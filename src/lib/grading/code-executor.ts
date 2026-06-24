@@ -274,10 +274,27 @@ async function executeSingleTestCase(
   };
 }
 
+function normalizeNumber(token: string): string {
+  const num = Number(token);
+  if (!isNaN(num) && token.trim() !== "") {
+    // Round to 6 significant digits to absorb floating-point noise
+    return parseFloat(num.toPrecision(6)).toString();
+  }
+  return token;
+}
+
+function normalizeLine(line: string): string {
+  // Split on boundaries between digits/dots and non-numeric characters,
+  // normalize each numeric token, then rejoin.
+  return line.replace(/[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?/g, (match) =>
+    normalizeNumber(match)
+  );
+}
+
 function normalizeOutput(output: string): string {
   return output
     .split("\n")
-    .map((line: string) => line.trimEnd())
+    .map((line: string) => normalizeLine(line.trimEnd()))
     .join("\n")
     .trim();
 }
