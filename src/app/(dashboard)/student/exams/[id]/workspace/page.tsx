@@ -18,6 +18,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
   const [runResults, setRunResults] = useState<Record<string, any>>({});
   const [isRunning, setIsRunning] = useState(false);
   const [activeTab, setActiveTab] = useState<"cases" | "output">("cases");
+  const [showUntestedWarning, setShowUntestedWarning] = useState(false);
   const [settings, setSettings] = useState<any>(null);
   const submissionId = typeof window !== 'undefined' ? sessionStorage.getItem(`exam_${examId}_submission_id`) : null;
 
@@ -211,7 +212,19 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
     }
   };
 
+  const handleSubmitClick = () => {
+    const untestedCode = questions.filter(
+      (q) => q.type === "CODE" && !runResults[q.id]
+    );
+    if (untestedCode.length > 0) {
+      setShowUntestedWarning(true);
+    } else {
+      handleSubmit();
+    }
+  };
+
   const handleSubmit = async () => {
+    setShowUntestedWarning(false);
     setIsSubmitting(true);
     try {
       const payloads = Object.entries(answers).map(([qId, ans]) => ({
@@ -312,7 +325,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
             {isExiting ? "Saving..." : "Save & Exit"}
           </button>
           <button
-            onClick={handleSubmit}
+            onClick={handleSubmitClick}
             disabled={isSubmitting || isExiting}
             className="premium-btn-primary py-2 px-6 text-sm"
           >
@@ -624,6 +637,51 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
         </main>
       </div>
       
+      {/* Untested Code Warning Modal */}
+      {showUntestedWarning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-bg-surface border border-border-strong rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-amber-500/15 flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                </svg>
+              </div>
+              <h3 className="text-white font-semibold text-lg">Code Not Tested</h3>
+            </div>
+            <p className="text-text-secondary text-sm mb-2">
+              You have <span className="text-amber-400 font-semibold">{questions.filter(q => q.type === "CODE" && !runResults[q.id]).length}</span> code question(s) that you haven&apos;t run yet:
+            </p>
+            <ul className="mb-5 space-y-1">
+              {questions
+                .map((q, idx) => ({ q, idx }))
+                .filter(({ q }) => q.type === "CODE" && !runResults[q.id])
+                .map(({ q, idx }) => (
+                  <li key={q.id} className="flex items-center gap-2 text-sm">
+                    <span className="w-6 h-6 rounded bg-amber-500/20 text-amber-400 text-xs font-bold flex items-center justify-center shrink-0">{idx + 1}</span>
+                    <span className="text-text-secondary truncate">{q.content?.slice(0, 60)}{q.content?.length > 60 ? "…" : ""}</span>
+                  </li>
+                ))}
+            </ul>
+            <p className="text-text-tertiary text-xs mb-5">Running your code lets you verify it works before submitting. You can still submit without testing.</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowUntestedWarning(false)}
+                className="flex-1 premium-btn-secondary py-2.5 text-sm"
+              >
+                Go Back &amp; Test
+              </button>
+              <button
+                onClick={handleSubmit}
+                className="flex-1 premium-btn-primary py-2.5 text-sm"
+              >
+                Submit Anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Footer Navigation */}
       <footer className="h-16 border-t border-border-strong bg-bg-surface flex items-center justify-between px-8 shrink-0">
         <button
