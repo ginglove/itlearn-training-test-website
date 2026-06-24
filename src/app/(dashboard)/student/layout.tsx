@@ -13,10 +13,10 @@ export default function StudentLayout({
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // If inside exam workspace, skip layout
+  // If inside exam workspace, skip sidebar layout but keep toast context
   const isWorkspace = pathname.includes("/workspace");
   if (isWorkspace) {
-    return <>{children}</>;
+    return <ToastProvider>{children}</ToastProvider>;
   }
 
   const handleLogout = () => {
