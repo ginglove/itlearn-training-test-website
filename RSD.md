@@ -119,10 +119,12 @@ Backend updates password hash, sets `is_first_login = FALSE`, invalidates temp t
 ### 3.3. Exam Monitoring (Teacher)
 The teacher monitoring dashboard (`GET /api/v1/teacher/exams/:id/monitor`) provides real-time session state:
 
-| Student Name | Connection Status | Active Question | Focus Loss Alerts | Score | Actions |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| John Doe | Online | Question 4 (Code) | 0 | 45.00 / 100.00 | Force Submit |
-| Jane Smith | Offline | Question 2 (Quiz) | 3 | 12.50 / 100.00 | Force Submit |
+| Student Name | IP | Focus Losses | Time Elapsed | Progress | Status | Score | Actions |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| John Doe | 192.168.1.1 | 0 | 00:35:22 | 4/6 (66%) ✓ 3 pass ✗ 1 fail | Active | 45.00 / 100.00 | Force Submit |
+| Jane Smith | 192.168.1.2 | 3 | 00:12:05 | 2/6 (33%) ✓ 1 pass ✗ 1 fail | Submitted | 12.50 / 100.00 | Force Submit |
+
+**Progress Column:** Shows `answered/totalQuestions` with a percentage progress bar and a pass/fail breakdown badge. The total question count (`totalQuestions`) is returned by the monitor SSE stream alongside `totalPossibleScore` and `roster`.
 
 ---
 
@@ -416,6 +418,18 @@ Configurable via platform settings:
 - CODE questions in the sidebar question map use **amber/yellow** color in all states.
 - QUIZ questions use **brand blue**.
 - This allows students to immediately distinguish question types at a glance.
+
+### 9.6. Student Progress Tracking in Monitor
+- The monitor SSE stream includes `totalQuestions` (integer) alongside `totalPossibleScore` and `roster`.
+- Each roster entry's `details` array lists per-question submissions. `details.length` is the number of questions the student has answered.
+- The **Progress** column renders a progress bar: `answered / totalQuestions` with percentage, plus a `✓ N pass / ✗ N fail` breakdown derived from each `detail.result` field.
+- Progress updates live on every SSE tick without page refresh.
+
+### 9.7. Dynamic Quiz Score Recomputation
+- In both the teacher monitor view (`GET /api/v1/teacher/exams/:id/monitor`) and the student completed-exam view (`GET /api/v1/student/completed/:id`), quiz question scores are **re-derived from selected options at read time** rather than relying solely on the stored `score` value.
+- The partial-credit formula mirrors the grader: if any selected option is incorrect, score = 0; otherwise score = `points × (correctSelected / totalCorrect)`.
+- Unanswered questions (no selected options) fall back to the stored `score`.
+- This guarantees that the displayed score is always consistent with the displayed PASS/FAIL result, even if the stored score was written by an older code path.
 
 ---
 
