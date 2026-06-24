@@ -46,6 +46,11 @@ export default function StudentsManagementPage() {
   const [resetSuccessResult, setResetSuccessResult] = useState<{ student: Student; temporaryPassword: string } | null>(null);
   const [resetError, setResetError] = useState<string | null>(null);
 
+  // Exam History panel states
+  const [historyStudent, setHistoryStudent] = useState<Student | null>(null);
+  const [historyData, setHistoryData] = useState<any[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
   useEffect(() => {
     fetchStudents();
   }, []);
@@ -76,6 +81,23 @@ export default function StudentsManagementPage() {
       setMessage({ type: "error", text: "Failed to connect to the server." });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const openHistory = async (student: Student) => {
+    setHistoryStudent(student);
+    setHistoryData([]);
+    setIsLoadingHistory(true);
+    try {
+      const res = await fetch(`/api/v1/teacher/students/${student.id}/exams`);
+      if (res.ok) {
+        const data = await res.json();
+        setHistoryData(data.exams || []);
+      }
+    } catch {
+      // silently fail — panel shows empty state
+    } finally {
+      setIsLoadingHistory(false);
     }
   };
 
@@ -371,6 +393,15 @@ export default function StudentsManagementPage() {
                       </td>
                       <td className="py-4 px-4 text-right">
                         <div className="flex justify-end gap-1">
+                          <button
+                            onClick={() => openHistory(student)}
+                            className="text-text-tertiary hover:text-blue-400 transition-colors p-1.5 rounded-lg hover:bg-blue-500/10"
+                            title="View exam history"
+                          >
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                            </svg>
+                          </button>
                           <button
                             onClick={() => handleResetPasswordConfirm(student)}
                             className="text-text-tertiary hover:text-amber-400 transition-colors p-1.5 rounded-lg hover:bg-amber-500/10"
@@ -798,6 +829,141 @@ export default function StudentsManagementPage() {
               </div>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* Exam History Slide-Over Panel */}
+      {historyStudent && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setHistoryStudent(null)}
+          />
+          {/* Panel */}
+          <div className="relative w-full max-w-2xl bg-bg-surface border-l border-border-strong h-full flex flex-col shadow-2xl animate-fade-in overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-5 border-b border-border-strong shrink-0">
+              <div>
+                <h2 className="text-lg font-bold text-white">{historyStudent.fullName}</h2>
+                <p className="text-xs text-text-tertiary font-mono mt-0.5">{historyStudent.username} · {historyStudent.email}</p>
+              </div>
+              <button
+                onClick={() => setHistoryStudent(null)}
+                className="text-text-tertiary hover:text-white transition-colors p-1.5 rounded-lg hover:bg-bg-surface-elevated"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Summary Bar */}
+            {!isLoadingHistory && historyData.length > 0 && (
+              <div className="px-6 py-4 border-b border-border-strong bg-bg-surface-elevated/30 shrink-0">
+                <div className="grid grid-cols-3 gap-4 text-center">
+                  <div>
+                    <div className="text-xl font-extrabold text-white">{historyData.length}</div>
+                    <div className="text-xs text-text-tertiary mt-0.5">Exams Joined</div>
+                  </div>
+                  <div>
+                    <div className="text-xl font-extrabold text-emerald-400">
+                      {historyData.filter(e => e.attempts.some((a: any) => a.status === "SUBMITTED")).length}
+                    </div>
+                    <div className="text-xs text-text-tertiary mt-0.5">Completed</div>
+                  </div>
+                  <div>
+                    <div className="text-xl font-extrabold text-blue-400">
+                      {historyData.filter(e => e.attempts.some((a: any) => a.status === "IN_PROGRESS")).length}
+                    </div>
+                    <div className="text-xs text-text-tertiary mt-0.5">In Progress</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+              {isLoadingHistory ? (
+                <div className="flex items-center justify-center py-20">
+                  <div className="w-8 h-8 border-2 border-brand-500/30 border-t-brand-500 rounded-full animate-spin" />
+                </div>
+              ) : historyData.length === 0 ? (
+                <div className="text-center py-20 text-text-tertiary">
+                  <svg className="w-12 h-12 mx-auto mb-3 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <p className="text-sm">This student has not participated in any of your exams yet.</p>
+                </div>
+              ) : (
+                historyData.map((examEntry: any) => {
+                  const bestSubmission = examEntry.attempts
+                    .filter((a: any) => a.status === "SUBMITTED")
+                    .sort((a: any, b: any) => (b.totalScore ?? 0) - (a.totalScore ?? 0))[0];
+                  const hasActive = examEntry.attempts.some((a: any) => a.status === "IN_PROGRESS");
+
+                  return (
+                    <div key={examEntry.examId} className="glass-card p-5 border border-border-strong rounded-xl">
+                      {/* Exam title & overall badge */}
+                      <div className="flex items-start justify-between mb-3">
+                        <h3 className="font-bold text-white text-sm leading-tight pr-4">{examEntry.examTitle}</h3>
+                        {hasActive ? (
+                          <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 shrink-0">In Progress</span>
+                        ) : bestSubmission ? (
+                          <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 shrink-0">Completed</span>
+                        ) : (
+                          <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-bg-surface-elevated text-text-tertiary shrink-0">No Submission</span>
+                        )}
+                      </div>
+
+                      {/* Score bar */}
+                      {bestSubmission && examEntry.maxScore > 0 && (
+                        <div className="mb-3">
+                          <div className="flex justify-between text-xs text-text-tertiary mb-1">
+                            <span>Best Score</span>
+                            <span className="text-white font-semibold">
+                              {bestSubmission.totalScore ?? 0} / {examEntry.maxScore}
+                            </span>
+                          </div>
+                          <div className="h-1.5 bg-bg-base rounded-full overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-gradient-to-r from-brand-500 to-brand-400 transition-all"
+                              style={{ width: `${Math.min(100, ((bestSubmission.totalScore ?? 0) / examEntry.maxScore) * 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Attempts list */}
+                      <div className="space-y-2 mt-3">
+                        {examEntry.attempts.map((attempt: any) => (
+                          <div
+                            key={attempt.submissionId}
+                            className="flex items-center justify-between text-xs bg-bg-base/50 rounded-lg px-3 py-2"
+                          >
+                            <div className="flex items-center gap-2 text-text-secondary">
+                              <span className="font-mono text-text-tertiary">#{attempt.attempt}</span>
+                              <span>{attempt.submittedAt ? new Date(attempt.submittedAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "Not submitted"}</span>
+                              {attempt.focusLossCount > 0 && (
+                                <span className="text-amber-400 font-medium">{attempt.focusLossCount} focus loss{attempt.focusLossCount > 1 ? "es" : ""}</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {attempt.status === "SUBMITTED" ? (
+                                <span className="font-bold text-white">{attempt.totalScore ?? 0} pts</span>
+                              ) : (
+                                <span className="text-blue-400 font-medium">In Progress</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>
       )}
