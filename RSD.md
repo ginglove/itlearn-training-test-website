@@ -170,7 +170,21 @@ The layout is constrained to the viewport (`h-screen`). Navigation uses a left s
 - **Untested Code Warning:** When clicking Submit Exam, if any CODE question has never been run, a modal lists the untested questions and requires the student to confirm ("Submit Anyway") or go back to test ("Go Back & Test").
 
 ### 4.4. UI Notification System (Toast)
-All user-facing feedback (success, error, warning, info) is delivered as slide-in toast pop-ups in the top-right corner. Toasts auto-dismiss after 4 seconds and can be manually dismissed. This applies to all teacher and student pages. No inline banners or `alert()` dialogs are used.
+All user-facing feedback (success, error, warning, info) is delivered as slide-in toast pop-ups in the top-right corner. Toasts auto-dismiss after 4 seconds and can be manually dismissed. This applies to all teacher and student pages, **including the exam workspace** (`/workspace` routes — the sidebar is skipped but `ToastProvider` is still mounted so toasts work during exams). No inline banners or `alert()` dialogs are used.
+
+### 4.5. Confirmation Dialog (ConfirmModal)
+Destructive actions that require explicit user confirmation use a styled `ConfirmModal` component (`src/components/toast.tsx`) instead of the browser-native `confirm()` API. No native `confirm()` calls exist anywhere in the UI.
+
+| Property | Description |
+| :--- | :--- |
+| `variant` | `danger` (rose), `warning` (amber), or `default` (brand blue) |
+| `title` | Short action label shown in the modal header |
+| `description` | Full consequence description shown in the modal body |
+| `confirmLabel` / `cancelLabel` | Customisable button text |
+
+Current usages:
+- **Delete Exam** (`/teacher/exams/:id/edit`): `variant="danger"` — warns that all submissions and grades will be permanently lost.
+- **Remove Question** (`/teacher/exams/:id/questions`): `variant="danger"` — warns that all associated options and test cases will be deleted.
 
 ---
 
@@ -181,7 +195,15 @@ All user-facing feedback (success, error, warning, info) is delivered as slide-i
 - Clone exam: duplicates all settings, questions, options, and test cases.
 - RESTRICTED access: assign specific students to an exam.
 
-### 5.2. Question Builder
+### 5.2. Teacher Page Navigation
+Key teacher pages include header back-navigation buttons for quick traversal:
+
+| Page | Button Label | Destination |
+| :--- | :--- | :--- |
+| Manage Questions (`/teacher/exams/:id/questions`) | ← Back | `/teacher` dashboard |
+| Coding Configuration (`/teacher/exams/:id/coding`) | ← Back to Questions | `/teacher/exams/:id/questions` |
+
+### 5.3. Question Builder
 Teachers can create questions directly in the UI or import via Excel/CSV.
 
 **Supported Question Types:**
@@ -195,7 +217,7 @@ Teachers can create questions directly in the UI or import via Excel/CSV.
 ```
 Import is atomic — all rows succeed or the transaction rolls back.
 
-### 5.3. Coding Task Configuration
+### 5.4. Coding Task Configuration
 Per code question, teachers configure:
 - **Time Limit (ms):** Maximum execution time.
 - **Memory Limit (KB):** Maximum memory usage.
@@ -203,7 +225,7 @@ Per code question, teachers configure:
 - **Teacher Reference Code:** When set, runs dynamically at grading/test time and its stdout becomes the expected output (overriding static `output_data`). This allows the expected output to be generated programmatically.
 - **Test Cases:** Each test case has `input_data`, `output_data`, and `is_hidden` flag. Hidden test cases are used for final grading only; public test cases are shown as samples to students.
 
-### 5.4. Platform Settings (Admin)
+### 5.5. Platform Settings (Admin)
 Teachers configure global settings:
 - Piston API URL and execution mode (Local Fallback / Local Only / API Only)
 - Session IP Binding (on/off)
@@ -412,7 +434,9 @@ Configurable via platform settings:
 - All feedback messages (save success, errors, validation failures) appear as slide-in toast pop-ups in the top-right corner.
 - Toasts auto-dismiss after 4 seconds; can be manually dismissed.
 - Variants: success (green), error (red), warning (amber), info (blue).
-- No `alert()` calls or inline static banners anywhere in the UI.
+- `ToastProvider` is mounted on both teacher and student layouts, including the exam workspace route (which skips the sidebar but retains the provider). This guarantees `useToast()` is available on every page.
+- No `alert()` calls, native `confirm()` calls, or inline static banners anywhere in the UI.
+- Destructive confirmations use the `ConfirmModal` component (see Section 4.5) instead of browser dialogs.
 
 ### 9.5. Code Question Visual Identity
 - CODE questions in the sidebar question map use **amber/yellow** color in all states.
