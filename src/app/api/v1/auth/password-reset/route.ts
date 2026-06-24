@@ -62,10 +62,28 @@ export async function POST(request: NextRequest) {
       boundIp: clientIp,
     });
 
+    // Fetch the updated user to return the same shape as /auth/login
+    const [updatedUser] = await db
+      .select({
+        id: users.id,
+        username: users.username,
+        fullName: users.fullName,
+        role: users.role,
+        isFirstLogin: users.isFirstLogin,
+      })
+      .where(eq(users.id, payload.userId));
+
     return NextResponse.json({
       status: "SUCCESS",
       token,
       role: payload.role,
+      user: {
+        id: updatedUser.id,
+        username: updatedUser.username,
+        full_name: updatedUser.fullName,
+        role: updatedUser.role,
+        is_first_login: updatedUser.isFirstLogin,
+      },
       message: "Password has been updated successfully.",
     });
   } catch (error) {

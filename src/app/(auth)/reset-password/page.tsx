@@ -60,7 +60,10 @@ export default function ResetPasswordPage() {
       // Cleanup and redirect based on role
       localStorage.removeItem("reset_token");
       document.cookie = `session=${data.token}; path=/; max-age=28800; secure; samesite=strict`;
-      
+      if (data.user) {
+        localStorage.setItem("user", JSON.stringify(data.user));
+      }
+
       if (data.role === "TEACHER") {
         router.push("/teacher");
       } else {
