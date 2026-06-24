@@ -92,3 +92,67 @@ export function useToast() {
   if (!ctx) throw new Error("useToast must be used inside ToastProvider");
   return ctx.showToast;
 }
+
+// ── ConfirmModal ────────────────────────────────────────────────────────────────
+
+interface ConfirmModalProps {
+  open: boolean;
+  title: string;
+  description: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  variant?: "danger" | "warning" | "default";
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+export function ConfirmModal({
+  open,
+  title,
+  description,
+  confirmLabel = "Confirm",
+  cancelLabel = "Cancel",
+  variant = "danger",
+  onConfirm,
+  onCancel,
+}: ConfirmModalProps) {
+  if (!open) return null;
+
+  const iconColor = variant === "danger" ? "text-rose-400" : variant === "warning" ? "text-amber-400" : "text-brand-400";
+  const iconBg   = variant === "danger" ? "bg-rose-500/15" : variant === "warning" ? "bg-amber-500/15" : "bg-brand-500/15";
+  const btnClass = variant === "danger"
+    ? "flex-1 py-2.5 text-sm font-semibold rounded-xl bg-rose-500 hover:bg-rose-400 text-white transition-colors"
+    : variant === "warning"
+    ? "flex-1 py-2.5 text-sm font-semibold rounded-xl bg-amber-500 hover:bg-amber-400 text-white transition-colors"
+    : "flex-1 premium-btn-primary py-2.5 text-sm";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="bg-bg-surface border border-border-strong rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6 animate-slide-in">
+        <div className="flex items-center gap-3 mb-4">
+          <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${iconBg}`}>
+            {variant === "danger" ? (
+              <svg className={`w-5 h-5 ${iconColor}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7h6m2 0H7m2-3h6a1 1 0 011 1v1H8V5a1 1 0 011-1z" />
+              </svg>
+            ) : (
+              <svg className={`w-5 h-5 ${iconColor}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+              </svg>
+            )}
+          </div>
+          <h3 className="text-white font-semibold text-base">{title}</h3>
+        </div>
+        <p className="text-text-secondary text-sm leading-relaxed mb-6">{description}</p>
+        <div className="flex gap-3">
+          <button onClick={onCancel} className="flex-1 premium-btn-secondary py-2.5 text-sm">
+            {cancelLabel}
+          </button>
+          <button onClick={onConfirm} className={btnClass}>
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

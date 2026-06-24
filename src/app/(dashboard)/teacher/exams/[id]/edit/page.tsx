@@ -3,7 +3,7 @@
 import { useState, useEffect, use } from "react";
 import { useRouter } from "next/navigation";
 import DateTimePicker from "@/app/components/DateTimePicker";
-import { useToast } from "@/components/toast";
+import { useToast, ConfirmModal } from "@/components/toast";
 
 export default function EditExamPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
@@ -26,6 +26,7 @@ export default function EditExamPage({ params }: { params: Promise<{ id: string 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
     fetchExamAndStudents();
@@ -112,10 +113,6 @@ export default function EditExamPage({ params }: { params: Promise<{ id: string 
   };
 
   const handleDelete = async () => {
-    if (!confirm("Are you sure you want to delete this exam? All student submissions and grades for this exam will be permanently lost.")) {
-      return;
-    }
-
     setIsDeleting(true);
 
     try {
@@ -158,7 +155,7 @@ export default function EditExamPage({ params }: { params: Promise<{ id: string 
             <h1 className="text-3xl font-bold text-white">Edit Exam Settings</h1>
           </div>
           <button
-            onClick={handleDelete}
+            onClick={() => setShowDeleteConfirm(true)}
             disabled={isDeleting}
             className="px-4 py-2 bg-rose-500/10 border border-rose-500/30 text-rose-400 hover:bg-rose-500/20 rounded-xl transition-all font-semibold text-sm"
           >
@@ -304,6 +301,17 @@ export default function EditExamPage({ params }: { params: Promise<{ id: string 
           </form>
         </div>
       </div>
+
+      <ConfirmModal
+        open={showDeleteConfirm}
+        variant="danger"
+        title="Delete Exam"
+        description="Are you sure you want to permanently delete this exam? All student submissions, answers, and grades will be lost. This action cannot be undone."
+        confirmLabel={isDeleting ? "Deleting..." : "Delete Exam"}
+        cancelLabel="Keep Exam"
+        onCancel={() => setShowDeleteConfirm(false)}
+        onConfirm={() => { setShowDeleteConfirm(false); handleDelete(); }}
+      />
     </div>
   );
 }

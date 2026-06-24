@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, use } from "react";
 import { useRouter } from "next/navigation";
-import { useToast } from "@/components/toast";
+import { useToast, ConfirmModal } from "@/components/toast";
 
 export default function ExamQuestionsPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
@@ -13,6 +13,7 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
   const [isFetching, setIsFetching] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -207,8 +208,6 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
   };
 
   const handleDeleteQuestion = async (qId: string) => {
-    if (!confirm("Are you sure you want to remove this question?")) return;
-
     try {
       const res = await fetch(`/api/v1/teacher/exams/${examId}/questions/${qId}`, {
         method: "DELETE",
@@ -288,8 +287,17 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
             <h1 className="text-3xl font-bold text-white">Manage Questions</h1>
             <p className="text-text-secondary mt-1 text-sm">Add, edit, or delete questions for this exam.</p>
           </div>
-          <div className="flex gap-4">
-            <button 
+          <div className="flex gap-3 items-center">
+            <button
+              onClick={() => router.push("/teacher")}
+              className="flex items-center gap-1.5 premium-btn-secondary py-2 text-sm"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+              Back
+            </button>
+            <button
               onClick={() => router.push(`/teacher/exams/${examId}/coding`)}
               className="premium-btn-secondary py-2 text-sm"
             >
@@ -732,7 +740,7 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
                           Edit
                         </button>
                         <button
-                          onClick={() => handleDeleteQuestion(q.id)}
+                          onClick={() => setDeleteTarget(q.id)}
                           className="px-3 py-1.5 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-lg text-xs font-semibold hover:bg-rose-500/20 transition-all opacity-0 group-hover:opacity-100"
                         >
                           Remove
@@ -746,6 +754,17 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
           </div>
         )}
       </div>
+
+      <ConfirmModal
+        open={deleteTarget !== null}
+        variant="danger"
+        title="Remove Question"
+        description="Are you sure you want to remove this question? All associated options and test cases will be permanently deleted."
+        confirmLabel="Remove Question"
+        cancelLabel="Keep Question"
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={() => { const id = deleteTarget!; setDeleteTarget(null); handleDeleteQuestion(id); }}
+      />
     </div>
   );
 }

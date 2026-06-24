@@ -122,8 +122,21 @@ export default function CodingConfigPage({ params }: { params: Promise<{ id: str
             <span>›</span>
             <span className="text-text-secondary">Coding Config</span>
           </div>
-          <h1 className="text-3xl font-bold text-white">Coding Configuration</h1>
-          <p className="text-text-secondary mt-1 text-sm">Set execution limits and manage test cases for code questions.</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-white">Coding Configuration</h1>
+              <p className="text-text-secondary mt-1 text-sm">Set execution limits and manage test cases for code questions.</p>
+            </div>
+            <button
+              onClick={() => router.push(`/teacher/exams/${examId}/questions`)}
+              className="flex items-center gap-1.5 premium-btn-secondary py-2 text-sm"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+              Back to Questions
+            </button>
+          </div>
         </div>
 
         <div className="glass-card p-8">
