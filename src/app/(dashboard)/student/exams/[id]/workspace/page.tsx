@@ -15,15 +15,14 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
   const [isExiting, setIsExiting] = useState(false);
   const [focusLosses, setFocusLosses] = useState(0);
   const [timeLeft, setTimeLeft] = useState(3600);
-  const [runResult, setRunResult] = useState<any>(null);
+  const [runResults, setRunResults] = useState<Record<string, any>>({});
   const [isRunning, setIsRunning] = useState(false);
   const [activeTab, setActiveTab] = useState<"cases" | "output">("cases");
   const [settings, setSettings] = useState<any>(null);
   const submissionId = typeof window !== 'undefined' ? sessionStorage.getItem(`exam_${examId}_submission_id`) : null;
 
-  // Reset execution tab & results when active question changes
+  // Reset active tab when question changes; keep results per-question
   useEffect(() => {
-    setRunResult(null);
     setActiveTab("cases");
   }, [currentIndex]);
 
@@ -185,7 +184,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
     if (!answer?.source_code?.trim()) return;
 
     setIsRunning(true);
-    setRunResult(null);
+    setRunResults(prev => ({ ...prev, [qId]: null }));
     setActiveTab("output");
 
     try {
@@ -201,12 +200,12 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
 
       const data = await res.json();
       if (res.ok) {
-        setRunResult(data.executionResult);
+        setRunResults(prev => ({ ...prev, [qId]: data.executionResult }));
       } else {
-        setRunResult({ error: data.message || "Execution failed" });
+        setRunResults(prev => ({ ...prev, [qId]: { error: data.message || "Execution failed" } }));
       }
     } catch (err) {
-      setRunResult({ error: "Network error. Could not run code." });
+      setRunResults(prev => ({ ...prev, [qId]: { error: "Network error. Could not run code." } }));
     } finally {
       setIsRunning(false);
     }
@@ -276,6 +275,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
   }
 
   const currentQ = questions[currentIndex];
+  const runResult = currentQ ? runResults[currentQ.id] ?? null : null;
   if (!currentQ) return null;
 
   const formatTime = (secs: number) => {
@@ -341,10 +341,14 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                     key={q.id}
                     onClick={() => setCurrentIndex(idx)}
                     className={`h-10 rounded-lg text-sm font-medium transition-all ${
-                      isCurrent 
-                        ? 'bg-brand-500 text-white ring-2 ring-brand-500/50 ring-offset-2 ring-offset-bg-base' 
+                      isCurrent
+                        ? q.type === "CODE"
+                          ? 'bg-amber-500 text-white ring-2 ring-amber-500/50 ring-offset-2 ring-offset-bg-base'
+                          : 'bg-brand-500 text-white ring-2 ring-brand-500/50 ring-offset-2 ring-offset-bg-base'
                         : hasAnswer
-                          ? 'bg-brand-500/20 text-brand-400 border border-brand-500/30 hover:bg-brand-500/30'
+                          ? q.type === "CODE"
+                            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500/30'
+                            : 'bg-brand-500/20 text-brand-400 border border-brand-500/30 hover:bg-brand-500/30'
                           : 'bg-bg-surface border border-border-strong text-text-secondary hover:border-text-tertiary'
                     }`}
                   >
