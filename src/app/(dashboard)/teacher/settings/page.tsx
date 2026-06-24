@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useToast } from "@/components/toast";
 
 export default function TeacherSettingsPage() {
   const [settings, setSettings] = useState({
@@ -13,10 +14,9 @@ export default function TeacherSettingsPage() {
     autoSaveInterval: 15,
     executionMode: "LOCAL_FALLBACK",
   });
+  const showToast = useToast();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
 
   useEffect(() => {
     fetchSettings();
@@ -25,7 +25,6 @@ export default function TeacherSettingsPage() {
   const fetchSettings = async () => {
     try {
       setIsLoading(true);
-      setError("");
       const res = await fetch("/api/v1/settings");
       if (!res.ok) throw new Error("Failed to load settings");
       const data = await res.json();
@@ -33,7 +32,7 @@ export default function TeacherSettingsPage() {
         setSettings(data.settings);
       }
     } catch (err) {
-      setError("Failed to fetch settings from the database.");
+      showToast("Failed to fetch settings from the database.", "error");
     } finally {
       setIsLoading(false);
     }
@@ -42,8 +41,6 @@ export default function TeacherSettingsPage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
-    setError("");
-    setSuccess("");
 
     try {
       const res = await fetch("/api/v1/settings", {
@@ -55,13 +52,13 @@ export default function TeacherSettingsPage() {
       if (!res.ok) throw new Error("Failed to update settings");
       const data = await res.json();
       if (data.status === "SUCCESS") {
-        setSuccess("Platform settings updated successfully!");
+        showToast("Platform settings updated successfully!");
         setSettings(data.settings);
       } else {
-        setError(data.message || "Failed to update settings");
+        showToast(data.message || "Failed to update settings", "error");
       }
     } catch (err) {
-      setError("Network error occurred while saving settings.");
+      showToast("Network error occurred while saving settings.", "error");
     } finally {
       setIsSaving(false);
     }
@@ -84,17 +81,6 @@ export default function TeacherSettingsPage() {
             <p className="text-text-secondary">Configure global platform preferences and integrations.</p>
           </div>
         </div>
-
-        {error && (
-          <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm px-4 py-3 rounded-xl mb-6">
-            {error}
-          </div>
-        )}
-        {success && (
-          <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm px-4 py-3 rounded-xl mb-6">
-            {success}
-          </div>
-        )}
 
         <form onSubmit={handleSave} className="grid grid-cols-1 gap-6">
           {/* Code Execution Section */}

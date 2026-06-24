@@ -2,6 +2,7 @@
 
 import { useRouter, usePathname } from "next/navigation";
 import { useState } from "react";
+import { ToastProvider } from "@/components/toast";
 
 export default function TeacherLayout({
   children,
@@ -165,7 +166,7 @@ export default function TeacherLayout({
 
       {/* Main Content Area */}
       <main className="flex-grow overflow-y-auto">
-        {children}
+        <ToastProvider>{children}</ToastProvider>
       </main>
     </div>
   );

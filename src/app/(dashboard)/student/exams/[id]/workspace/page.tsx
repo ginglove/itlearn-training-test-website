@@ -2,6 +2,7 @@
 
 import { use, useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { useToast } from "@/components/toast";
 
 export default function ExamWorkspacePage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
@@ -15,6 +16,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
   const [isExiting, setIsExiting] = useState(false);
   const [focusLosses, setFocusLosses] = useState(0);
   const [timeLeft, setTimeLeft] = useState(3600);
+  const showToast = useToast();
   const [runResults, setRunResults] = useState<Record<string, any>>({});
   const [isRunning, setIsRunning] = useState(false);
   const [activeTab, setActiveTab] = useState<"cases" | "output">("cases");
@@ -246,11 +248,11 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
         sessionStorage.removeItem(`exam_${examId}_submission_id`);
         router.push("/student/exams");
       } else {
-        alert("Failed to submit exam. Please try again.");
+        showToast("Failed to submit exam. Please try again.", "error");
         setIsSubmitting(false);
       }
     } catch (err) {
-      alert("Network error. Drafts are saved, try again.");
+      showToast("Network error. Drafts are saved, try again.", "error");
       setIsSubmitting(false);
     }
   };

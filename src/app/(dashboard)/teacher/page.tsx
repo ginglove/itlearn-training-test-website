@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useToast } from "@/components/toast";
 
 export default function TeacherDashboard() {
   const router = useRouter();
+  const showToast = useToast();
   const [exams, setExams] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [cloningId, setCloningId] = useState<string | null>(null);
@@ -40,10 +42,10 @@ export default function TeacherDashboard() {
         await fetchExams();
         router.push(`/teacher/exams/${data.exam.id}/edit`);
       } else {
-        alert(data.message || "Failed to clone exam.");
+        showToast(data.message || "Failed to clone exam.", "error");
       }
     } catch {
-      alert("Network error. Please try again.");
+      showToast("Network error. Please try again.", "error");
     } finally {
       setCloningId(null);
     }

@@ -1,0 +1,94 @@
+"use client";
+
+import React, { createContext, useCallback, useContext, useRef, useState } from "react";
+
+type ToastType = "success" | "error" | "warning" | "info";
+
+interface Toast {
+  id: number;
+  type: ToastType;
+  message: string;
+}
+
+interface ToastContextValue {
+  showToast: (message: string, type?: ToastType) => void;
+}
+
+const ToastContext = createContext<ToastContextValue | null>(null);
+
+const ICONS: Record<ToastType, React.ReactElement> = {
+  success: (
+    <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+    </svg>
+  ),
+  error: (
+    <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+    </svg>
+  ),
+  warning: (
+    <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+    </svg>
+  ),
+  info: (
+    <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 110 20A10 10 0 0112 2z" />
+    </svg>
+  ),
+};
+
+const STYLES: Record<ToastType, string> = {
+  success: "bg-emerald-500/10 border-emerald-500/30 text-emerald-400",
+  error:   "bg-rose-500/10 border-rose-500/30 text-rose-400",
+  warning: "bg-amber-500/10 border-amber-500/30 text-amber-400",
+  info:    "bg-brand-500/10 border-brand-500/30 text-brand-400",
+};
+
+export function ToastProvider({ children }: { children: React.ReactNode }) {
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const counter = useRef(0);
+
+  const showToast = useCallback((message: string, type: ToastType = "success") => {
+    const id = ++counter.current;
+    setToasts((prev) => [...prev, { id, type, message }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 4000);
+  }, []);
+
+  const dismiss = (id: number) => setToasts((prev) => prev.filter((t) => t.id !== id));
+
+  return (
+    <ToastContext.Provider value={{ showToast }}>
+      {children}
+      {/* Toast container — top-right */}
+      <div className="fixed top-5 right-5 z-[9999] flex flex-col gap-3 pointer-events-none">
+        {toasts.map((toast) => (
+          <div
+            key={toast.id}
+            className={`pointer-events-auto flex items-start gap-3 px-4 py-3 rounded-xl border shadow-xl backdrop-blur-sm max-w-sm w-full animate-slide-in ${STYLES[toast.type]}`}
+          >
+            {ICONS[toast.type]}
+            <p className="text-sm font-medium leading-snug flex-1">{toast.message}</p>
+            <button
+              onClick={() => dismiss(toast.id)}
+              className="opacity-60 hover:opacity-100 transition-opacity mt-0.5 shrink-0"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        ))}
+      </div>
+    </ToastContext.Provider>
+  );
+}
+
+export function useToast() {
+  const ctx = useContext(ToastContext);
+  if (!ctx) throw new Error("useToast must be used inside ToastProvider");
+  return ctx.showToast;
+}

@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useToast } from "@/components/toast";
 
 export default function StudentExamsPage() {
   const router = useRouter();
+  const showToast = useToast();
   const [exams, setExams] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -47,10 +49,10 @@ export default function StudentExamsPage() {
         sessionStorage.setItem(`exam_${examId}_duration`, String(data.examDuration));
         router.push(`/student/exams/${examId}/workspace`);
       } else {
-        alert(data.message || "Failed to start exam");
+        showToast(data.message || "Failed to start exam", "error");
       }
     } catch (err) {
-      alert("Network error. Could not connect to exam server.");
+      showToast("Network error. Could not connect to exam server.", "error");
     }
   };
 

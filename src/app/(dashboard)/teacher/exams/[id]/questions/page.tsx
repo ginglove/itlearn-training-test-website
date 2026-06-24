@@ -2,16 +2,17 @@
 
 import { useState, useEffect, useRef, use } from "react";
 import { useRouter } from "next/navigation";
+import { useToast } from "@/components/toast";
 
 export default function ExamQuestionsPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
   const { id: examId } = use(params);
   
   const [questions, setQuestions] = useState<any[]>([]);
+  const showToast = useToast();
   const [isFetching, setIsFetching] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -99,7 +100,6 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
     if (!file) return;
 
     setIsUploading(true);
-    setMessage(null);
 
     const formData = new FormData();
     formData.append("file", file);
@@ -113,13 +113,13 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
       const data = await res.json();
 
       if (res.ok) {
-        setMessage({ type: "success", text: `Successfully imported ${data.count} questions.` });
+        showToast(`Successfully imported ${data.count} questions.`);
         fetchQuestions();
       } else {
-        setMessage({ type: "error", text: data.message || "Failed to import questions." });
+        showToast(data.message || "Failed to import questions.", "error");
       }
     } catch (err) {
-      setMessage({ type: "error", text: "Network error during upload." });
+      showToast("Network error during upload.", "error");
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -129,19 +129,18 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
   const handleAddQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
-    setMessage(null);
 
     // Validate quiz options
     if (newQuestion.type === "QUIZ") {
       const validOptions = newQuestion.options.filter(o => o.optionText.trim() !== "");
       if (validOptions.length < 2) {
-        setMessage({ type: "error", text: "Quiz questions require at least two non-empty options." });
+        showToast("Quiz questions require at least two non-empty options.", "error");
         setIsSaving(false);
         return;
       }
       const hasCorrect = validOptions.some(o => o.isCorrect);
       if (!hasCorrect) {
-        setMessage({ type: "error", text: "At least one option must be marked as correct." });
+        showToast("At least one option must be marked as correct.", "error");
         setIsSaving(false);
         return;
       }
@@ -172,10 +171,9 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
       });
 
       if (res.ok) {
-        setMessage({ type: "success", text: editingQuestionId ? "Question updated successfully." : "Question created successfully." });
+        showToast(editingQuestionId ? "Question updated successfully." : "Question created successfully.");
         setShowAddForm(false);
         setEditingQuestionId(null);
-        // Reset form
         setNewQuestion({
           type: "QUIZ",
           title: "",
@@ -199,10 +197,10 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
         fetchQuestions();
       } else {
         const data = await res.json();
-        setMessage({ type: "error", text: data.message || "Failed to save question." });
+        showToast(data.message || "Failed to save question.", "error");
       }
     } catch (err) {
-      setMessage({ type: "error", text: "Network error occurred." });
+      showToast("Network error occurred.", "error");
     } finally {
       setIsSaving(false);
     }
@@ -217,14 +215,14 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
       });
 
       if (res.ok) {
-        setMessage({ type: "success", text: "Question removed successfully." });
+        showToast("Question removed successfully.");
         fetchQuestions();
       } else {
         const data = await res.json();
-        setMessage({ type: "error", text: data.message || "Failed to delete question." });
+        showToast(data.message || "Failed to delete question.", "error");
       }
     } catch (err) {
-      setMessage({ type: "error", text: "Network error." });
+      showToast("Network error.", "error");
     }
   };
 
@@ -330,16 +328,6 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
             </button>
           </div>
         </div>
-
-        {message && (
-          <div className={`p-4 rounded-xl mb-6 ${
-            message.type === 'success' 
-              ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400' 
-              : 'bg-rose-500/10 border border-rose-500/20 text-rose-400'
-          }`}>
-            {message.text}
-          </div>
-        )}
 
         {showAddForm ? (
           /* Question Builder Form */

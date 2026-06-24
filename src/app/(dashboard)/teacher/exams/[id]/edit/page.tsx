@@ -3,6 +3,7 @@
 import { useState, useEffect, use } from "react";
 import { useRouter } from "next/navigation";
 import DateTimePicker from "@/app/components/DateTimePicker";
+import { useToast } from "@/components/toast";
 
 export default function EditExamPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
@@ -21,11 +22,10 @@ export default function EditExamPage({ params }: { params: Promise<{ id: string 
 
   const [students, setStudents] = useState<any[]>([]);
   const [assignedStudents, setAssignedStudents] = useState<string[]>([]);
+  const showToast = useToast();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
 
   useEffect(() => {
     fetchExamAndStudents();
@@ -34,7 +34,6 @@ export default function EditExamPage({ params }: { params: Promise<{ id: string 
   const fetchExamAndStudents = async () => {
     try {
       setIsLoading(true);
-      setError("");
 
       // Fetch Exam details
       const examRes = await fetch(`/api/v1/teacher/exams/${examId}`);
@@ -69,7 +68,7 @@ export default function EditExamPage({ params }: { params: Promise<{ id: string 
       setAssignedStudents(exam.assignedStudents || []);
       setStudents(studentsData.students || []);
     } catch (err: any) {
-      setError(err.message || "An error occurred while loading data");
+      showToast(err.message || "An error occurred while loading data", "error");
     } finally {
       setIsLoading(false);
     }
@@ -86,8 +85,6 @@ export default function EditExamPage({ params }: { params: Promise<{ id: string 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
-    setError("");
-    setSuccess("");
 
     try {
       const res = await fetch(`/api/v1/teacher/exams/${examId}`, {
@@ -102,13 +99,13 @@ export default function EditExamPage({ params }: { params: Promise<{ id: string 
       });
 
       if (res.ok) {
-        setSuccess("Exam configurations updated successfully!");
+        showToast("Exam configurations updated successfully!");
       } else {
         const data = await res.json();
-        setError(data.message || "Failed to update exam");
+        showToast(data.message || "Failed to update exam", "error");
       }
     } catch (err) {
-      setError("Network error occurred.");
+      showToast("Network error occurred.", "error");
     } finally {
       setIsSaving(false);
     }
@@ -120,7 +117,6 @@ export default function EditExamPage({ params }: { params: Promise<{ id: string 
     }
 
     setIsDeleting(true);
-    setError("");
 
     try {
       const res = await fetch(`/api/v1/teacher/exams/${examId}`, {
@@ -131,11 +127,11 @@ export default function EditExamPage({ params }: { params: Promise<{ id: string 
         router.push("/teacher");
       } else {
         const data = await res.json();
-        setError(data.message || "Failed to delete exam");
+        showToast(data.message || "Failed to delete exam", "error");
         setIsDeleting(false);
       }
     } catch (err) {
-      setError("Network error occurred.");
+      showToast("Network error occurred.", "error");
       setIsDeleting(false);
     }
   };
@@ -171,17 +167,6 @@ export default function EditExamPage({ params }: { params: Promise<{ id: string 
         </div>
 
         <div className="glass-card p-8">
-          {error && (
-            <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm px-4 py-3 rounded-lg mb-6">
-              {error}
-            </div>
-          )}
-          {success && (
-            <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm px-4 py-3 rounded-lg mb-6">
-              {success}
-            </div>
-          )}
-
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label className="block text-sm font-medium text-text-secondary mb-1.5">Exam Title</label>

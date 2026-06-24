@@ -2,6 +2,7 @@
 
 import { useState, useEffect, use } from "react";
 import { useRouter } from "next/navigation";
+import { useToast } from "@/components/toast";
 
 export default function CodingConfigPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
@@ -11,9 +12,9 @@ export default function CodingConfigPage({ params }: { params: Promise<{ id: str
   const [memoryLimit, setMemoryLimit] = useState(65536);
   const [testCases, setTestCases] = useState([{ inputData: "", outputData: "", isHidden: false }]);
   const [isLoading, setIsLoading] = useState(false);
+  const showToast = useToast();
   const [isFetching, setIsFetching] = useState(true);
   const [questionsList, setQuestionsList] = useState<any[]>([]);
-  const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
 
   useEffect(() => {
     fetchQuestions();
@@ -79,12 +80,11 @@ export default function CodingConfigPage({ params }: { params: Promise<{ id: str
 
   const handleSave = async () => {
     if (!questionId) {
-      setMessage({ type: "error", text: "Please enter a valid Question ID" });
+      showToast("Please enter a valid Question ID", "error");
       return;
     }
 
     setIsLoading(true);
-    setMessage(null);
 
     try {
       const res = await fetch(`/api/v1/teacher/exams/${examId}/coding-config`, {
@@ -99,13 +99,13 @@ export default function CodingConfigPage({ params }: { params: Promise<{ id: str
       });
 
       if (res.ok) {
-        setMessage({ type: "success", text: "Coding configuration saved successfully." });
+        showToast("Coding configuration saved successfully.");
       } else {
         const data = await res.json();
-        setMessage({ type: "error", text: data.message || "Failed to save configuration." });
+        showToast(data.message || "Failed to save configuration.", "error");
       }
     } catch (err) {
-      setMessage({ type: "error", text: "Network error." });
+      showToast("Network error.", "error");
     } finally {
       setIsLoading(false);
     }
@@ -127,16 +127,6 @@ export default function CodingConfigPage({ params }: { params: Promise<{ id: str
         </div>
 
         <div className="glass-card p-8">
-          {message && (
-            <div className={`p-4 rounded-xl mb-6 ${
-              message.type === 'success' 
-                ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400' 
-                : 'bg-rose-500/10 border border-rose-500/20 text-rose-400'
-            }`}>
-              {message.text}
-            </div>
-          )}
-
           <div className="space-y-6">
             <div>
               <label className="block text-sm font-medium text-text-secondary mb-1.5">Select Coding Question</label>
