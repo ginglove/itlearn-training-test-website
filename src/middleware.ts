@@ -3,10 +3,10 @@ import type { NextRequest } from "next/server";
 import { verifyToken } from "./lib/auth";
 
 // Routes that require authentication
-const protectedRoutes = ["/api/v1/student", "/api/v1/teacher", "/student", "/teacher"];
+const protectedRoutes = ["/api/v1/student", "/api/v1/teacher", "/api/v1/settings", "/student", "/teacher"];
 
 // Routes specific to teachers
-const teacherRoutes = ["/api/v1/teacher", "/teacher"];
+const teacherRoutes = ["/api/v1/teacher", "/api/v1/settings", "/teacher"];
 
 // Routes specific to students
 const studentRoutes = ["/api/v1/student", "/student"];
