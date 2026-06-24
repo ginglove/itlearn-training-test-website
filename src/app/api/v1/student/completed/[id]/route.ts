@@ -112,15 +112,24 @@ export async function GET(
         const selectedTexts = selectedIds.map((id) => opts[id]?.text ?? null).filter(Boolean);
         const correctTexts = Object.values(opts).filter((o) => o.isCorrect).map((o) => o.text);
 
-        // PASS if selected IDs exactly match correct IDs
         const correctIds = Object.entries(opts).filter(([, v]) => v.isCorrect).map(([k]) => k).sort();
         const selectedSorted = [...selectedIds].sort();
-        const result =
-          correctIds.length > 0 && correctIds.join(",") === selectedSorted.join(",")
-            ? "PASS"
-            : "FAIL";
+        const isCorrect =
+          correctIds.length > 0 && correctIds.join(",") === selectedSorted.join(",");
+        const result = isCorrect ? "PASS" : "FAIL";
 
-        return { ...d, selectedTexts, correctTexts, result };
+        // Compute score dynamically so it's always consistent with PASS/FAIL
+        const computedScore = (() => {
+          if (selectedIds.length === 0) return d.score;
+          if (correctIds.length === 0) return "0.00";
+          const hasWrong = selectedSorted.some((id) => !correctIds.includes(id));
+          if (hasWrong) return "0.00";
+          const correctCount = selectedSorted.filter((id) => correctIds.includes(id)).length;
+          const pts = parseFloat(d.questionPoints as string) || 0;
+          return (pts * (correctCount / correctIds.length)).toFixed(2);
+        })();
+
+        return { ...d, score: computedScore, selectedTexts, correctTexts, result };
       } else {
         // CODE
         const result =

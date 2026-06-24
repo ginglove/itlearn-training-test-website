@@ -112,6 +112,7 @@ export default function CodingMonitorPage({ params }: { params: Promise<{ id: st
   const { id: examId } = use(params);
   const [students, setStudents] = useState<any[]>([]);
   const [totalPossibleScore, setTotalPossibleScore] = useState("0");
+  const [totalQuestions, setTotalQuestions] = useState(0);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -123,6 +124,7 @@ export default function CodingMonitorPage({ params }: { params: Promise<{ id: st
           const data = JSON.parse(e.data);
           setStudents(data.roster);
           setTotalPossibleScore(data.totalPossibleScore ?? "0");
+          setTotalQuestions(data.totalQuestions ?? 0);
         } catch (err) {
           console.error("SSE parse error:", err);
         }
@@ -181,7 +183,7 @@ export default function CodingMonitorPage({ params }: { params: Promise<{ id: st
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-bg-surface-elevated/50 border-b border-border-strong">
-                {["Student", "IP", "Focus Losses", "Time Elapsed", "Status", "Score", ""].map((h) => (
+                {["Student", "IP", "Focus Losses", "Time Elapsed", "Progress", "Status", "Score", ""].map((h) => (
                   <th key={h} className="p-4 text-xs font-medium text-text-tertiary uppercase tracking-wider">{h}</th>
                 ))}
               </tr>
@@ -189,7 +191,7 @@ export default function CodingMonitorPage({ params }: { params: Promise<{ id: st
             <tbody className="divide-y divide-border-subtle">
               {students.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="p-10 text-center text-text-tertiary">
+                  <td colSpan={8} className="p-10 text-center text-text-tertiary">
                     <div className="w-6 h-6 border-2 border-brand-500/30 border-t-brand-500 rounded-full animate-spin mx-auto mb-3" />
                     Waiting for students to join...
                   </td>
@@ -223,6 +225,37 @@ export default function CodingMonitorPage({ params }: { params: Promise<{ id: st
                             <div className="text-xs text-text-tertiary mt-0.5">completed</div>
                           )}
                         </td>
+                        {/* ── Progress cell ── */}
+                        <td className="p-4">
+                          {(() => {
+                            const answered = student.details?.length ?? 0;
+                            const total = totalQuestions;
+                            const pct = total > 0 ? Math.round((answered / total) * 100) : 0;
+                            const pass = student.details?.filter((d: any) => d.result === "PASS").length ?? 0;
+                            const fail = student.details?.filter((d: any) => d.result === "FAIL").length ?? 0;
+                            return (
+                              <div className="space-y-1.5 min-w-[110px]">
+                                <div className="flex items-center justify-between text-xs">
+                                  <span className="font-mono text-white font-semibold">{answered}/{total}</span>
+                                  <span className="text-text-tertiary">{pct}%</span>
+                                </div>
+                                <div className="h-1.5 bg-bg-surface-elevated rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full bg-brand-500 rounded-full transition-all duration-500"
+                                    style={{ width: `${pct}%` }}
+                                  />
+                                </div>
+                                {answered > 0 && (
+                                  <div className="flex gap-2 text-[10px] font-semibold">
+                                    {pass > 0 && <span className="text-emerald-400">✓ {pass} pass</span>}
+                                    {fail > 0 && <span className="text-rose-400">✗ {fail} fail</span>}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
+                        </td>
+
                         <td className="p-4">
                           {student.submittedAt ? (
                             <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-2.5 py-1 rounded-lg">
@@ -259,7 +292,7 @@ export default function CodingMonitorPage({ params }: { params: Promise<{ id: st
                       {/* ── Expandable detail section ── */}
                       {isExpanded && (
                         <tr key={`${student.id}-detail`}>
-                          <td colSpan={7} className="bg-bg-surface-elevated/10 px-6 py-5 border-t border-border-strong/50">
+                          <td colSpan={8} className="bg-bg-surface-elevated/10 px-6 py-5 border-t border-border-strong/50">
                             <div className="border border-border-strong rounded-xl overflow-hidden">
                               <div className="bg-bg-surface px-4 py-3 border-b border-border-strong">
                                 <span className="text-xs font-bold text-text-tertiary uppercase tracking-wider">
