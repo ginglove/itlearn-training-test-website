@@ -187,7 +187,7 @@ git push
 2. Connect your GitHub account and select your repository.
 3. Netlify reads `netlify.toml` automatically. Confirm these build settings in the UI:
    - **Build command:** `npm run build`
-   - **Publish directory:** `.` *(dot — the project root, not `.next`)*
+   - **Publish directory:** `.next`
    - **Plugin:** `@netlify/plugin-nextjs` is installed automatically via `netlify.toml`
 4. **Do not click Deploy yet.** Set environment variables first (Step 6).
 
