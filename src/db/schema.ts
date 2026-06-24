@@ -7,6 +7,7 @@ import {
   timestamp,
   integer,
   decimal,
+  json,
   pgEnum,
   uniqueIndex,
   index,
@@ -133,6 +134,7 @@ export const examSubmissions = pgTable(
     startAt: timestamp("start_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    questionOrder: json("question_order").$type<string[]>(),
     submittedAt: timestamp("submitted_at", { withTimezone: true }),
     totalScore: decimal("total_score", { precision: 5, scale: 2 }).default(
       "0.00"

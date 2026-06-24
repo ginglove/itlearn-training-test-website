@@ -87,6 +87,7 @@ CREATE TABLE "exam_submissions" (
 	"exam_id" uuid NOT NULL,
 	"student_id" uuid NOT NULL,
 	"start_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"question_order" json,
 	"submitted_at" timestamp with time zone,
 	"total_score" numeric(5, 2) DEFAULT '0.00',
 	"client_ip" varchar(45) NOT NULL,

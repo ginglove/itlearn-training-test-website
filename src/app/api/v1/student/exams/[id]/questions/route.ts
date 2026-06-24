@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { questions, quizOptions, codeConfigs, testCases, exams } from "@/db/schema";
-import { eq, asc, and } from "drizzle-orm";
+import { questions, quizOptions, codeConfigs, testCases, exams, examSubmissions } from "@/db/schema";
+import { eq, asc, and, isNull } from "drizzle-orm";
 
 export async function GET(
   request: NextRequest,
@@ -65,11 +65,37 @@ export async function GET(
       }
     }
 
-    // Shuffle if configured
+    // Shuffle if configured — persist order so it stays the same on resume
     if (exam.isShuffled) {
-      for (let i = enrichedQuestions.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [enrichedQuestions[i], enrichedQuestions[j]] = [enrichedQuestions[j], enrichedQuestions[i]];
+      // Look up the active submission for this student
+      const [submission] = await db
+        .select({ id: examSubmissions.id, questionOrder: examSubmissions.questionOrder })
+        .from(examSubmissions)
+        .where(
+          and(
+            eq(examSubmissions.examId, examId),
+            eq(examSubmissions.studentId, studentId),
+            isNull(examSubmissions.submittedAt)
+          )
+        )
+        .limit(1);
+
+      if (submission?.questionOrder && (submission.questionOrder as string[]).length === enrichedQuestions.length) {
+        // Resume: restore the previously saved order
+        const orderMap = new Map((submission.questionOrder as string[]).map((id, idx) => [id, idx]));
+        enrichedQuestions.sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
+      } else {
+        // First load: shuffle and persist the order
+        for (let i = enrichedQuestions.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [enrichedQuestions[i], enrichedQuestions[j]] = [enrichedQuestions[j], enrichedQuestions[i]];
+        }
+        if (submission) {
+          await db
+            .update(examSubmissions)
+            .set({ questionOrder: enrichedQuestions.map((q) => q.id) })
+            .where(eq(examSubmissions.id, submission.id));
+        }
       }
     }
 
