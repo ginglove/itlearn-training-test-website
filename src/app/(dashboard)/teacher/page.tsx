@@ -7,6 +7,7 @@ export default function TeacherDashboard() {
   const router = useRouter();
   const [exams, setExams] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [cloningId, setCloningId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchExams();
@@ -27,6 +28,24 @@ export default function TeacherDashboard() {
       console.error(err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleClone = async (examId: string) => {
+    setCloningId(examId);
+    try {
+      const res = await fetch(`/api/v1/teacher/exams/${examId}/clone`, { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        await fetchExams();
+        router.push(`/teacher/exams/${data.exam.id}/edit`);
+      } else {
+        alert(data.message || "Failed to clone exam.");
+      }
+    } catch {
+      alert("Network error. Please try again.");
+    } finally {
+      setCloningId(null);
     }
   };
 
@@ -73,7 +92,22 @@ export default function TeacherDashboard() {
               <div key={exam.id} className="glass-card p-6 flex flex-col h-full relative group">
                 <div className="flex justify-between items-start mb-2">
                   <h3 className="text-xl font-bold text-white pr-6">{exam.title}</h3>
-                  <button 
+                  <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => handleClone(exam.id)}
+                    disabled={cloningId === exam.id}
+                    className="text-text-tertiary hover:text-brand-400 transition-colors"
+                    title="Clone Exam"
+                  >
+                    {cloningId === exam.id ? (
+                      <div className="w-5 h-5 border-2 border-brand-400/30 border-t-brand-400 rounded-full animate-spin" />
+                    ) : (
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                    )}
+                  </button>
+                  <button
                     onClick={() => router.push(`/teacher/exams/${exam.id}/edit`)}
                     className="text-text-tertiary hover:text-white transition-colors"
                     title="Edit Settings & Access"
@@ -83,6 +117,7 @@ export default function TeacherDashboard() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
                   </button>
+                  </div>
                 </div>
                 <p className="text-text-secondary text-sm mb-4 line-clamp-2 flex-grow">
                   {exam.description || "No description provided."}
