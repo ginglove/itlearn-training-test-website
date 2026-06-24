@@ -104,6 +104,18 @@ export async function POST(
       testCasesMap.set(tc.questionId, list);
     }
 
+    // Batch-fetch quiz options for all QUIZ questions upfront
+    const quizQuestionIds = examQuestions.filter((q) => q.type === "QUIZ").map((q) => q.id);
+    const allQuizOptions = quizQuestionIds.length > 0
+      ? await db.select().from(quizOptions).where(inArray(quizOptions.questionId, quizQuestionIds))
+      : [];
+    const quizOptionsMap = new Map<string, typeof quizOptions.$inferSelect[]>();
+    for (const opt of allQuizOptions) {
+      const list = quizOptionsMap.get(opt.questionId) || [];
+      list.push(opt);
+      quizOptionsMap.set(opt.questionId, list);
+    }
+
     // Grade QUIZ and CODE questions synchronously
     let totalScore = 0;
     const detailInserts: any[] = [];
@@ -113,11 +125,7 @@ export async function POST(
       if (!q) continue;
 
         if (q.type === "QUIZ") {
-          // Fetch correct options
-          const options = await db
-            .select()
-            .from(quizOptions)
-            .where(eq(quizOptions.questionId, q.id));
+          const options = quizOptionsMap.get(q.id) || [];
 
           const correctOptionIds = options
             .filter((opt) => opt.isCorrect)

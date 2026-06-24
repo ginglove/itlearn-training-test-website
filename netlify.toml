@@ -1,0 +1,21 @@
+[build]
+  command = "npm run build"
+  publish = "."
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# Required environment variables — set values in Netlify UI, not here
+# DATABASE_URL          — Neon serverless Postgres connection string
+# JWT_SECRET            — Random 32+ char secret for signing JWTs
+# INTERNAL_CRON_SECRET  — Secret for protecting /api/v1/internal/* routes
+# UPSTASH_REDIS_REST_URL   — Upstash Redis REST endpoint
+# UPSTASH_REDIS_REST_TOKEN — Upstash Redis REST token
+# PISTON_API_URL        — (optional) Override default Piston API URL

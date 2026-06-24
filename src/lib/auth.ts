@@ -41,9 +41,10 @@ export function validatePasswordComplexity(password: string): {
 }
 
 // ── JWT utilities ──────────────────────────────────────────────────────────────
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "fallback-secret-change-me"
-);
+if (!process.env.JWT_SECRET) {
+  throw new Error("JWT_SECRET environment variable is not set");
+}
+const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET);
 
 export interface TokenPayload {
   userId: string;
@@ -79,21 +80,24 @@ export function generateTemporaryPassword(): string {
   const special = "@$!%*?&";
   const all = upper + lower + digits + special;
 
-  let password = "";
-  // Ensure at least one from each category
-  password += upper[Math.floor(Math.random() * upper.length)];
-  password += lower[Math.floor(Math.random() * lower.length)];
-  password += digits[Math.floor(Math.random() * digits.length)];
-  password += special[Math.floor(Math.random() * special.length)];
+  const randomIndex = (charset: string) =>
+    charset[crypto.getRandomValues(new Uint32Array(1))[0] % charset.length];
 
-  // Fill remaining 8 chars
+  let password = "";
+  password += randomIndex(upper);
+  password += randomIndex(lower);
+  password += randomIndex(digits);
+  password += randomIndex(special);
+
   for (let i = 0; i < 8; i++) {
-    password += all[Math.floor(Math.random() * all.length)];
+    password += randomIndex(all);
   }
 
-  // Shuffle
-  return password
-    .split("")
-    .sort(() => Math.random() - 0.5)
-    .join("");
+  // Cryptographically shuffle
+  const arr = password.split("");
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = crypto.getRandomValues(new Uint32Array(1))[0] % (i + 1);
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr.join("");
 }

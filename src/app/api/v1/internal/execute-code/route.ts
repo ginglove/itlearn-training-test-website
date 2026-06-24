@@ -12,7 +12,10 @@ const redis = new Redis({
 });
 
 // We'll use a secret token to protect this internal route (called by a cron or worker)
-const INTERNAL_CRON_SECRET = process.env.INTERNAL_CRON_SECRET || "cron-secret-123";
+const INTERNAL_CRON_SECRET = process.env.INTERNAL_CRON_SECRET;
+if (!INTERNAL_CRON_SECRET) {
+  throw new Error("INTERNAL_CRON_SECRET environment variable is not set");
+}
 
 export async function POST(request: NextRequest) {
   try {
