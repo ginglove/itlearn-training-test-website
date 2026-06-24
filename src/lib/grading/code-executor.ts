@@ -103,7 +103,9 @@ async function executeLocalSingleTestCase(
   timedOut: boolean;
   executionTimeMs: number;
 }> {
-  const tempDir = path.join(process.cwd(), "tmp_exec");
+  // /tmp is writable on both local machines and Netlify/Lambda environments.
+  // process.cwd() is read-only on Netlify (/var/task), so we never use it for temp files.
+  const tempDir = path.join("/tmp", "itlearn_exec");
   if (!fs.existsSync(tempDir)) {
     fs.mkdirSync(tempDir, { recursive: true });
   }
@@ -122,8 +124,10 @@ async function executeLocalSingleTestCase(
       const pythonExe = getPythonExecutable();
       command = `${pythonExe} "${filePath}"`;
     } else if (language === "javascript" || language === "js") {
-      const nodeExe = getNodeExecutable();
-      command = `${nodeExe} "${filePath}"`;
+      // process.execPath is the path to the running Node binary — always correct
+      // regardless of environment (local, Netlify Lambda, CI, etc.)
+      const nodeExe = process.execPath || getNodeExecutable();
+      command = `"${nodeExe}" "${filePath}"`;
     } else {
       resolve({
         stdout: "",
@@ -186,12 +190,7 @@ async function executeSingleTestCase(
   timedOut: boolean;
   executionTimeMs: number;
 }> {
-  const isNetlify = !!process.env.NETLIFY;
-
   if (executionMode === "LOCAL_ONLY") {
-    if (isNetlify) {
-      throw new Error("LOCAL_ONLY execution mode is not supported on Netlify. Set executionMode to API_ONLY in platform settings.");
-    }
     return executeLocalSingleTestCase(sourceCode, language, input, timeLimitMs);
   }
 
@@ -242,9 +241,6 @@ async function executeSingleTestCase(
   }
 
   if (useFallback) {
-    if (isNetlify) {
-      throw new Error("Piston API unavailable and local fallback is not supported on Netlify. Check PISTON_API_URL or switch executionMode to API_ONLY.");
-    }
     console.info("Using local child-process execution fallback.");
     return executeLocalSingleTestCase(sourceCode, language, input, timeLimitMs);
   }

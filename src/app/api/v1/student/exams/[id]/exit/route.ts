@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { examSubmissions, submissionDetails } from "@/db/schema";
+import { examSubmissions } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 export async function POST(
@@ -43,17 +43,11 @@ export async function POST(
       );
     }
 
-    await db.transaction(async (tx) => {
-      await tx
-        .delete(submissionDetails)
-        .where(eq(submissionDetails.submissionId, submissionId));
-      await tx
-        .delete(examSubmissions)
-        .where(eq(examSubmissions.id, submissionId));
-    });
+    // Keep the draft and all saved answers intact so the student can resume later.
+    // The submission record stays with submittedAt = null until they submit or time runs out.
 
     return NextResponse.json(
-      { status: "EXITED", message: "Draft exam has been cancelled." },
+      { status: "SAVED", message: "Progress saved. You can resume this exam before it closes." },
       { status: 200 }
     );
   } catch (error) {

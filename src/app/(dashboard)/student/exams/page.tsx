@@ -42,8 +42,9 @@ export default function StudentExamsPage() {
       const data = await res.json();
       
       if (res.ok) {
-        // Store submissionId for the workspace
         sessionStorage.setItem(`exam_${examId}_submission_id`, data.submissionId);
+        sessionStorage.setItem(`exam_${examId}_start_at`, data.startAt);
+        sessionStorage.setItem(`exam_${examId}_duration`, String(data.examDuration));
         router.push(`/student/exams/${examId}/workspace`);
       } else {
         alert(data.message || "Failed to start exam");

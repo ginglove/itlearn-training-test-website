@@ -12,8 +12,9 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isExiting, setIsExiting] = useState(false);
   const [focusLosses, setFocusLosses] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(3600); // Default 1hr
+  const [timeLeft, setTimeLeft] = useState(3600);
   const [runResult, setRunResult] = useState<any>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [activeTab, setActiveTab] = useState<"cases" | "output">("cases");
@@ -35,20 +36,50 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
 
     const fetchQuestions = async () => {
       try {
-        const res = await fetch(`/api/v1/student/exams/${examId}/questions`);
-        const data = await res.json();
-        if (res.ok) {
-          setQuestions(data.questions);
-          // Initialize answer state
+        const [questionsRes, draftRes] = await Promise.all([
+          fetch(`/api/v1/student/exams/${examId}/questions`),
+          fetch(`/api/v1/student/exams/${examId}/draft`),
+        ]);
+
+        const questionsData = await questionsRes.json();
+        const draftData = draftRes.ok ? await draftRes.json() : { answers: [] };
+
+        if (questionsRes.ok) {
+          setQuestions(questionsData.questions);
+
+          // Build a map of saved draft answers keyed by questionId
+          const draftMap: Record<string, any> = {};
+          for (const d of draftData.answers || []) {
+            draftMap[d.questionId] = d;
+          }
+
+          // Initialise answers from draft first, fall back to starter code / empty
           const initialAnswers: Record<string, any> = {};
-          data.questions.forEach((q: any) => {
+          questionsData.questions.forEach((q: any) => {
+            const saved = draftMap[q.id];
             if (q.type === "CODE") {
-              initialAnswers[q.id] = { source_code: q.starterCode || "", language: "python" };
+              initialAnswers[q.id] = {
+                source_code: saved?.sourceCode ?? q.starterCode ?? "",
+                language: saved?.language ?? "python",
+              };
             } else {
-              initialAnswers[q.id] = { selected_options: [] };
+              initialAnswers[q.id] = {
+                selected_options: saved?.selectedOptions ?? [],
+              };
             }
           });
           setAnswers(initialAnswers);
+        }
+
+        // Compute remaining time from startAt + examDuration stored by the exams list page
+        const startAt = sessionStorage.getItem(`exam_${examId}_start_at`);
+        const durationMins = parseInt(sessionStorage.getItem(`exam_${examId}_duration`) || "60", 10);
+        if (startAt) {
+          const elapsed = Math.floor((Date.now() - new Date(startAt).getTime()) / 1000);
+          const remaining = Math.max(0, durationMins * 60 - elapsed);
+          setTimeLeft(remaining);
+        } else {
+          setTimeLeft(durationMins * 60);
         }
       } catch (err) {
         console.error(err);
@@ -212,6 +243,30 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
     }
   };
 
+  const handleSaveAndExit = async () => {
+    setIsExiting(true);
+    // Flush current answers to the server before leaving
+    try {
+      const payloads = Object.entries(answers).map(([qId, ans]) => ({
+        question_id: qId,
+        ...ans,
+      }));
+      await fetch(`/api/v1/student/exams/${examId}/auto-save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ submission_id: submissionId, unsynced_payloads: payloads }),
+      });
+      await fetch(`/api/v1/student/exams/${examId}/exit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ submissionId }),
+      });
+    } catch {
+      // Even on network error we navigate away — draft is auto-saved periodically
+    }
+    router.push("/student/exams");
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-bg-base flex items-center justify-center">
@@ -249,9 +304,16 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
             {formatTime(timeLeft)}
           </div>
           
-          <button 
+          <button
+            onClick={handleSaveAndExit}
+            disabled={isExiting || isSubmitting}
+            className="premium-btn-secondary py-2 px-4 text-sm"
+          >
+            {isExiting ? "Saving..." : "Save & Exit"}
+          </button>
+          <button
             onClick={handleSubmit}
-            disabled={isSubmitting}
+            disabled={isSubmitting || isExiting}
             className="premium-btn-primary py-2 px-6 text-sm"
           >
             {isSubmitting ? "Submitting..." : "Submit Exam"}

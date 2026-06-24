@@ -61,7 +61,12 @@ export async function POST(
       .limit(1);
 
     if (activeSubmission) {
-      return NextResponse.json({ status: "SUCCESS", submissionId: activeSubmission.id });
+      return NextResponse.json({
+        status: "SUCCESS",
+        submissionId: activeSubmission.id,
+        startAt: activeSubmission.startAt,
+        examDuration: exam.duration,
+      });
     }
 
     // 3. Count completed attempts
@@ -99,7 +104,12 @@ export async function POST(
       })
       .returning();
 
-    return NextResponse.json({ status: "SUCCESS", submissionId: newSubmission.id });
+    return NextResponse.json({
+      status: "SUCCESS",
+      submissionId: newSubmission.id,
+      startAt: newSubmission.startAt,
+      examDuration: exam.duration,
+    });
   } catch (error) {
     console.error("Start exam error:", error);
     return NextResponse.json(
