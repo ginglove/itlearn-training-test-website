@@ -626,20 +626,30 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
                 </div>
                 <h4 className="text-md font-bold text-white mb-1">Bulk Import</h4>
                 <p className="text-text-tertiary text-xs mb-3">Upload spreadsheet file (.xlsx/csv)</p>
-                <input 
-                  type="file" 
+                <input
+                  type="file"
                   accept=".xlsx,.csv"
-                  className="hidden" 
+                  className="hidden"
                   ref={fileInputRef}
                   onChange={handleFileUpload}
                 />
-                <button 
+                <button
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isUploading}
                   className="premium-btn-secondary py-1.5 px-4 text-xs w-full max-w-[150px]"
                 >
                   {isUploading ? "Uploading..." : "Select File"}
                 </button>
+                <a
+                  href="/api/v1/teacher/questions/template"
+                  download="questions_template.xlsx"
+                  className="mt-2 inline-flex items-center gap-1.5 text-xs text-brand-400 hover:text-brand-300 transition-colors font-medium"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Download Template
+                </a>
               </div>
 
               {/* Status statistics */}
