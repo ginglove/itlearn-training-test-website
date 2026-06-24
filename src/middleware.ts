@@ -6,7 +6,7 @@ import { verifyToken } from "./lib/auth";
 const protectedRoutes = ["/api/v1/student", "/api/v1/teacher", "/api/v1/settings", "/student", "/teacher"];
 
 // Routes specific to teachers
-const teacherRoutes = ["/api/v1/teacher", "/api/v1/settings", "/teacher"];
+const teacherRoutes = ["/api/v1/teacher", "/teacher"];
 
 // Routes specific to students
 const studentRoutes = ["/api/v1/student", "/student"];
