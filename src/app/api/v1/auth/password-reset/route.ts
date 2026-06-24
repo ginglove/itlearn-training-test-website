@@ -71,6 +71,7 @@ export async function POST(request: NextRequest) {
         role: users.role,
         isFirstLogin: users.isFirstLogin,
       })
+      .from(users)
       .where(eq(users.id, payload.userId));
 
     return NextResponse.json({
