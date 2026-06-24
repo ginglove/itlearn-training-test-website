@@ -76,32 +76,35 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  // Check IP binding (RSD Section 3.2)
-  const clientIp =
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    request.headers.get("x-real-ip") ||
-    "unknown";
+  // Check IP binding (RSD Section 3.2) — students only.
+  // Teachers manage the system from varying networks; IP binding is an exam anti-cheat
+  // measure and must not block teacher dashboard or API operations.
+  const isTeacherPath = teacherRoutes.some((r) => pathname.startsWith(r));
 
-  if (payload.boundIp !== "unknown" && clientIp !== "unknown" && payload.boundIp !== clientIp) {
-    // Log incident conceptually here.
-    if (pathname.startsWith("/api/")) {
-      return NextResponse.json(
-        {
-          error: "ACCESS_DENIED",
-          message: "Session mismatch detected. Your IP address does not match your active session.",
-        },
-        { status: 403 }
-      );
+  if (!isTeacherPath) {
+    const clientIp =
+      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      request.headers.get("x-real-ip") ||
+      "unknown";
+
+    if (payload.boundIp !== "unknown" && clientIp !== "unknown" && payload.boundIp !== clientIp) {
+      if (pathname.startsWith("/api/")) {
+        return NextResponse.json(
+          {
+            error: "ACCESS_DENIED",
+            message: "Session mismatch detected. Your IP address does not match your active session.",
+          },
+          { status: 403 }
+        );
+      }
+      return NextResponse.redirect(new URL("/login?error=ip_mismatch", request.url));
     }
-    // Redirect to login to force re-auth
-    return NextResponse.redirect(new URL("/login?error=ip_mismatch", request.url));
   }
 
   // Role-based access control
-  const isTeacherRoute = teacherRoutes.some((route) => pathname.startsWith(route));
   const isStudentRoute = studentRoutes.some((route) => pathname.startsWith(route));
 
-  if (isTeacherRoute && payload.role !== "TEACHER") {
+  if (isTeacherPath && payload.role !== "TEACHER") {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "FORBIDDEN", message: "Teacher access required" }, { status: 403 });
     }

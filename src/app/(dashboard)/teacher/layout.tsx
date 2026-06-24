@@ -13,8 +13,8 @@ export default function TeacherLayout({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const handleLogout = () => {
-    // Clear session cookie
     document.cookie = "session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT;";
+    localStorage.removeItem("user");
     router.push("/login");
   };
 

@@ -43,11 +43,17 @@ export default function StudentSettingsPage() {
       const stored = localStorage.getItem("user");
       if (stored) {
         const parsed = JSON.parse(stored);
+        if (parsed.role !== "STUDENT") {
+          // Stale data from a previous teacher session — clear and redirect
+          localStorage.removeItem("user");
+          router.push("/login");
+          return;
+        }
         setUser(parsed);
         setFullName(parsed.full_name || "");
       }
     } catch {}
-  }, []);
+  }, [router]);
 
   const handleNameUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
