@@ -422,24 +422,24 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
         </aside>
 
         {/* Right Area: Question Content */}
-        <main className="flex-1 overflow-y-auto p-8 relative">
-          <div className="max-w-4xl mx-auto">
-            
+        <main className="flex-1 overflow-y-auto p-4 relative">
+          <div className="max-w-5xl mx-auto">
+
             {/* Question Header */}
-            <div className="flex justify-between items-start mb-8">
-              <div>
-                <span className="text-xs font-bold text-brand-400 uppercase tracking-wider mb-2 block">
+            <div className="flex justify-between items-start mb-4">
+              <div className="flex-1 min-w-0">
+                <span className="text-xs font-bold text-brand-400 uppercase tracking-wider mb-1 block">
                   Question {currentIndex + 1} of {questions.length} • {currentQ.type}
                 </span>
-                <h2 className="text-xl text-white font-medium whitespace-pre-wrap">{currentQ.content}</h2>
+                <h2 className="text-sm text-white font-medium whitespace-pre-wrap leading-relaxed">{currentQ.content}</h2>
               </div>
-              <div className="text-text-tertiary font-mono bg-bg-surface-elevated px-3 py-1 rounded text-sm whitespace-nowrap ml-6">
+              <div className="text-text-tertiary font-mono bg-bg-surface-elevated px-3 py-1 rounded text-sm whitespace-nowrap ml-4 shrink-0">
                 {currentQ.points} pts
               </div>
             </div>
 
             {/* Response Area */}
-            <div className="mt-8">
+            <div className="mt-3">
               {currentQ.type === "QUIZ" && currentQ.options ? (
                 <div className="space-y-3">
                   {currentQ.options.map((opt: any) => {
@@ -599,7 +599,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                   )}
                 </div>
               ) : currentQ.type === "CODE" ? (
-                <div className="border border-border-strong rounded-xl overflow-hidden flex flex-col h-[600px] shadow-2xl">
+                <div className="border border-border-strong rounded-xl overflow-hidden flex flex-col h-[540px] shadow-2xl">
                   {/* Editor Header */}
                   <div className="bg-bg-surface-elevated px-4 py-2 flex items-center justify-between border-b border-border-strong shrink-0">
                     <div className="flex items-center gap-4">
@@ -653,7 +653,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                   {/* Editor Body */}
                   <textarea
                     spellCheck={false}
-                    className="flex-1 w-full bg-bg-surface text-text-primary p-6 font-mono text-[15px] leading-relaxed resize-none focus:outline-none focus:ring-0 custom-scrollbar"
+                    className="flex-1 w-full bg-bg-surface text-text-primary p-4 font-mono text-[13px] leading-relaxed resize-none focus:outline-none focus:ring-0 custom-scrollbar"
                     placeholder={
                       answers[currentQ.id]?.language === "javascript"
                         ? "// Write your JavaScript solution here..."
@@ -664,7 +664,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                   />
                   
                   {/* Tabbed Bottom Panel */}
-                  <div className="h-52 border-t border-border-strong bg-bg-surface-elevated/50 flex flex-col shrink-0">
+                  <div className="h-72 border-t border-border-strong bg-bg-surface-elevated/50 flex flex-col shrink-0">
                     {/* Tab Header */}
                     <div className="px-4 py-2 border-b border-border-strong flex items-center gap-1 shrink-0">
                       <button
@@ -705,13 +705,22 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                       {activeTab === "cases" ? (
                         /* Sample Cases Tab */
                         currentQ.publicCases && currentQ.publicCases.length > 0 ? (
-                          <div className="flex gap-4">
+                          <div className="space-y-2">
                             {currentQ.publicCases.map((tc: any, i: number) => (
-                              <div key={i} className="bg-bg-base border border-border-strong rounded-lg p-3 min-w-[250px]">
-                                <div className="text-xs text-text-tertiary mb-1">Input:</div>
-                                <div className="font-mono text-sm text-white mb-3 whitespace-pre-wrap">{tc.inputData || "(empty)"}</div>
-                                <div className="text-xs text-text-tertiary mb-1">Expected Output:</div>
-                                <div className="font-mono text-sm text-brand-300 whitespace-pre-wrap">{tc.outputData}</div>
+                              <div key={i} className="bg-bg-base border border-border-strong rounded-lg overflow-hidden">
+                                <div className="px-3 py-1.5 border-b border-border-strong bg-bg-surface-elevated/40">
+                                  <span className="text-xs font-semibold text-text-tertiary">Sample {i + 1}</span>
+                                </div>
+                                <div className="grid grid-cols-2 divide-x divide-border-strong">
+                                  <div className="p-3">
+                                    <div className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-1.5">Input</div>
+                                    <pre className="font-mono text-xs text-white whitespace-pre-wrap break-all leading-relaxed">{tc.inputData || "(empty)"}</pre>
+                                  </div>
+                                  <div className="p-3">
+                                    <div className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-1.5">Expected Output</div>
+                                    <pre className="font-mono text-xs text-brand-300 whitespace-pre-wrap break-all leading-relaxed">{tc.outputData || "(empty)"}</pre>
+                                  </div>
+                                </div>
                               </div>
                             ))}
                           </div>
@@ -750,34 +759,43 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                                 </span>
                               </div>
                               {/* Per-Test-Case Results */}
-                              {runResult.results?.map((r: any, i: number) => (
-                                <div key={i} className="bg-bg-base border border-border-strong rounded-lg p-3">
-                                  <div className="flex items-center justify-between mb-2">
-                                    <span className="text-xs font-semibold text-text-secondary">Test Case {i + 1}</span>
-                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                                      r.status === "AC" ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"
-                                    }`}>
-                                      {r.status}
-                                    </span>
+                              {runResult.results?.map((r: any, i: number) => {
+                                const tc = currentQ.publicCases?.[i];
+                                return (
+                                  <div key={i} className="bg-bg-base border border-border-strong rounded-lg overflow-hidden">
+                                    <div className="flex items-center justify-between px-3 py-2 border-b border-border-strong bg-bg-surface-elevated/40">
+                                      <span className="text-xs font-semibold text-text-secondary">Test Case {i + 1}</span>
+                                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                                        r.status === "AC" ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" :
+                                        r.status === "CE" ? "bg-amber-500/15 text-amber-400 border-amber-500/30" :
+                                        "bg-rose-500/15 text-rose-400 border-rose-500/30"
+                                      }`}>
+                                        {r.status}
+                                      </span>
+                                    </div>
+                                    <div className="grid grid-cols-3 divide-x divide-border-strong text-xs font-mono">
+                                      <div className="p-2.5">
+                                        <div className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-1">Input</div>
+                                        <pre className="text-text-secondary whitespace-pre-wrap break-all leading-relaxed">{tc?.inputData || r.inputData || "(empty)"}</pre>
+                                      </div>
+                                      <div className="p-2.5">
+                                        <div className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-1">Expected</div>
+                                        <pre className="text-brand-300 whitespace-pre-wrap break-all leading-relaxed">{r.expectedOutput !== undefined && r.expectedOutput !== "" ? r.expectedOutput : <span className="text-text-tertiary italic">(empty)</span>}</pre>
+                                      </div>
+                                      <div className="p-2.5">
+                                        <div className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-1">Your Output</div>
+                                        <pre className={`whitespace-pre-wrap break-all leading-relaxed ${r.status === "AC" ? "text-emerald-400" : "text-rose-400"}`}>{r.actualOutput !== undefined && r.actualOutput !== "" ? r.actualOutput : <span className="text-text-tertiary italic">(empty)</span>}</pre>
+                                      </div>
+                                    </div>
+                                    {r.stderr && (
+                                      <div className="border-t border-border-strong px-3 py-2">
+                                        <div className="text-[10px] font-bold text-amber-400/70 uppercase tracking-wider mb-1">stderr</div>
+                                        <pre className="text-amber-400/90 whitespace-pre-wrap font-mono text-[11px] bg-amber-500/5 rounded p-2 max-h-20 overflow-y-auto">{r.stderr}</pre>
+                                      </div>
+                                    )}
                                   </div>
-                                  <div className="grid grid-cols-2 gap-3 text-xs font-mono">
-                                    <div>
-                                      <div className="text-text-tertiary mb-0.5">Expected:</div>
-                                      <div className="text-brand-300 whitespace-pre-wrap">{r.expectedOutput || "(empty)"}</div>
-                                    </div>
-                                    <div>
-                                      <div className="text-text-tertiary mb-0.5">Actual:</div>
-                                      <div className={`whitespace-pre-wrap ${r.status === "AC" ? "text-emerald-400" : "text-rose-400"}`}>{r.actualOutput || "(empty)"}</div>
-                                    </div>
-                                  </div>
-                                  {r.stderr && (
-                                    <div className="mt-2 text-xs">
-                                      <div className="text-amber-400/70 mb-0.5">stderr:</div>
-                                      <pre className="text-amber-400/90 whitespace-pre-wrap font-mono text-[11px] bg-amber-500/5 rounded p-2 max-h-24 overflow-y-auto">{r.stderr}</pre>
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           )
                         ) : (
