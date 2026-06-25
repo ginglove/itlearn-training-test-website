@@ -38,6 +38,7 @@ export async function GET(
         selectedOptions: submissionDetails.selectedOptions,
         sourceCode: submissionDetails.sourceCode,
         language: submissionDetails.language,
+        studentXpath: submissionDetails.studentXpath,
       })
       .from(submissionDetails)
       .where(eq(submissionDetails.submissionId, submission.id));

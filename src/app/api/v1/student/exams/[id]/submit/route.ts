@@ -7,10 +7,12 @@ import {
   quizOptions,
   codeConfigs,
   testCases,
+  xpathConfigs,
 } from "@/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import { gradeQuizQuestion } from "@/lib/grading/quiz-grader";
 import { executeCode } from "@/lib/grading/code-executor";
+import { evaluateXPathQuestion } from "@/lib/grading/xpath-evaluator";
 import { getUserId } from "@/lib/get-user-id";
 
 export async function POST(
@@ -96,13 +98,19 @@ export async function POST(
     }
 
     const configMap = new Map(allConfigs.map((c) => [c.questionId, c]));
-    // Group test cases by questionId
     const testCasesMap = new Map<string, typeof testCases.$inferSelect[]>();
     for (const tc of allTestCases) {
       const list = testCasesMap.get(tc.questionId) || [];
       list.push(tc);
       testCasesMap.set(tc.questionId, list);
     }
+
+    // Fetch XPath configs
+    const xpathQuestionIds = examQuestions.filter((q) => q.type === "XPATH").map((q) => q.id);
+    const allXpathConfigs = xpathQuestionIds.length > 0
+      ? await db.select().from(xpathConfigs).where(inArray(xpathConfigs.questionId, xpathQuestionIds))
+      : [];
+    const xpathConfigMap = new Map(allXpathConfigs.map((c) => [c.questionId, c]));
 
     // Batch-fetch quiz options for all QUIZ questions upfront
     const quizQuestionIds = examQuestions.filter((q) => q.type === "QUIZ").map((q) => q.id);
@@ -179,6 +187,32 @@ export async function POST(
             sourceCode: answer.source_code,
             language: answer.language,
             status: overallStatus,
+            score: questionScore.toFixed(2),
+          });
+        } else if (q.type === "XPATH") {
+          const xConfig = xpathConfigMap.get(q.id);
+          let questionScore = 0;
+          let xpathStatus: "AC" | "WA" | "CE" = "WA";
+
+          if (answer.student_xpath?.trim() && xConfig) {
+            const xResult = await evaluateXPathQuestion({
+              targetType: xConfig.targetType as "URL" | "HTML",
+              targetPayload: xConfig.targetPayload,
+              referenceXpath: xConfig.referenceXpath,
+              studentXpath: answer.student_xpath.trim(),
+            });
+            xpathStatus = xResult.status;
+            if (xResult.status === "AC") {
+              questionScore = parseFloat(q.points as string);
+            }
+          }
+
+          totalScore += questionScore;
+          detailInserts.push({
+            submissionId: submissionIdFinal,
+            questionId: q.id,
+            studentXpath: answer.student_xpath ?? "",
+            status: xpathStatus,
             score: questionScore.toFixed(2),
           });
         }

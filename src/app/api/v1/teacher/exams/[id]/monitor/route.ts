@@ -6,6 +6,7 @@ import {
   questions,
   quizOptions,
   submissionDetails,
+  xpathConfigs,
 } from "@/db/schema";
 import { eq, sql, inArray } from "drizzle-orm";
 
@@ -66,6 +67,7 @@ async function buildSnapshot(examId: string) {
       language: submissionDetails.language,
       sourceCode: submissionDetails.sourceCode,
       selectedOptions: submissionDetails.selectedOptions,
+      studentXpath: submissionDetails.studentXpath,
     })
     .from(submissionDetails)
     .innerJoin(questions, eq(submissionDetails.questionId, questions.id))
@@ -148,7 +150,7 @@ async function buildSnapshot(examId: string) {
         result: isCorrect ? "PASS" : "FAIL",
       };
     } else {
-      // CODE question result
+      // CODE / XPATH question result
       const result =
         d.status === null
           ? "NOT COMPLETED"

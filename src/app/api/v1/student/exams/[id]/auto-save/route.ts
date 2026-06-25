@@ -54,18 +54,20 @@ export async function POST(
           await tx
             .update(submissionDetails)
             .set({
-              selectedOptions: payload.selected_options || existingDetail.selectedOptions,
-              sourceCode: payload.source_code || existingDetail.sourceCode,
-              language: payload.language || existingDetail.language,
+              selectedOptions: payload.selected_options ?? existingDetail.selectedOptions,
+              sourceCode: payload.source_code ?? existingDetail.sourceCode,
+              language: payload.language ?? existingDetail.language,
+              studentXpath: payload.student_xpath ?? existingDetail.studentXpath,
             })
             .where(eq(submissionDetails.id, existingDetail.id));
         } else {
           await tx.insert(submissionDetails).values({
             submissionId: subId,
             questionId: payload.question_id,
-            selectedOptions: payload.selected_options || [],
-            sourceCode: payload.source_code || "",
-            language: payload.language || "python",
+            selectedOptions: payload.selected_options ?? [],
+            sourceCode: payload.source_code ?? "",
+            language: payload.language ?? "python",
+            studentXpath: payload.student_xpath ?? null,
           });
         }
       }

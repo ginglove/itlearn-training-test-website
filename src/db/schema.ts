@@ -15,7 +15,7 @@ import {
 
 // ── Enums ──────────────────────────────────────────────────────────────────────
 export const userRoleEnum = pgEnum("user_role", ["TEACHER", "STUDENT"]);
-export const questionTypeEnum = pgEnum("question_type", ["QUIZ", "CODE"]);
+export const questionTypeEnum = pgEnum("question_type", ["QUIZ", "CODE", "XPATH"]);
 export const executionStatusEnum = pgEnum("execution_status", [
   "AC",
   "WA",
@@ -105,6 +105,18 @@ export const codeConfigs = pgTable("code_configs", {
   teacherCode: text("teacher_code"),
 });
 
+// ── XPath Configs ──────────────────────────────────────────────────────────────
+export const xpathConfigs = pgTable("xpath_configs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  questionId: uuid("question_id")
+    .unique()
+    .notNull()
+    .references(() => questions.id, { onDelete: "cascade" }),
+  targetType: varchar("target_type", { length: 10 }).notNull().default("URL"), // 'URL' | 'HTML'
+  targetPayload: text("target_payload").notNull(),
+  referenceXpath: text("reference_xpath").notNull(),
+});
+
 // ── Test Cases ─────────────────────────────────────────────────────────────────
 export const testCases = pgTable(
   "test_cases",
@@ -168,6 +180,7 @@ export const submissionDetails = pgTable(
     sourceCode: text("source_code"),
     language: varchar("language", { length: 30 }),
     status: executionStatusEnum("status"),
+    studentXpath: text("student_xpath"),
     score: decimal("score", { precision: 5, scale: 2 }).notNull().default("0.00"),
   },
   (table) => [

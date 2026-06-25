@@ -20,6 +20,8 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
   const [runResults, setRunResults] = useState<Record<string, any>>({});
   const [isRunning, setIsRunning] = useState(false);
   const [activeTab, setActiveTab] = useState<"cases" | "output">("cases");
+  const [xpathResults, setXpathResults] = useState<Record<string, any>>({});
+  const [isRunningXpath, setIsRunningXpath] = useState(false);
   const [showUntestedWarning, setShowUntestedWarning] = useState(false);
   const [settings, setSettings] = useState<any>(null);
   const submissionId = typeof window !== 'undefined' ? sessionStorage.getItem(`exam_${examId}_submission_id`) : null;
@@ -63,6 +65,10 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
               initialAnswers[q.id] = {
                 source_code: saved?.sourceCode ?? q.starterCode ?? "",
                 language: saved?.language ?? "python",
+              };
+            } else if (q.type === "XPATH") {
+              initialAnswers[q.id] = {
+                student_xpath: saved?.studentXpath ?? "",
               };
             } else {
               initialAnswers[q.id] = {
@@ -214,6 +220,26 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
     }
   };
 
+  const handleRunXPath = async (qId: string) => {
+    const xpath = answers[qId]?.student_xpath?.trim();
+    if (!xpath) return;
+    setIsRunningXpath(true);
+    setXpathResults((prev) => ({ ...prev, [qId]: null }));
+    try {
+      const res = await fetch(`/api/v1/student/exams/${examId}/run-xpath`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question_id: qId, student_xpath: xpath }),
+      });
+      const data = await res.json();
+      setXpathResults((prev) => ({ ...prev, [qId]: res.ok ? data.result : { status: "CE", message: data.message ?? "Error" } }));
+    } catch {
+      setXpathResults((prev) => ({ ...prev, [qId]: { status: "CE", message: "Network error." } }));
+    } finally {
+      setIsRunningXpath(false);
+    }
+  };
+
   const handleSubmitClick = () => {
     const untestedCode = questions.filter(
       (q) => q.type === "CODE" && !runResults[q.id]
@@ -347,24 +373,32 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
             <div className="grid grid-cols-5 gap-2">
               {questions.map((q, idx) => {
                 const isCurrent = idx === currentIndex;
-                const hasAnswer = q.type === "CODE" 
-                  ? !!answers[q.id]?.source_code?.trim() 
+                const hasAnswer = q.type === "CODE"
+                  ? !!answers[q.id]?.source_code?.trim()
+                  : q.type === "XPATH"
+                  ? !!answers[q.id]?.student_xpath?.trim()
                   : answers[q.id]?.selected_options?.length > 0;
+
+                const activeColor = q.type === "CODE"
+                  ? "bg-amber-500 text-white ring-2 ring-amber-500/50 ring-offset-2 ring-offset-bg-base"
+                  : q.type === "XPATH"
+                  ? "bg-emerald-500 text-white ring-2 ring-emerald-500/50 ring-offset-2 ring-offset-bg-base"
+                  : "bg-brand-500 text-white ring-2 ring-brand-500/50 ring-offset-2 ring-offset-bg-base";
+
+                const answeredColor = q.type === "CODE"
+                  ? "bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500/30"
+                  : q.type === "XPATH"
+                  ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30"
+                  : "bg-brand-500/20 text-brand-400 border border-brand-500/30 hover:bg-brand-500/30";
 
                 return (
                   <button
                     key={q.id}
                     onClick={() => setCurrentIndex(idx)}
                     className={`h-10 rounded-lg text-sm font-medium transition-all ${
-                      isCurrent
-                        ? q.type === "CODE"
-                          ? 'bg-amber-500 text-white ring-2 ring-amber-500/50 ring-offset-2 ring-offset-bg-base'
-                          : 'bg-brand-500 text-white ring-2 ring-brand-500/50 ring-offset-2 ring-offset-bg-base'
-                        : hasAnswer
-                          ? q.type === "CODE"
-                            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500/30'
-                            : 'bg-brand-500/20 text-brand-400 border border-brand-500/30 hover:bg-brand-500/30'
-                          : 'bg-bg-surface border border-border-strong text-text-secondary hover:border-text-tertiary'
+                      isCurrent ? activeColor
+                        : hasAnswer ? answeredColor
+                        : "bg-bg-surface border border-border-strong text-text-secondary hover:border-text-tertiary"
                     }`}
                   >
                     {idx + 1}
@@ -441,6 +475,127 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                     <p className="text-xs text-text-tertiary mt-4">
                       * Select all that apply. Incorrect selections may result in point deductions.
                     </p>
+                  )}
+                </div>
+              ) : currentQ.type === "XPATH" ? (
+                /* ── Mode C: XPath Automation Workspace ── */
+                <div className="border border-emerald-500/20 rounded-xl overflow-hidden shadow-2xl">
+                  {/* Split pane */}
+                  <div className="grid grid-cols-2 divide-x divide-emerald-500/10" style={{ minHeight: 360 }}>
+                    {/* Left pane: target preview */}
+                    <div className="flex flex-col bg-bg-surface-elevated/20">
+                      <div className="px-4 py-2 border-b border-emerald-500/10 text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-2">
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9" />
+                        </svg>
+                        Target Preview
+                      </div>
+                      <div className="flex-1 p-3">
+                        {currentQ.targetType === "URL" && currentQ.targetPayload ? (
+                          <iframe
+                            src={currentQ.targetPayload}
+                            sandbox="allow-same-origin"
+                            className="w-full h-full rounded border border-border-strong bg-white"
+                            style={{ minHeight: 300 }}
+                            title="XPath target"
+                          />
+                        ) : currentQ.targetPayload ? (
+                          <pre className="font-mono text-xs text-text-secondary bg-bg-base border border-border-strong rounded-lg p-3 overflow-auto h-full whitespace-pre-wrap">
+                            {currentQ.targetPayload}
+                          </pre>
+                        ) : (
+                          <div className="flex items-center justify-center h-full text-text-tertiary text-sm">
+                            No target configured for this question.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Right pane: question + xpath input */}
+                    <div className="flex flex-col p-5 gap-5">
+                      <div>
+                        <h3 className="text-sm font-semibold text-text-secondary mb-1">Task</h3>
+                        <p className="text-white text-sm leading-relaxed whitespace-pre-wrap">{currentQ.content}</p>
+                      </div>
+
+                      <div className="flex flex-col gap-2">
+                        <label className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
+                          Your XPath Locator
+                        </label>
+                        <input
+                          type="text"
+                          spellCheck={false}
+                          value={answers[currentQ.id]?.student_xpath ?? ""}
+                          onChange={(e) =>
+                            setAnswers((prev) => ({
+                              ...prev,
+                              [currentQ.id]: { student_xpath: e.target.value },
+                            }))
+                          }
+                          placeholder='//div[@id="result"]'
+                          className="w-full bg-bg-base border border-border-strong rounded-xl px-4 py-3 text-white text-sm font-mono placeholder:text-text-tertiary focus:outline-none focus:border-emerald-500/50 transition-colors"
+                        />
+                        <button
+                          onClick={() => handleRunXPath(currentQ.id)}
+                          disabled={isRunningXpath || !answers[currentQ.id]?.student_xpath?.trim()}
+                          className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-600/40 disabled:cursor-not-allowed text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors"
+                        >
+                          {isRunningXpath ? (
+                            <>
+                              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                              Testing Locator...
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                              </svg>
+                              Test Locator
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Output console */}
+                  {xpathResults[currentQ.id] !== undefined && (
+                    <div className="border-t border-emerald-500/10 bg-bg-surface-elevated/30 p-4">
+                      <div className="text-xs font-bold text-text-tertiary uppercase tracking-wider mb-3">Output Console</div>
+                      {xpathResults[currentQ.id] === null ? (
+                        <div className="flex items-center gap-2 text-text-secondary text-sm">
+                          <div className="w-4 h-4 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
+                          Evaluating XPath...
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-3">
+                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold border ${
+                              xpathResults[currentQ.id].status === "AC"
+                                ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                                : xpathResults[currentQ.id].status === "CE"
+                                ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
+                                : "bg-rose-500/15 text-rose-400 border-rose-500/30"
+                            }`}>
+                              {xpathResults[currentQ.id].status}
+                            </span>
+                            <span className="text-text-secondary text-sm">{xpathResults[currentQ.id].message}</span>
+                          </div>
+                          {xpathResults[currentQ.id].snippets?.length > 0 && (
+                            <div>
+                              <div className="text-xs text-text-tertiary mb-2">Matched elements (first 5):</div>
+                              <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                                {xpathResults[currentQ.id].snippets.map((s: string, i: number) => (
+                                  <pre key={i} className="font-mono text-xs text-emerald-300 bg-bg-base border border-emerald-500/10 rounded px-3 py-2 whitespace-pre-wrap break-all">
+                                    {s}
+                                  </pre>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
               ) : currentQ.type === "CODE" ? (

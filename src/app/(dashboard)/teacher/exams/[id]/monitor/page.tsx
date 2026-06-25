@@ -114,6 +114,7 @@ export default function CodingMonitorPage({ params }: { params: Promise<{ id: st
   const [totalPossibleScore, setTotalPossibleScore] = useState("0");
   const [totalQuestions, setTotalQuestions] = useState(0);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [forceSubmitting, setForceSubmitting] = useState<string | null>(null);
 
   useEffect(() => {
     let eventSource: EventSource;
@@ -137,6 +138,26 @@ export default function CodingMonitorPage({ params }: { params: Promise<{ id: st
     connectSSE();
     return () => { if (eventSource) eventSource.close(); };
   }, [examId]);
+
+  const handleForceSubmit = async (studentId: string) => {
+    if (!confirm("Force-submit this student's exam? This will grade and finalize their current answers.")) return;
+    setForceSubmitting(studentId);
+    try {
+      const res = await fetch(`/api/v1/teacher/exams/${examId}/force-submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ studentId }),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        alert(d.message ?? "Force-submit failed.");
+      }
+    } catch {
+      alert("Network error. Please try again.");
+    } finally {
+      setForceSubmitting(null);
+    }
+  };
 
   const completed = students.filter((s) => s.submittedAt);
   const inProgress = students.filter((s) => !s.submittedAt);
@@ -265,10 +286,19 @@ export default function CodingMonitorPage({ params }: { params: Promise<{ id: st
                               Submitted
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-brand-500/10 border border-brand-500/20 text-brand-400 px-2.5 py-1 rounded-lg">
-                              <span className="w-1.5 h-1.5 rounded-full bg-brand-400 animate-pulse" />
-                              In Progress
-                            </span>
+                            <div className="flex flex-col gap-1.5">
+                              <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-brand-500/10 border border-brand-500/20 text-brand-400 px-2.5 py-1 rounded-lg">
+                                <span className="w-1.5 h-1.5 rounded-full bg-brand-400 animate-pulse" />
+                                In Progress
+                              </span>
+                              <button
+                                onClick={() => handleForceSubmit(student.studentId)}
+                                disabled={forceSubmitting === student.studentId}
+                                className="inline-flex items-center gap-1 text-[10px] font-semibold text-rose-400 border border-rose-500/20 bg-rose-500/5 hover:bg-rose-500/10 px-2 py-0.5 rounded-md transition-colors disabled:opacity-50"
+                              >
+                                {forceSubmitting === student.studentId ? "Submitting..." : "Force Submit"}
+                              </button>
+                            </div>
                           )}
                         </td>
                         <td className="p-4">
@@ -331,7 +361,9 @@ export default function CodingMonitorPage({ params }: { params: Promise<{ id: st
                                           <div className="font-medium text-white text-sm leading-snug">{d.questionTitle}</div>
                                           <span className={`mt-1 inline-block text-[10px] font-bold px-1.5 py-0.5 rounded border ${
                                             d.questionType === "CODE"
-                                              ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                                              ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                                              : d.questionType === "XPATH"
+                                              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                                               : "bg-brand-500/10 text-brand-400 border-brand-500/20"
                                           }`}>
                                             {d.questionType}
@@ -345,6 +377,14 @@ export default function CodingMonitorPage({ params }: { params: Promise<{ id: st
                                               <CodeExpandRow code={d.sourceCode} language={d.language} />
                                             ) : (
                                               <span className="text-xs text-text-tertiary italic">No code submitted</span>
+                                            )
+                                          ) : d.questionType === "XPATH" ? (
+                                            d.studentXpath ? (
+                                              <code className="font-mono text-xs text-emerald-300 bg-emerald-500/5 border border-emerald-500/10 rounded px-2 py-1 block break-all">
+                                                {d.studentXpath}
+                                              </code>
+                                            ) : (
+                                              <span className="text-xs text-text-tertiary italic">No XPath submitted</span>
                                             )
                                           ) : (
                                             <div className="space-y-1">
@@ -364,8 +404,8 @@ export default function CodingMonitorPage({ params }: { params: Promise<{ id: st
 
                                         {/* Correct answer */}
                                         <td className="px-4 py-3 max-w-[240px]">
-                                          {d.questionType === "CODE" ? (
-                                            <span className="text-xs text-text-tertiary italic">Graded by output</span>
+                                          {d.questionType === "CODE" || d.questionType === "XPATH" ? (
+                                            <span className="text-xs text-text-tertiary italic">Graded by {d.questionType === "XPATH" ? "DOM match" : "output"}</span>
                                           ) : (
                                             <div className="space-y-1">
                                               {d.correctTexts?.length > 0 ? (
