@@ -51,6 +51,7 @@ export const exams = pgTable(
     isShuffled: boolean("is_shuffled").notNull().default(false),
     allowedAttempts: integer("allowed_attempts").default(1).notNull(),
     accessType: varchar("access_type", { length: 20 }).default("ALL").notNull(),
+    sessionType: varchar("session_type", { length: 20 }).default("QUIZ").notNull(),
     createdBy: uuid("created_by")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
