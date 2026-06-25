@@ -690,7 +690,9 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                         Execution Output
                         {runResult && !runResult.error && (
                           <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                            runResult.overallStatus === "AC"
+                            runResult.results?.every((r: any) => !r.expectedOutputConfigured)
+                              ? "bg-amber-500/20 text-amber-400"
+                              : runResult.overallStatus === "AC"
                               ? "bg-emerald-500/20 text-emerald-400"
                               : "bg-rose-500/20 text-rose-400"
                           }`}>
@@ -742,29 +744,48 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                           ) : (
                             <div className="space-y-3">
                               {/* Overall Status Badge */}
-                              <div className="flex items-center gap-3 mb-2">
-                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${
+                              {(() => {
+                                const allUnconfigured = runResult.results?.every((r: any) => !r.expectedOutputConfigured);
+                                const statusLabel =
+                                  runResult.overallStatus === "AC" ? (allUnconfigured ? "⚠ Not Graded" : "✓ All Passed") :
+                                  runResult.overallStatus === "CE" ? "⚠ Compile Error" :
+                                  runResult.overallStatus === "TLE" ? "⏱ Time Limit Exceeded" :
+                                  runResult.overallStatus === "RE" ? "✕ Runtime Error" :
+                                  "✕ Wrong Answer";
+                                const statusClass =
+                                  allUnconfigured ? "bg-amber-500/15 text-amber-400 border border-amber-500/30" :
                                   runResult.overallStatus === "AC" ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30" :
                                   runResult.overallStatus === "CE" ? "bg-amber-500/15 text-amber-400 border border-amber-500/30" :
-                                  "bg-rose-500/15 text-rose-400 border border-rose-500/30"
-                                }`}>
-                                  {runResult.overallStatus === "AC" ? "✓ All Passed" :
-                                   runResult.overallStatus === "CE" ? "⚠ Compile Error" :
-                                   runResult.overallStatus === "TLE" ? "⏱ Time Limit Exceeded" :
-                                   runResult.overallStatus === "RE" ? "✕ Runtime Error" :
-                                   "✕ Wrong Answer"}
-                                </span>
-                                <span className="text-text-tertiary text-xs font-mono">
-                                  {runResult.totalPassed}/{runResult.totalTestCases} passed
-                                </span>
-                              </div>
-                              {/* Per-Test-Case Results */}
-                              {runResult.results?.map((r: any, i: number) => {
-                                const tc = currentQ.publicCases?.[i];
+                                  "bg-rose-500/15 text-rose-400 border border-rose-500/30";
                                 return (
-                                  <div key={i} className="bg-bg-base border border-border-strong rounded-lg overflow-hidden">
-                                    <div className="flex items-center justify-between px-3 py-2 border-b border-border-strong bg-bg-surface-elevated/40">
-                                      <span className="text-xs font-semibold text-text-secondary">Test Case {i + 1}</span>
+                                  <div className="flex items-center gap-3 mb-2">
+                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${statusClass}`}>
+                                      {statusLabel}
+                                    </span>
+                                    <span className="text-text-tertiary text-xs font-mono">
+                                      {runResult.totalPassed}/{runResult.totalTestCases} passed
+                                    </span>
+                                  </div>
+                                );
+                              })()}
+                              {/* Warning: expected output not configured */}
+                              {runResult.results?.every((r: any) => !r.expectedOutputConfigured) && (
+                                <div className="flex items-start gap-2 text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2.5 mb-1">
+                                  <svg className="w-3.5 h-3.5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                                  </svg>
+                                  <span>Expected output is not configured for this question. Results may not reflect actual grading. Contact your instructor.</span>
+                                </div>
+                              )}
+                              {/* Per-Test-Case Results */}
+                              {runResult.results?.map((r: any, i: number) => (
+                                <div key={i} className="bg-bg-base border border-border-strong rounded-lg overflow-hidden">
+                                  <div className="flex items-center justify-between px-3 py-2 border-b border-border-strong bg-bg-surface-elevated/40">
+                                    <span className="text-xs font-semibold text-text-secondary">Test Case {i + 1}</span>
+                                    <div className="flex items-center gap-2">
+                                      {r.executionTimeMs > 0 && (
+                                        <span className="text-[10px] text-text-tertiary font-mono">{r.executionTimeMs}ms</span>
+                                      )}
                                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
                                         r.status === "AC" ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" :
                                         r.status === "CE" ? "bg-amber-500/15 text-amber-400 border-amber-500/30" :
@@ -773,29 +794,46 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                                         {r.status}
                                       </span>
                                     </div>
-                                    <div className="grid grid-cols-3 divide-x divide-border-strong text-xs font-mono">
-                                      <div className="p-2.5">
-                                        <div className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-1">Input</div>
-                                        <pre className="text-text-secondary whitespace-pre-wrap break-all leading-relaxed">{tc?.inputData || r.inputData || "(empty)"}</pre>
-                                      </div>
-                                      <div className="p-2.5">
-                                        <div className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-1">Expected</div>
-                                        <pre className="text-brand-300 whitespace-pre-wrap break-all leading-relaxed">{r.expectedOutput !== undefined && r.expectedOutput !== "" ? r.expectedOutput : <span className="text-text-tertiary italic">(empty)</span>}</pre>
-                                      </div>
-                                      <div className="p-2.5">
-                                        <div className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-1">Your Output</div>
-                                        <pre className={`whitespace-pre-wrap break-all leading-relaxed ${r.status === "AC" ? "text-emerald-400" : "text-rose-400"}`}>{r.actualOutput !== undefined && r.actualOutput !== "" ? r.actualOutput : <span className="text-text-tertiary italic">(empty)</span>}</pre>
-                                      </div>
-                                    </div>
-                                    {r.stderr && (
-                                      <div className="border-t border-border-strong px-3 py-2">
-                                        <div className="text-[10px] font-bold text-amber-400/70 uppercase tracking-wider mb-1">stderr</div>
-                                        <pre className="text-amber-400/90 whitespace-pre-wrap font-mono text-[11px] bg-amber-500/5 rounded p-2 max-h-20 overflow-y-auto">{r.stderr}</pre>
-                                      </div>
-                                    )}
                                   </div>
-                                );
-                              })}
+                                  <div className="grid grid-cols-3 divide-x divide-border-strong text-xs font-mono">
+                                    {/* Input — sourced directly from execution result */}
+                                    <div className="p-2.5">
+                                      <div className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-1">Input</div>
+                                      <pre className="text-text-secondary whitespace-pre-wrap break-all leading-relaxed">
+                                        {r.inputData || "(empty)"}
+                                      </pre>
+                                    </div>
+                                    {/* Expected output */}
+                                    <div className="p-2.5">
+                                      <div className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-1">Expected</div>
+                                      {r.expectedOutputConfigured ? (
+                                        <pre className="text-brand-300 whitespace-pre-wrap break-all leading-relaxed">
+                                          {r.expectedOutput || <span className="text-text-tertiary italic">(empty string)</span>}
+                                        </pre>
+                                      ) : (
+                                        <span className="text-amber-400/70 italic text-[10px]">not configured</span>
+                                      )}
+                                    </div>
+                                    {/* Student output */}
+                                    <div className="p-2.5">
+                                      <div className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-1">Your Output</div>
+                                      {r.actualOutput ? (
+                                        <pre className={`whitespace-pre-wrap break-all leading-relaxed ${r.status === "AC" ? "text-emerald-400" : "text-rose-400"}`}>
+                                          {r.actualOutput}
+                                        </pre>
+                                      ) : (
+                                        <span className="text-text-tertiary italic text-[10px]">no output</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {r.stderr && (
+                                    <div className="border-t border-border-strong px-3 py-2">
+                                      <div className="text-[10px] font-bold text-amber-400/70 uppercase tracking-wider mb-1">Error</div>
+                                      <pre className="text-amber-400/90 whitespace-pre-wrap font-mono text-[11px] bg-amber-500/5 rounded p-2 max-h-20 overflow-y-auto">{r.stderr}</pre>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
                             </div>
                           )
                         ) : (
