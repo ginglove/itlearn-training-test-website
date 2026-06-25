@@ -781,7 +781,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                               {runResult.error}
                             </div>
                           ) : (
-                            {(() => {
+                            <>{(() => {
                               const results: any[] = runResult.results ?? [];
                               // A "vacuous pass" is when code ran but produced no output AND expected is also empty
                               const isVacuousPass =
@@ -908,7 +908,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                                   })}
                                 </div>
                               );
-                            })()}
+                            })()}</>
                           )
                         ) : (
                           <p className="text-text-tertiary text-xs">Click &quot;Run Code&quot; to execute your solution against sample test cases.</p>
