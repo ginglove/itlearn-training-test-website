@@ -20,8 +20,10 @@ interface TestCase {
 interface ExecutionResult {
   testCaseId: string;
   status: "AC" | "WA" | "CE" | "RE" | "TLE";
+  inputData: string;
   actualOutput: string;
   expectedOutput: string;
+  expectedOutputConfigured: boolean;
   executionTimeMs: number;
   stderr: string;
 }
@@ -31,7 +33,6 @@ interface CodeExecutionRequest {
   language: "python" | "javascript";
   testCases: TestCase[];
   timeLimitMs: number;
-  memoryLimitKb: number;
   teacherCode?: string;
 }
 
@@ -216,7 +217,6 @@ async function executeSingleTestCase(
           stdin: input,
           run_timeout: timeLimitMs,
           compile_timeout: 10000,
-          run_memory_limit: -1,
         }),
       });
 
@@ -375,11 +375,14 @@ export async function executeCode(
         status = expectedNorm === actualNorm ? "AC" : "WA";
       }
 
+      const usedTeacherCode = !!(request.teacherCode && request.teacherCode.trim().length > 0);
       results.push({
         testCaseId: testCase.id,
         status,
+        inputData: testCase.input,
         actualOutput: hasCompileError ? compileErrorMsg : execution.stdout,
         expectedOutput: expectedOutput,
+        expectedOutputConfigured: usedTeacherCode || testCase.expectedOutput.trim().length > 0,
         executionTimeMs: execution.executionTimeMs,
         stderr: execution.stderr,
       });
@@ -387,8 +390,10 @@ export async function executeCode(
       results.push({
         testCaseId: testCase.id,
         status: "RE",
+        inputData: testCase.input,
         actualOutput: "",
         expectedOutput: testCase.expectedOutput,
+        expectedOutputConfigured: testCase.expectedOutput.trim().length > 0,
         executionTimeMs: 0,
         stderr: error instanceof Error ? error.message : "Unknown execution error",
       });

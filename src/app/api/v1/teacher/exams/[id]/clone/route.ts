@@ -104,7 +104,6 @@ export async function POST(
             await tx.insert(codeConfigs).values({
               questionId: newQ.id,
               timeLimit: cfg.timeLimit,
-              memoryLimit: cfg.memoryLimit,
               starterCode: cfg.starterCode,
               teacherCode: cfg.teacherCode,
             });

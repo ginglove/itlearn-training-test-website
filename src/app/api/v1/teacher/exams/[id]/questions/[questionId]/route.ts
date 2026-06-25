@@ -73,14 +73,12 @@ export async function PUT(
       // 3. Handle CODE configurations and test cases replacement
       if (question.type === "CODE") {
         const tLimit = codeConfig?.timeLimit || 2000;
-        const mLimit = codeConfig?.memoryLimit || 128000;
 
         await tx
           .insert(codeConfigs)
           .values({
             questionId,
             timeLimit: tLimit,
-            memoryLimit: mLimit,
             starterCode: codeConfig?.starterCode || "",
             teacherCode: codeConfig?.teacherCode || "",
           })
@@ -88,7 +86,6 @@ export async function PUT(
             target: codeConfigs.questionId,
             set: {
               timeLimit: tLimit,
-              memoryLimit: mLimit,
               starterCode: codeConfig?.starterCode || "",
               teacherCode: codeConfig?.teacherCode || "",
             },

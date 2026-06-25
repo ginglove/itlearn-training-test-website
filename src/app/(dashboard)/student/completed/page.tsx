@@ -19,13 +19,14 @@ interface CompletedSubmission {
 interface SubmissionDetail {
   questionId: string;
   questionTitle: string;
-  questionType: "QUIZ" | "CODE";
+  questionType: "QUIZ" | "CODE" | "XPATH";
   questionPoints: string;
   questionContent: string;
   score: string;
   status: string | null;
   language: string | null;
   sourceCode: string | null;
+  studentXpath: string | null;
   selectedOptions: string[] | null;
   selectedTexts: string[];
   correctTexts: string[];
@@ -341,7 +342,9 @@ export default function CompletedExamsPage() {
                             <span className="text-xs font-bold text-text-tertiary">#{i + 1}</span>
                             <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
                               d.questionType === "CODE"
-                                ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                                ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                                : d.questionType === "XPATH"
+                                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                                 : "bg-brand-500/10 text-brand-400 border-brand-500/20"
                             }`}>{d.questionType}</span>
                             {d.language && (
@@ -361,7 +364,25 @@ export default function CompletedExamsPage() {
                       {/* Answer comparison body */}
                       <div className="bg-bg-base px-4 py-3 space-y-3">
 
-                        {d.questionType === "QUIZ" ? (
+                        {d.questionType === "XPATH" ? (
+                          <div className="space-y-2">
+                            <div className="text-xs font-semibold text-text-tertiary uppercase tracking-wider flex items-center gap-1.5">
+                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
+                              </svg>
+                              Your XPath Expression
+                            </div>
+                            {d.studentXpath ? (
+                              <pre className="font-mono text-xs text-emerald-300 bg-bg-base border border-emerald-500/20 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all">
+                                {d.studentXpath}
+                              </pre>
+                            ) : (
+                              <div className="text-xs text-text-tertiary italic px-3 py-2 bg-bg-surface border border-border-strong rounded-lg">
+                                No XPath submitted
+                              </div>
+                            )}
+                          </div>
+                        ) : d.questionType === "QUIZ" ? (
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             {/* Student answer */}
                             <div>

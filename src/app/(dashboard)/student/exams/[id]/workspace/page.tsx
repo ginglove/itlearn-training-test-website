@@ -20,6 +20,8 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
   const [runResults, setRunResults] = useState<Record<string, any>>({});
   const [isRunning, setIsRunning] = useState(false);
   const [activeTab, setActiveTab] = useState<"cases" | "output">("cases");
+  const [xpathResults, setXpathResults] = useState<Record<string, any>>({});
+  const [isRunningXpath, setIsRunningXpath] = useState(false);
   const [showUntestedWarning, setShowUntestedWarning] = useState(false);
   const [settings, setSettings] = useState<any>(null);
   const submissionId = typeof window !== 'undefined' ? sessionStorage.getItem(`exam_${examId}_submission_id`) : null;
@@ -63,6 +65,10 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
               initialAnswers[q.id] = {
                 source_code: saved?.sourceCode ?? q.starterCode ?? "",
                 language: saved?.language ?? "python",
+              };
+            } else if (q.type === "XPATH") {
+              initialAnswers[q.id] = {
+                student_xpath: saved?.studentXpath ?? "",
               };
             } else {
               initialAnswers[q.id] = {
@@ -214,6 +220,26 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
     }
   };
 
+  const handleRunXPath = async (qId: string) => {
+    const xpath = answers[qId]?.student_xpath?.trim();
+    if (!xpath) return;
+    setIsRunningXpath(true);
+    setXpathResults((prev) => ({ ...prev, [qId]: null }));
+    try {
+      const res = await fetch(`/api/v1/student/exams/${examId}/run-xpath`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question_id: qId, student_xpath: xpath }),
+      });
+      const data = await res.json();
+      setXpathResults((prev) => ({ ...prev, [qId]: res.ok ? data.result : { status: "CE", message: data.message ?? "Error" } }));
+    } catch {
+      setXpathResults((prev) => ({ ...prev, [qId]: { status: "CE", message: "Network error." } }));
+    } finally {
+      setIsRunningXpath(false);
+    }
+  };
+
   const handleSubmitClick = () => {
     const untestedCode = questions.filter(
       (q) => q.type === "CODE" && !runResults[q.id]
@@ -347,24 +373,32 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
             <div className="grid grid-cols-5 gap-2">
               {questions.map((q, idx) => {
                 const isCurrent = idx === currentIndex;
-                const hasAnswer = q.type === "CODE" 
-                  ? !!answers[q.id]?.source_code?.trim() 
+                const hasAnswer = q.type === "CODE"
+                  ? !!answers[q.id]?.source_code?.trim()
+                  : q.type === "XPATH"
+                  ? !!answers[q.id]?.student_xpath?.trim()
                   : answers[q.id]?.selected_options?.length > 0;
+
+                const activeColor = q.type === "CODE"
+                  ? "bg-amber-500 text-white ring-2 ring-amber-500/50 ring-offset-2 ring-offset-bg-base"
+                  : q.type === "XPATH"
+                  ? "bg-emerald-500 text-white ring-2 ring-emerald-500/50 ring-offset-2 ring-offset-bg-base"
+                  : "bg-brand-500 text-white ring-2 ring-brand-500/50 ring-offset-2 ring-offset-bg-base";
+
+                const answeredColor = q.type === "CODE"
+                  ? "bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500/30"
+                  : q.type === "XPATH"
+                  ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30"
+                  : "bg-brand-500/20 text-brand-400 border border-brand-500/30 hover:bg-brand-500/30";
 
                 return (
                   <button
                     key={q.id}
                     onClick={() => setCurrentIndex(idx)}
                     className={`h-10 rounded-lg text-sm font-medium transition-all ${
-                      isCurrent
-                        ? q.type === "CODE"
-                          ? 'bg-amber-500 text-white ring-2 ring-amber-500/50 ring-offset-2 ring-offset-bg-base'
-                          : 'bg-brand-500 text-white ring-2 ring-brand-500/50 ring-offset-2 ring-offset-bg-base'
-                        : hasAnswer
-                          ? q.type === "CODE"
-                            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500/30'
-                            : 'bg-brand-500/20 text-brand-400 border border-brand-500/30 hover:bg-brand-500/30'
-                          : 'bg-bg-surface border border-border-strong text-text-secondary hover:border-text-tertiary'
+                      isCurrent ? activeColor
+                        : hasAnswer ? answeredColor
+                        : "bg-bg-surface border border-border-strong text-text-secondary hover:border-text-tertiary"
                     }`}
                   >
                     {idx + 1}
@@ -388,24 +422,24 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
         </aside>
 
         {/* Right Area: Question Content */}
-        <main className="flex-1 overflow-y-auto p-8 relative">
-          <div className="max-w-4xl mx-auto">
-            
+        <main className="flex-1 overflow-y-auto p-4 relative">
+          <div className="max-w-5xl mx-auto">
+
             {/* Question Header */}
-            <div className="flex justify-between items-start mb-8">
-              <div>
-                <span className="text-xs font-bold text-brand-400 uppercase tracking-wider mb-2 block">
+            <div className="flex justify-between items-start mb-4">
+              <div className="flex-1 min-w-0">
+                <span className="text-xs font-bold text-brand-400 uppercase tracking-wider mb-1 block">
                   Question {currentIndex + 1} of {questions.length} • {currentQ.type}
                 </span>
-                <h2 className="text-xl text-white font-medium whitespace-pre-wrap">{currentQ.content}</h2>
+                <h2 className="text-sm text-white font-medium whitespace-pre-wrap leading-relaxed">{currentQ.content}</h2>
               </div>
-              <div className="text-text-tertiary font-mono bg-bg-surface-elevated px-3 py-1 rounded text-sm whitespace-nowrap ml-6">
+              <div className="text-text-tertiary font-mono bg-bg-surface-elevated px-3 py-1 rounded text-sm whitespace-nowrap ml-4 shrink-0">
                 {currentQ.points} pts
               </div>
             </div>
 
             {/* Response Area */}
-            <div className="mt-8">
+            <div className="mt-3">
               {currentQ.type === "QUIZ" && currentQ.options ? (
                 <div className="space-y-3">
                   {currentQ.options.map((opt: any) => {
@@ -443,8 +477,129 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                     </p>
                   )}
                 </div>
+              ) : currentQ.type === "XPATH" ? (
+                /* ── Mode C: XPath Automation Workspace ── */
+                <div className="border border-emerald-500/20 rounded-xl overflow-hidden shadow-2xl">
+                  {/* Split pane */}
+                  <div className="grid grid-cols-2 divide-x divide-emerald-500/10" style={{ minHeight: 360 }}>
+                    {/* Left pane: target preview */}
+                    <div className="flex flex-col bg-bg-surface-elevated/20">
+                      <div className="px-4 py-2 border-b border-emerald-500/10 text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-2">
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9" />
+                        </svg>
+                        Target Preview
+                      </div>
+                      <div className="flex-1 p-3">
+                        {currentQ.targetType === "URL" && currentQ.targetPayload ? (
+                          <iframe
+                            src={currentQ.targetPayload}
+                            sandbox="allow-same-origin"
+                            className="w-full h-full rounded border border-border-strong bg-white"
+                            style={{ minHeight: 300 }}
+                            title="XPath target"
+                          />
+                        ) : currentQ.targetPayload ? (
+                          <pre className="font-mono text-xs text-text-secondary bg-bg-base border border-border-strong rounded-lg p-3 overflow-auto h-full whitespace-pre-wrap">
+                            {currentQ.targetPayload}
+                          </pre>
+                        ) : (
+                          <div className="flex items-center justify-center h-full text-text-tertiary text-sm">
+                            No target configured for this question.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Right pane: question + xpath input */}
+                    <div className="flex flex-col p-5 gap-5">
+                      <div>
+                        <h3 className="text-sm font-semibold text-text-secondary mb-1">Task</h3>
+                        <p className="text-white text-sm leading-relaxed whitespace-pre-wrap">{currentQ.content}</p>
+                      </div>
+
+                      <div className="flex flex-col gap-2">
+                        <label className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
+                          Your XPath Locator
+                        </label>
+                        <input
+                          type="text"
+                          spellCheck={false}
+                          value={answers[currentQ.id]?.student_xpath ?? ""}
+                          onChange={(e) =>
+                            setAnswers((prev) => ({
+                              ...prev,
+                              [currentQ.id]: { student_xpath: e.target.value },
+                            }))
+                          }
+                          placeholder='//div[@id="result"]'
+                          className="w-full bg-bg-base border border-border-strong rounded-xl px-4 py-3 text-white text-sm font-mono placeholder:text-text-tertiary focus:outline-none focus:border-emerald-500/50 transition-colors"
+                        />
+                        <button
+                          onClick={() => handleRunXPath(currentQ.id)}
+                          disabled={isRunningXpath || !answers[currentQ.id]?.student_xpath?.trim()}
+                          className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-600/40 disabled:cursor-not-allowed text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors"
+                        >
+                          {isRunningXpath ? (
+                            <>
+                              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                              Testing Locator...
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                              </svg>
+                              Test Locator
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Output console */}
+                  {xpathResults[currentQ.id] !== undefined && (
+                    <div className="border-t border-emerald-500/10 bg-bg-surface-elevated/30 p-4">
+                      <div className="text-xs font-bold text-text-tertiary uppercase tracking-wider mb-3">Output Console</div>
+                      {xpathResults[currentQ.id] === null ? (
+                        <div className="flex items-center gap-2 text-text-secondary text-sm">
+                          <div className="w-4 h-4 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
+                          Evaluating XPath...
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-3">
+                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold border ${
+                              xpathResults[currentQ.id].status === "AC"
+                                ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                                : xpathResults[currentQ.id].status === "CE"
+                                ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
+                                : "bg-rose-500/15 text-rose-400 border-rose-500/30"
+                            }`}>
+                              {xpathResults[currentQ.id].status}
+                            </span>
+                            <span className="text-text-secondary text-sm">{xpathResults[currentQ.id].message}</span>
+                          </div>
+                          {xpathResults[currentQ.id].snippets?.length > 0 && (
+                            <div>
+                              <div className="text-xs text-text-tertiary mb-2">Matched elements (first 5):</div>
+                              <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                                {xpathResults[currentQ.id].snippets.map((s: string, i: number) => (
+                                  <pre key={i} className="font-mono text-xs text-emerald-300 bg-bg-base border border-emerald-500/10 rounded px-3 py-2 whitespace-pre-wrap break-all">
+                                    {s}
+                                  </pre>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               ) : currentQ.type === "CODE" ? (
-                <div className="border border-border-strong rounded-xl overflow-hidden flex flex-col h-[600px] shadow-2xl">
+                <div className="border border-border-strong rounded-xl overflow-hidden flex flex-col h-[540px] shadow-2xl">
                   {/* Editor Header */}
                   <div className="bg-bg-surface-elevated px-4 py-2 flex items-center justify-between border-b border-border-strong shrink-0">
                     <div className="flex items-center gap-4">
@@ -498,18 +653,39 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                   {/* Editor Body */}
                   <textarea
                     spellCheck={false}
-                    className="flex-1 w-full bg-bg-surface text-text-primary p-6 font-mono text-[15px] leading-relaxed resize-none focus:outline-none focus:ring-0 custom-scrollbar"
+                    className="flex-1 w-full bg-bg-surface text-text-primary p-4 font-mono text-[13px] leading-relaxed resize-none focus:outline-none focus:ring-0 custom-scrollbar"
                     placeholder={
                       answers[currentQ.id]?.language === "javascript"
-                        ? "// Write your JavaScript solution here..."
-                        : "# Write your Python solution here..."
+                        ? [
+                            "// Read input from stdin",
+                            "const fs = require('fs');",
+                            "const input = fs.readFileSync('/dev/stdin', 'utf8').trim();",
+                            "",
+                            "// Parse and solve",
+                            "// const data = JSON.parse(input);",
+                            "",
+                            "// Print your result",
+                            "// console.log(result);",
+                          ].join("\n")
+                        : [
+                            "# Read input from stdin",
+                            "import sys",
+                            "input_data = sys.stdin.read().strip()",
+                            "",
+                            "# Parse and solve",
+                            "# import json",
+                            "# data = json.loads(input_data)",
+                            "",
+                            "# Print your result",
+                            "# print(result)",
+                          ].join("\n")
                     }
                     value={answers[currentQ.id]?.source_code || ""}
                     onChange={(e) => handleCodeChange(currentQ.id, e.target.value)}
                   />
                   
                   {/* Tabbed Bottom Panel */}
-                  <div className="h-52 border-t border-border-strong bg-bg-surface-elevated/50 flex flex-col shrink-0">
+                  <div className="h-72 border-t border-border-strong bg-bg-surface-elevated/50 flex flex-col shrink-0">
                     {/* Tab Header */}
                     <div className="px-4 py-2 border-b border-border-strong flex items-center gap-1 shrink-0">
                       <button
@@ -535,7 +711,11 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                         Execution Output
                         {runResult && !runResult.error && (
                           <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                            runResult.overallStatus === "AC"
+                            runResult.results?.every((r: any) => !r.actualOutput && !r.expectedOutput)
+                              ? "bg-amber-500/20 text-amber-400"
+                              : runResult.results?.every((r: any) => !r.expectedOutputConfigured)
+                              ? "bg-amber-500/20 text-amber-400"
+                              : runResult.overallStatus === "AC"
                               ? "bg-emerald-500/20 text-emerald-400"
                               : "bg-rose-500/20 text-rose-400"
                           }`}>
@@ -546,17 +726,42 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                     </div>
 
                     {/* Tab Content */}
-                    <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+                    <div className="flex-1 overflow-y-auto p-3 custom-scrollbar">
                       {activeTab === "cases" ? (
                         /* Sample Cases Tab */
                         currentQ.publicCases && currentQ.publicCases.length > 0 ? (
-                          <div className="flex gap-4">
+                          <div className="space-y-2">
+                            {/* Stdin hint */}
+                            <div className="flex items-center gap-2 text-[10px] text-text-tertiary bg-bg-surface border border-border-strong rounded-lg px-2.5 py-1.5">
+                              <svg className="w-3 h-3 shrink-0 text-brand-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                              </svg>
+                              <span>
+                                The <span className="text-white font-semibold">Input</span> below is passed as{" "}
+                                <code className="font-mono text-brand-300">stdin</code> to your code when you click{" "}
+                                <span className="text-white font-semibold">Run Code</span>.
+                                Read it using{" "}
+                                {answers[currentQ.id]?.language === "javascript"
+                                  ? <><code className="font-mono text-amber-300">process.stdin</code> / <code className="font-mono text-amber-300">require(&apos;fs&apos;).readFileSync(&apos;/dev/stdin&apos;)</code></>
+                                  : <><code className="font-mono text-amber-300">sys.stdin.read()</code> / <code className="font-mono text-amber-300">input()</code></>
+                                }, then print your result.
+                              </span>
+                            </div>
                             {currentQ.publicCases.map((tc: any, i: number) => (
-                              <div key={i} className="bg-bg-base border border-border-strong rounded-lg p-3 min-w-[250px]">
-                                <div className="text-xs text-text-tertiary mb-1">Input:</div>
-                                <div className="font-mono text-sm text-white mb-3 whitespace-pre-wrap">{tc.inputData || "(empty)"}</div>
-                                <div className="text-xs text-text-tertiary mb-1">Expected Output:</div>
-                                <div className="font-mono text-sm text-brand-300 whitespace-pre-wrap">{tc.outputData}</div>
+                              <div key={i} className="bg-bg-base border border-border-strong rounded-lg overflow-hidden">
+                                <div className="px-3 py-1.5 border-b border-border-strong bg-bg-surface-elevated/40">
+                                  <span className="text-xs font-semibold text-text-tertiary">Sample {i + 1}</span>
+                                </div>
+                                <div className="grid grid-cols-2 divide-x divide-border-strong">
+                                  <div className="p-3">
+                                    <div className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-1.5">Input (stdin)</div>
+                                    <pre className="font-mono text-xs text-white whitespace-pre-wrap break-all leading-relaxed">{tc.inputData || "(empty)"}</pre>
+                                  </div>
+                                  <div className="p-3">
+                                    <div className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-1.5">Expected Output (stdout)</div>
+                                    <pre className="font-mono text-xs text-brand-300 whitespace-pre-wrap break-all leading-relaxed">{tc.outputData || "(not configured)"}</pre>
+                                  </div>
+                                </div>
                               </div>
                             ))}
                           </div>
@@ -576,54 +781,134 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                               {runResult.error}
                             </div>
                           ) : (
-                            <div className="space-y-3">
-                              {/* Overall Status Badge */}
-                              <div className="flex items-center gap-3 mb-2">
-                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${
-                                  runResult.overallStatus === "AC" ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30" :
-                                  runResult.overallStatus === "CE" ? "bg-amber-500/15 text-amber-400 border border-amber-500/30" :
-                                  "bg-rose-500/15 text-rose-400 border border-rose-500/30"
-                                }`}>
-                                  {runResult.overallStatus === "AC" ? "✓ All Passed" :
-                                   runResult.overallStatus === "CE" ? "⚠ Compile Error" :
-                                   runResult.overallStatus === "TLE" ? "⏱ Time Limit Exceeded" :
-                                   runResult.overallStatus === "RE" ? "✕ Runtime Error" :
-                                   "✕ Wrong Answer"}
-                                </span>
-                                <span className="text-text-tertiary text-xs font-mono">
-                                  {runResult.totalPassed}/{runResult.totalTestCases} passed
-                                </span>
-                              </div>
-                              {/* Per-Test-Case Results */}
-                              {runResult.results?.map((r: any, i: number) => (
-                                <div key={i} className="bg-bg-base border border-border-strong rounded-lg p-3">
-                                  <div className="flex items-center justify-between mb-2">
-                                    <span className="text-xs font-semibold text-text-secondary">Test Case {i + 1}</span>
-                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                                      r.status === "AC" ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"
-                                    }`}>
-                                      {r.status}
+                            <>{(() => {
+                              const results: any[] = runResult.results ?? [];
+                              // A "vacuous pass" is when code ran but produced no output AND expected is also empty
+                              const isVacuousPass =
+                                runResult.overallStatus === "AC" &&
+                                results.every((r: any) => !r.actualOutput && !r.expectedOutput);
+                              const allUnconfigured = results.every((r: any) => !r.expectedOutputConfigured);
+                              const studentNoOutput = results.every((r: any) => !r.actualOutput && !r.stderr);
+
+                              // Derive a meaningful overall status label
+                              const overallIsProblematic = isVacuousPass || allUnconfigured;
+                              const statusLabel =
+                                isVacuousPass ? "⚠ No Output Produced" :
+                                allUnconfigured ? "⚠ Not Graded" :
+                                runResult.overallStatus === "AC" ? "✓ All Passed" :
+                                runResult.overallStatus === "CE" ? "⚠ Compile Error" :
+                                runResult.overallStatus === "TLE" ? "⏱ Time Limit Exceeded" :
+                                runResult.overallStatus === "RE" ? "✕ Runtime Error" :
+                                "✕ Wrong Answer";
+                              const statusClass =
+                                overallIsProblematic ? "bg-amber-500/15 text-amber-400 border border-amber-500/30" :
+                                runResult.overallStatus === "AC" ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30" :
+                                runResult.overallStatus === "CE" ? "bg-amber-500/15 text-amber-400 border border-amber-500/30" :
+                                "bg-rose-500/15 text-rose-400 border border-rose-500/30";
+
+                              return (
+                                <div className="space-y-3">
+                                  {/* Overall status */}
+                                  <div className="flex items-center gap-3">
+                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${statusClass}`}>
+                                      {statusLabel}
+                                    </span>
+                                    <span className="text-text-tertiary text-xs font-mono">
+                                      {runResult.totalPassed}/{runResult.totalTestCases} passed
                                     </span>
                                   </div>
-                                  <div className="grid grid-cols-2 gap-3 text-xs font-mono">
-                                    <div>
-                                      <div className="text-text-tertiary mb-0.5">Expected:</div>
-                                      <div className="text-brand-300 whitespace-pre-wrap">{r.expectedOutput || "(empty)"}</div>
-                                    </div>
-                                    <div>
-                                      <div className="text-text-tertiary mb-0.5">Actual:</div>
-                                      <div className={`whitespace-pre-wrap ${r.status === "AC" ? "text-emerald-400" : "text-rose-400"}`}>{r.actualOutput || "(empty)"}</div>
-                                    </div>
-                                  </div>
-                                  {r.stderr && (
-                                    <div className="mt-2 text-xs">
-                                      <div className="text-amber-400/70 mb-0.5">stderr:</div>
-                                      <pre className="text-amber-400/90 whitespace-pre-wrap font-mono text-[11px] bg-amber-500/5 rounded p-2 max-h-24 overflow-y-auto">{r.stderr}</pre>
+
+                                  {/* Contextual warnings */}
+                                  {studentNoOutput && (
+                                    <div className="flex items-start gap-2 text-xs bg-rose-500/10 border border-rose-500/20 rounded-lg px-3 py-2.5 text-rose-300">
+                                      <svg className="w-3.5 h-3.5 shrink-0 mt-0.5 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                                      </svg>
+                                      <span>
+                                        Your code ran but produced <strong>no output</strong>. Make sure you print your result using{" "}
+                                        <code className="font-mono bg-rose-500/10 px-1 rounded">console.log()</code> (JavaScript) or{" "}
+                                        <code className="font-mono bg-rose-500/10 px-1 rounded">print()</code> (Python).
+                                      </span>
                                     </div>
                                   )}
+                                  {allUnconfigured && !studentNoOutput && (
+                                    <div className="flex items-start gap-2 text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2.5">
+                                      <svg className="w-3.5 h-3.5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                                      </svg>
+                                      <span>Expected output is not configured. This result does not reflect real grading. Contact your instructor.</span>
+                                    </div>
+                                  )}
+
+                                  {/* Per-test-case results */}
+                                  {results.map((r: any, i: number) => {
+                                    const noOutput = !r.actualOutput && !r.stderr;
+                                    const emptyExpected = r.expectedOutputConfigured && !r.expectedOutput;
+                                    // Badge: amber when vacuous AC, otherwise normal
+                                    const vacuous = r.status === "AC" && !r.actualOutput && !r.expectedOutput;
+                                    const badgeClass = vacuous
+                                      ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
+                                      : r.status === "AC" ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                                      : r.status === "CE" ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
+                                      : "bg-rose-500/15 text-rose-400 border-rose-500/30";
+                                    const badgeLabel = vacuous ? "?" : r.status;
+
+                                    return (
+                                      <div key={i} className="bg-bg-base border border-border-strong rounded-lg overflow-hidden">
+                                        <div className="flex items-center justify-between px-3 py-2 border-b border-border-strong bg-bg-surface-elevated/40">
+                                          <span className="text-xs font-semibold text-text-secondary">Test Case {i + 1}</span>
+                                          <div className="flex items-center gap-2">
+                                            {r.executionTimeMs > 0 && (
+                                              <span className="text-[10px] text-text-tertiary font-mono">{r.executionTimeMs}ms</span>
+                                            )}
+                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${badgeClass}`}>
+                                              {badgeLabel}
+                                            </span>
+                                          </div>
+                                        </div>
+                                        <div className="grid grid-cols-3 divide-x divide-border-strong text-xs font-mono">
+                                          {/* Input */}
+                                          <div className="p-2.5">
+                                            <div className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-1">Input</div>
+                                            <pre className="text-text-secondary whitespace-pre-wrap break-all leading-relaxed">
+                                              {r.inputData || <span className="italic text-text-tertiary">(empty)</span>}
+                                            </pre>
+                                          </div>
+                                          {/* Expected */}
+                                          <div className="p-2.5">
+                                            <div className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-1">Expected</div>
+                                            {!r.expectedOutputConfigured ? (
+                                              <span className="text-amber-400/60 italic">not configured</span>
+                                            ) : emptyExpected ? (
+                                              <span className="text-amber-400/60 italic">(empty — check teacher config)</span>
+                                            ) : (
+                                              <pre className="text-brand-300 whitespace-pre-wrap break-all leading-relaxed">{r.expectedOutput}</pre>
+                                            )}
+                                          </div>
+                                          {/* Your Output */}
+                                          <div className="p-2.5">
+                                            <div className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-1">Your Output</div>
+                                            {noOutput ? (
+                                              <span className="text-rose-400/70 italic">no output — add print/console.log</span>
+                                            ) : (
+                                              <pre className={`whitespace-pre-wrap break-all leading-relaxed ${r.status === "AC" && !vacuous ? "text-emerald-400" : "text-rose-400"}`}>
+                                                {r.actualOutput}
+                                              </pre>
+                                            )}
+                                          </div>
+                                        </div>
+                                        {r.stderr && (
+                                          <div className="border-t border-border-strong px-3 py-2">
+                                            <div className="text-[10px] font-bold text-amber-400/70 uppercase tracking-wider mb-1">Error</div>
+                                            <pre className="text-amber-400/90 whitespace-pre-wrap font-mono text-[11px] bg-amber-500/5 rounded p-2 max-h-20 overflow-y-auto">{r.stderr}</pre>
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
                                 </div>
-                              ))}
-                            </div>
+                              );
+                            })()}</>
                           )
                         ) : (
                           <p className="text-text-tertiary text-xs">Click &quot;Run Code&quot; to execute your solution against sample test cases.</p>

@@ -70,6 +70,7 @@ export async function GET(
         language: submissionDetails.language,
         sourceCode: submissionDetails.sourceCode,
         selectedOptions: submissionDetails.selectedOptions,
+        studentXpath: submissionDetails.studentXpath,
       })
       .from(submissionDetails)
       .innerJoin(questions, eq(submissionDetails.questionId, questions.id))
@@ -131,7 +132,7 @@ export async function GET(
 
         return { ...d, score: computedScore, selectedTexts, correctTexts, result };
       } else {
-        // CODE
+        // CODE or XPATH
         const result =
           d.status === null ? "NOT COMPLETED" : d.status === "AC" ? "PASS" : "FAIL";
         return { ...d, selectedTexts: [], correctTexts: [], result };

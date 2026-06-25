@@ -18,6 +18,7 @@ export default function EditExamPage({ params }: { params: Promise<{ id: string 
     isShuffled: false,
     allowedAttempts: 1,
     accessType: "ALL",
+    sessionType: "QUIZ",
   });
 
   const [students, setStudents] = useState<any[]>([]);
@@ -64,6 +65,7 @@ export default function EditExamPage({ params }: { params: Promise<{ id: string 
         isShuffled: exam.isShuffled,
         allowedAttempts: exam.allowedAttempts || 1,
         accessType: exam.accessType || "ALL",
+        sessionType: exam.sessionType || "QUIZ",
       });
 
       setAssignedStudents(exam.assignedStudents || []);
@@ -223,17 +225,31 @@ export default function EditExamPage({ params }: { params: Promise<{ id: string 
                   className="premium-input"
                 />
               </div>
-              <div className="flex items-center h-full pt-6">
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.isShuffled}
-                    onChange={(e) => setFormData({ ...formData, isShuffled: e.target.checked })}
-                    className="w-5 h-5 rounded border-border-strong bg-bg-base text-brand-500 focus:ring-brand-500/50"
-                  />
-                  <span className="text-sm font-medium text-white">Shuffle Questions</span>
-                </label>
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-1.5">Session Type</label>
+                <select
+                  value={formData.sessionType}
+                  onChange={(e) => setFormData({ ...formData, sessionType: e.target.value })}
+                  className="premium-input bg-bg-surface-elevated text-white w-full"
+                >
+                  <option value="HOMEWORK">Homework</option>
+                  <option value="QUIZ">Quiz Session</option>
+                  <option value="PRACTICE">Practice</option>
+                  <option value="FINAL">Final Exam</option>
+                </select>
               </div>
+            </div>
+
+            <div>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.isShuffled}
+                  onChange={(e) => setFormData({ ...formData, isShuffled: e.target.checked })}
+                  className="w-5 h-5 rounded border-border-strong bg-bg-base text-brand-500 focus:ring-brand-500/50"
+                />
+                <span className="text-sm font-medium text-white">Shuffle Questions</span>
+              </label>
             </div>
 
             {/* Access Control section */}

@@ -1,4 +1,5 @@
 -- Clean up existing tables and types
+DROP TABLE IF EXISTS "xpath_configs" CASCADE;
 DROP TABLE IF EXISTS "code_configs" CASCADE;
 DROP TABLE IF EXISTS "exam_submissions" CASCADE;
 DROP TABLE IF EXISTS "exam_assignments" CASCADE;
@@ -16,7 +17,7 @@ DROP TYPE IF EXISTS "public"."user_role" CASCADE;
 
 -- Enums
 CREATE TYPE "public"."execution_status" AS ENUM('AC', 'WA', 'CE', 'RE', 'TLE');
-CREATE TYPE "public"."question_type" AS ENUM('QUIZ', 'CODE');
+CREATE TYPE "public"."question_type" AS ENUM('QUIZ', 'CODE', 'XPATH');
 CREATE TYPE "public"."user_role" AS ENUM('TEACHER', 'STUDENT');
 
 -- Tables
@@ -103,7 +104,17 @@ CREATE TABLE "submission_details" (
 	"source_code" text,
 	"language" varchar(30),
 	"status" "execution_status",
+	"student_xpath" text,
 	"score" numeric(5, 2) DEFAULT '0.00' NOT NULL
+);
+
+CREATE TABLE "xpath_configs" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"question_id" uuid NOT NULL,
+	"target_type" varchar(10) DEFAULT 'URL' NOT NULL,
+	"target_payload" text NOT NULL,
+	"reference_xpath" text NOT NULL,
+	CONSTRAINT "xpath_configs_question_id_unique" UNIQUE("question_id")
 );
 
 CREATE TABLE "exam_assignments" (
@@ -124,6 +135,7 @@ ALTER TABLE "quiz_options" ADD CONSTRAINT "quiz_options_question_id_questions_id
 ALTER TABLE "submission_details" ADD CONSTRAINT "submission_details_submission_id_exam_submissions_id_fk" FOREIGN KEY ("submission_id") REFERENCES "public"."exam_submissions"("id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "submission_details" ADD CONSTRAINT "submission_details_question_id_questions_id_fk" FOREIGN KEY ("question_id") REFERENCES "public"."questions"("id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "test_cases" ADD CONSTRAINT "test_cases_question_id_questions_id_fk" FOREIGN KEY ("question_id") REFERENCES "public"."questions"("id") ON DELETE cascade ON UPDATE no action;
+ALTER TABLE "xpath_configs" ADD CONSTRAINT "xpath_configs_question_id_questions_id_fk" FOREIGN KEY ("question_id") REFERENCES "public"."questions"("id") ON DELETE cascade ON UPDATE no action;
 
 -- Indexes
 CREATE UNIQUE INDEX "one_submission_per_student_exam_attempt" ON "exam_submissions" USING btree ("exam_id","student_id","attempt");
