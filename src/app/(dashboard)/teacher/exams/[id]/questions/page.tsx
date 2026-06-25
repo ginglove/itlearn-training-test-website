@@ -303,6 +303,13 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
             >
               Coding Constraints
             </button>
+            <button
+              onClick={() => router.push(`/teacher/exams/${examId}/xpath`)}
+              className="premium-btn-secondary py-2 text-sm flex items-center gap-1.5"
+            >
+              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+              XPath Config
+            </button>
             <button 
               onClick={() => {
                 if (showAddForm) {
@@ -352,6 +359,7 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
                   >
                     <option value="QUIZ">Quiz / Multiple Choice</option>
                     <option value="CODE">Coding Assessment</option>
+                    <option value="XPATH">XPath Automation</option>
                   </select>
                 </div>
                 <div>
@@ -568,6 +576,22 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
                 </div>
               )}
 
+              {/* XPath info section */}
+              {newQuestion.type === "XPATH" && (
+                <div className="pt-4 border-t border-border-strong">
+                  <div className="flex items-start gap-3 bg-emerald-500/5 border border-emerald-500/20 rounded-xl px-4 py-3">
+                    <span className="text-emerald-400 mt-0.5">
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </span>
+                    <p className="text-sm text-emerald-300">
+                      After creating this question, go to <strong>XPath Config</strong> to set the target URL or HTML snippet and the reference XPath locator.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <div className="pt-6 border-t border-border-strong flex justify-end gap-4">
                 <button
                   type="button"
@@ -651,7 +675,7 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
               {/* Status statistics */}
               <div className="glass-card p-6 flex flex-col justify-center col-span-2">
                 <h4 className="text-md font-bold text-white mb-3">Exam Structure</h4>
-                <div className="grid grid-cols-3 gap-4 text-center">
+                <div className="grid grid-cols-4 gap-4 text-center">
                   <div className="bg-bg-surface-elevated/50 p-4 rounded-xl">
                     <div className="text-2xl font-extrabold text-white">
                       {questions.length}
@@ -662,13 +686,19 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
                     <div className="text-2xl font-extrabold text-brand-400">
                       {questions.filter(q => q.type === "QUIZ").length}
                     </div>
-                    <div className="text-xs text-text-tertiary mt-1">Quiz Questions</div>
+                    <div className="text-xs text-text-tertiary mt-1">Quiz</div>
                   </div>
                   <div className="bg-bg-surface-elevated/50 p-4 rounded-xl">
-                    <div className="text-2xl font-extrabold text-blue-400">
+                    <div className="text-2xl font-extrabold text-amber-400">
                       {questions.filter(q => q.type === "CODE").length}
                     </div>
-                    <div className="text-xs text-text-tertiary mt-1">Coding Questions</div>
+                    <div className="text-xs text-text-tertiary mt-1">Coding</div>
+                  </div>
+                  <div className="bg-bg-surface-elevated/50 p-4 rounded-xl">
+                    <div className="text-2xl font-extrabold text-emerald-400">
+                      {questions.filter(q => q.type === "XPATH").length}
+                    </div>
+                    <div className="text-xs text-text-tertiary mt-1">XPath</div>
                   </div>
                 </div>
               </div>
@@ -694,9 +724,11 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
                         <div className="flex items-center gap-3 mb-2">
                           <span className="text-xs font-bold text-text-tertiary font-mono">#{idx + 1}</span>
                           <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                            q.type === 'QUIZ' 
-                              ? 'bg-brand-500/10 text-brand-400 border border-brand-500/20' 
-                              : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                            q.type === 'QUIZ'
+                              ? 'bg-brand-500/10 text-brand-400 border border-brand-500/20'
+                              : q.type === 'XPATH'
+                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                              : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
                           }`}>
                             {q.type}
                           </span>
@@ -728,6 +760,11 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
                             <span>Limit: {q.config?.timeLimit || 2000}ms / {q.config?.memoryLimit || 128000}KB</span>
                             <span>•</span>
                             <span>Test cases: {q.testCases?.length || 0} ({q.testCases?.filter((c: any) => c.isHidden).length || 0} hidden)</span>
+                          </div>
+                        )}
+                        {q.type === 'XPATH' && (
+                          <div className="text-xs text-emerald-400/70 mt-2 font-mono">
+                            Configure target & reference XPath via <strong>XPath Config</strong>
                           </div>
                         )}
                       </div>
