@@ -63,7 +63,14 @@ export default function XPathConfigPage({ params }: { params: Promise<{ id: stri
       });
       const data = await res.json();
       if (res.ok) {
-        setVerifyResult({ ok: true, message: data.message ?? "Verified successfully." });
+        if (data.warning) {
+          setVerifyResult({
+            ok: false,
+            message: `⚠ Static verification note: ${data.warning} — The target page may use JavaScript to render content. Static verification fetches raw HTML only. You can still save and use this XPath if you confirmed it works in the browser.`,
+          });
+        } else {
+          setVerifyResult({ ok: true, message: data.message ?? "Verified successfully." });
+        }
       } else {
         setVerifyResult({ ok: false, message: data.message ?? "Verification failed." });
       }
@@ -84,11 +91,22 @@ export default function XPathConfigPage({ params }: { params: Promise<{ id: stri
       const res = await fetch(`/api/v1/teacher/exams/${examId}/xpath-config`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        // verify:true so we get a warning if static verification fails, but save always proceeds
         body: JSON.stringify({ questionId, targetType, targetPayload, referenceXpath, verify: true }),
       });
       const data = await res.json();
       if (res.ok) {
-        showToast("XPath configuration saved.", "success");
+        if (data.warning) {
+          // Saved successfully but static verification couldn't confirm the XPath
+          setVerifyResult({
+            ok: false,
+            message: `Saved. Static verification note: ${data.warning} (JS-rendered pages may still work at exam time if evaluated in-browser.)`,
+          });
+          showToast("Configuration saved with a verification warning.", "success");
+        } else {
+          setVerifyResult({ ok: true, message: "Saved and verified successfully." });
+          showToast("XPath configuration saved.", "success");
+        }
         fetchQuestions();
       } else {
         showToast(data.message ?? "Failed to save configuration.", "error");

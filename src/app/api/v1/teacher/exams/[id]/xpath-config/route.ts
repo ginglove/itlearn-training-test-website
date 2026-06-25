@@ -73,14 +73,13 @@ export async function POST(
       );
     }
 
-    // Run pre-flight verification if requested
+    // Run pre-flight verification if requested — advisory only, never blocks save
+    let verifyWarning: string | null = null;
     if (verify) {
       const result = await verifyReferenceXPath({ targetType, targetPayload, referenceXpath });
       if (!result.ok) {
-        return NextResponse.json(
-          { error: "VERIFICATION_FAILED", message: result.message },
-          { status: 422 }
-        );
+        // Return warning details but still allow the save to proceed
+        verifyWarning = result.message;
       }
     }
 
@@ -99,7 +98,10 @@ export async function POST(
       await db.insert(xpathConfigs).values({ questionId, targetType, targetPayload, referenceXpath });
     }
 
-    return NextResponse.json({ status: "SUCCESS" });
+    return NextResponse.json({
+      status: "SUCCESS",
+      ...(verifyWarning ? { warning: verifyWarning } : {}),
+    });
   } catch (error) {
     console.error("Save xpath config error:", error);
     return NextResponse.json({ error: "INTERNAL_ERROR" }, { status: 500 });
