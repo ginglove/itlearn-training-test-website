@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { questions, quizOptions, codeConfigs, testCases, exams } from "@/db/schema";
+import { questions, quizOptions, codeConfigs, testCases, exams, xpathConfigs } from "@/db/schema";
 import { eq, asc, and } from "drizzle-orm";
 
 export async function GET(
@@ -53,6 +53,17 @@ export async function GET(
           ...q,
           config: config || null,
           testCases: cases,
+        });
+      } else if (q.type === "XPATH") {
+        const [config] = await db
+          .select()
+          .from(xpathConfigs)
+          .where(eq(xpathConfigs.questionId, q.id))
+          .limit(1);
+
+        enrichedQuestions.push({
+          ...q,
+          xpathConfig: config || null,
         });
       }
     }

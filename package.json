@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "db:setup": "tsx src/db/apply-schema.ts",
+    "db:migrate": "tsx src/db/run-migration.ts",
     "seed": "tsx src/db/seed.ts"
   },
   "dependencies": {
