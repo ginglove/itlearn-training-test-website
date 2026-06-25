@@ -656,8 +656,29 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                     className="flex-1 w-full bg-bg-surface text-text-primary p-4 font-mono text-[13px] leading-relaxed resize-none focus:outline-none focus:ring-0 custom-scrollbar"
                     placeholder={
                       answers[currentQ.id]?.language === "javascript"
-                        ? "// Write your JavaScript solution here..."
-                        : "# Write your Python solution here..."
+                        ? [
+                            "// Read input from stdin",
+                            "const fs = require('fs');",
+                            "const input = fs.readFileSync('/dev/stdin', 'utf8').trim();",
+                            "",
+                            "// Parse and solve",
+                            "// const data = JSON.parse(input);",
+                            "",
+                            "// Print your result",
+                            "// console.log(result);",
+                          ].join("\n")
+                        : [
+                            "# Read input from stdin",
+                            "import sys",
+                            "input_data = sys.stdin.read().strip()",
+                            "",
+                            "# Parse and solve",
+                            "# import json",
+                            "# data = json.loads(input_data)",
+                            "",
+                            "# Print your result",
+                            "# print(result)",
+                          ].join("\n")
                     }
                     value={answers[currentQ.id]?.source_code || ""}
                     onChange={(e) => handleCodeChange(currentQ.id, e.target.value)}
@@ -690,7 +711,9 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                         Execution Output
                         {runResult && !runResult.error && (
                           <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                            runResult.results?.every((r: any) => !r.expectedOutputConfigured)
+                            runResult.results?.every((r: any) => !r.actualOutput && !r.expectedOutput)
+                              ? "bg-amber-500/20 text-amber-400"
+                              : runResult.results?.every((r: any) => !r.expectedOutputConfigured)
                               ? "bg-amber-500/20 text-amber-400"
                               : runResult.overallStatus === "AC"
                               ? "bg-emerald-500/20 text-emerald-400"
@@ -703,11 +726,27 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                     </div>
 
                     {/* Tab Content */}
-                    <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+                    <div className="flex-1 overflow-y-auto p-3 custom-scrollbar">
                       {activeTab === "cases" ? (
                         /* Sample Cases Tab */
                         currentQ.publicCases && currentQ.publicCases.length > 0 ? (
                           <div className="space-y-2">
+                            {/* Stdin hint */}
+                            <div className="flex items-center gap-2 text-[10px] text-text-tertiary bg-bg-surface border border-border-strong rounded-lg px-2.5 py-1.5">
+                              <svg className="w-3 h-3 shrink-0 text-brand-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                              </svg>
+                              <span>
+                                The <span className="text-white font-semibold">Input</span> below is passed as{" "}
+                                <code className="font-mono text-brand-300">stdin</code> to your code when you click{" "}
+                                <span className="text-white font-semibold">Run Code</span>.
+                                Read it using{" "}
+                                {answers[currentQ.id]?.language === "javascript"
+                                  ? <><code className="font-mono text-amber-300">process.stdin</code> / <code className="font-mono text-amber-300">require(&apos;fs&apos;).readFileSync(&apos;/dev/stdin&apos;)</code></>
+                                  : <><code className="font-mono text-amber-300">sys.stdin.read()</code> / <code className="font-mono text-amber-300">input()</code></>
+                                }, then print your result.
+                              </span>
+                            </div>
                             {currentQ.publicCases.map((tc: any, i: number) => (
                               <div key={i} className="bg-bg-base border border-border-strong rounded-lg overflow-hidden">
                                 <div className="px-3 py-1.5 border-b border-border-strong bg-bg-surface-elevated/40">
@@ -715,12 +754,12 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                                 </div>
                                 <div className="grid grid-cols-2 divide-x divide-border-strong">
                                   <div className="p-3">
-                                    <div className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-1.5">Input</div>
+                                    <div className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-1.5">Input (stdin)</div>
                                     <pre className="font-mono text-xs text-white whitespace-pre-wrap break-all leading-relaxed">{tc.inputData || "(empty)"}</pre>
                                   </div>
                                   <div className="p-3">
-                                    <div className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-1.5">Expected Output</div>
-                                    <pre className="font-mono text-xs text-brand-300 whitespace-pre-wrap break-all leading-relaxed">{tc.outputData || "(empty)"}</pre>
+                                    <div className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-1.5">Expected Output (stdout)</div>
+                                    <pre className="font-mono text-xs text-brand-300 whitespace-pre-wrap break-all leading-relaxed">{tc.outputData || "(not configured)"}</pre>
                                   </div>
                                 </div>
                               </div>
@@ -742,23 +781,35 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                               {runResult.error}
                             </div>
                           ) : (
-                            <div className="space-y-3">
-                              {/* Overall Status Badge */}
-                              {(() => {
-                                const allUnconfigured = runResult.results?.every((r: any) => !r.expectedOutputConfigured);
-                                const statusLabel =
-                                  runResult.overallStatus === "AC" ? (allUnconfigured ? "⚠ Not Graded" : "✓ All Passed") :
-                                  runResult.overallStatus === "CE" ? "⚠ Compile Error" :
-                                  runResult.overallStatus === "TLE" ? "⏱ Time Limit Exceeded" :
-                                  runResult.overallStatus === "RE" ? "✕ Runtime Error" :
-                                  "✕ Wrong Answer";
-                                const statusClass =
-                                  allUnconfigured ? "bg-amber-500/15 text-amber-400 border border-amber-500/30" :
-                                  runResult.overallStatus === "AC" ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30" :
-                                  runResult.overallStatus === "CE" ? "bg-amber-500/15 text-amber-400 border border-amber-500/30" :
-                                  "bg-rose-500/15 text-rose-400 border border-rose-500/30";
-                                return (
-                                  <div className="flex items-center gap-3 mb-2">
+                            {(() => {
+                              const results: any[] = runResult.results ?? [];
+                              // A "vacuous pass" is when code ran but produced no output AND expected is also empty
+                              const isVacuousPass =
+                                runResult.overallStatus === "AC" &&
+                                results.every((r: any) => !r.actualOutput && !r.expectedOutput);
+                              const allUnconfigured = results.every((r: any) => !r.expectedOutputConfigured);
+                              const studentNoOutput = results.every((r: any) => !r.actualOutput && !r.stderr);
+
+                              // Derive a meaningful overall status label
+                              const overallIsProblematic = isVacuousPass || allUnconfigured;
+                              const statusLabel =
+                                isVacuousPass ? "⚠ No Output Produced" :
+                                allUnconfigured ? "⚠ Not Graded" :
+                                runResult.overallStatus === "AC" ? "✓ All Passed" :
+                                runResult.overallStatus === "CE" ? "⚠ Compile Error" :
+                                runResult.overallStatus === "TLE" ? "⏱ Time Limit Exceeded" :
+                                runResult.overallStatus === "RE" ? "✕ Runtime Error" :
+                                "✕ Wrong Answer";
+                              const statusClass =
+                                overallIsProblematic ? "bg-amber-500/15 text-amber-400 border border-amber-500/30" :
+                                runResult.overallStatus === "AC" ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30" :
+                                runResult.overallStatus === "CE" ? "bg-amber-500/15 text-amber-400 border border-amber-500/30" :
+                                "bg-rose-500/15 text-rose-400 border border-rose-500/30";
+
+                              return (
+                                <div className="space-y-3">
+                                  {/* Overall status */}
+                                  <div className="flex items-center gap-3">
                                     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${statusClass}`}>
                                       {statusLabel}
                                     </span>
@@ -766,75 +817,98 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                                       {runResult.totalPassed}/{runResult.totalTestCases} passed
                                     </span>
                                   </div>
-                                );
-                              })()}
-                              {/* Warning: expected output not configured */}
-                              {runResult.results?.every((r: any) => !r.expectedOutputConfigured) && (
-                                <div className="flex items-start gap-2 text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2.5 mb-1">
-                                  <svg className="w-3.5 h-3.5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                                  </svg>
-                                  <span>Expected output is not configured for this question. Results may not reflect actual grading. Contact your instructor.</span>
-                                </div>
-                              )}
-                              {/* Per-Test-Case Results */}
-                              {runResult.results?.map((r: any, i: number) => (
-                                <div key={i} className="bg-bg-base border border-border-strong rounded-lg overflow-hidden">
-                                  <div className="flex items-center justify-between px-3 py-2 border-b border-border-strong bg-bg-surface-elevated/40">
-                                    <span className="text-xs font-semibold text-text-secondary">Test Case {i + 1}</span>
-                                    <div className="flex items-center gap-2">
-                                      {r.executionTimeMs > 0 && (
-                                        <span className="text-[10px] text-text-tertiary font-mono">{r.executionTimeMs}ms</span>
-                                      )}
-                                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
-                                        r.status === "AC" ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" :
-                                        r.status === "CE" ? "bg-amber-500/15 text-amber-400 border-amber-500/30" :
-                                        "bg-rose-500/15 text-rose-400 border-rose-500/30"
-                                      }`}>
-                                        {r.status}
+
+                                  {/* Contextual warnings */}
+                                  {studentNoOutput && (
+                                    <div className="flex items-start gap-2 text-xs bg-rose-500/10 border border-rose-500/20 rounded-lg px-3 py-2.5 text-rose-300">
+                                      <svg className="w-3.5 h-3.5 shrink-0 mt-0.5 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                                      </svg>
+                                      <span>
+                                        Your code ran but produced <strong>no output</strong>. Make sure you print your result using{" "}
+                                        <code className="font-mono bg-rose-500/10 px-1 rounded">console.log()</code> (JavaScript) or{" "}
+                                        <code className="font-mono bg-rose-500/10 px-1 rounded">print()</code> (Python).
                                       </span>
                                     </div>
-                                  </div>
-                                  <div className="grid grid-cols-3 divide-x divide-border-strong text-xs font-mono">
-                                    {/* Input — sourced directly from execution result */}
-                                    <div className="p-2.5">
-                                      <div className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-1">Input</div>
-                                      <pre className="text-text-secondary whitespace-pre-wrap break-all leading-relaxed">
-                                        {r.inputData || "(empty)"}
-                                      </pre>
-                                    </div>
-                                    {/* Expected output */}
-                                    <div className="p-2.5">
-                                      <div className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-1">Expected</div>
-                                      {r.expectedOutputConfigured ? (
-                                        <pre className="text-brand-300 whitespace-pre-wrap break-all leading-relaxed">
-                                          {r.expectedOutput || <span className="text-text-tertiary italic">(empty string)</span>}
-                                        </pre>
-                                      ) : (
-                                        <span className="text-amber-400/70 italic text-[10px]">not configured</span>
-                                      )}
-                                    </div>
-                                    {/* Student output */}
-                                    <div className="p-2.5">
-                                      <div className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-1">Your Output</div>
-                                      {r.actualOutput ? (
-                                        <pre className={`whitespace-pre-wrap break-all leading-relaxed ${r.status === "AC" ? "text-emerald-400" : "text-rose-400"}`}>
-                                          {r.actualOutput}
-                                        </pre>
-                                      ) : (
-                                        <span className="text-text-tertiary italic text-[10px]">no output</span>
-                                      )}
-                                    </div>
-                                  </div>
-                                  {r.stderr && (
-                                    <div className="border-t border-border-strong px-3 py-2">
-                                      <div className="text-[10px] font-bold text-amber-400/70 uppercase tracking-wider mb-1">Error</div>
-                                      <pre className="text-amber-400/90 whitespace-pre-wrap font-mono text-[11px] bg-amber-500/5 rounded p-2 max-h-20 overflow-y-auto">{r.stderr}</pre>
+                                  )}
+                                  {allUnconfigured && !studentNoOutput && (
+                                    <div className="flex items-start gap-2 text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2.5">
+                                      <svg className="w-3.5 h-3.5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                                      </svg>
+                                      <span>Expected output is not configured. This result does not reflect real grading. Contact your instructor.</span>
                                     </div>
                                   )}
+
+                                  {/* Per-test-case results */}
+                                  {results.map((r: any, i: number) => {
+                                    const noOutput = !r.actualOutput && !r.stderr;
+                                    const emptyExpected = r.expectedOutputConfigured && !r.expectedOutput;
+                                    // Badge: amber when vacuous AC, otherwise normal
+                                    const vacuous = r.status === "AC" && !r.actualOutput && !r.expectedOutput;
+                                    const badgeClass = vacuous
+                                      ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
+                                      : r.status === "AC" ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                                      : r.status === "CE" ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
+                                      : "bg-rose-500/15 text-rose-400 border-rose-500/30";
+                                    const badgeLabel = vacuous ? "?" : r.status;
+
+                                    return (
+                                      <div key={i} className="bg-bg-base border border-border-strong rounded-lg overflow-hidden">
+                                        <div className="flex items-center justify-between px-3 py-2 border-b border-border-strong bg-bg-surface-elevated/40">
+                                          <span className="text-xs font-semibold text-text-secondary">Test Case {i + 1}</span>
+                                          <div className="flex items-center gap-2">
+                                            {r.executionTimeMs > 0 && (
+                                              <span className="text-[10px] text-text-tertiary font-mono">{r.executionTimeMs}ms</span>
+                                            )}
+                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${badgeClass}`}>
+                                              {badgeLabel}
+                                            </span>
+                                          </div>
+                                        </div>
+                                        <div className="grid grid-cols-3 divide-x divide-border-strong text-xs font-mono">
+                                          {/* Input */}
+                                          <div className="p-2.5">
+                                            <div className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-1">Input</div>
+                                            <pre className="text-text-secondary whitespace-pre-wrap break-all leading-relaxed">
+                                              {r.inputData || <span className="italic text-text-tertiary">(empty)</span>}
+                                            </pre>
+                                          </div>
+                                          {/* Expected */}
+                                          <div className="p-2.5">
+                                            <div className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-1">Expected</div>
+                                            {!r.expectedOutputConfigured ? (
+                                              <span className="text-amber-400/60 italic">not configured</span>
+                                            ) : emptyExpected ? (
+                                              <span className="text-amber-400/60 italic">(empty — check teacher config)</span>
+                                            ) : (
+                                              <pre className="text-brand-300 whitespace-pre-wrap break-all leading-relaxed">{r.expectedOutput}</pre>
+                                            )}
+                                          </div>
+                                          {/* Your Output */}
+                                          <div className="p-2.5">
+                                            <div className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-1">Your Output</div>
+                                            {noOutput ? (
+                                              <span className="text-rose-400/70 italic">no output — add print/console.log</span>
+                                            ) : (
+                                              <pre className={`whitespace-pre-wrap break-all leading-relaxed ${r.status === "AC" && !vacuous ? "text-emerald-400" : "text-rose-400"}`}>
+                                                {r.actualOutput}
+                                              </pre>
+                                            )}
+                                          </div>
+                                        </div>
+                                        {r.stderr && (
+                                          <div className="border-t border-border-strong px-3 py-2">
+                                            <div className="text-[10px] font-bold text-amber-400/70 uppercase tracking-wider mb-1">Error</div>
+                                            <pre className="text-amber-400/90 whitespace-pre-wrap font-mono text-[11px] bg-amber-500/5 rounded p-2 max-h-20 overflow-y-auto">{r.stderr}</pre>
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
                                 </div>
-                              ))}
-                            </div>
+                              );
+                            })()}
                           )
                         ) : (
                           <p className="text-text-tertiary text-xs">Click &quot;Run Code&quot; to execute your solution against sample test cases.</p>
