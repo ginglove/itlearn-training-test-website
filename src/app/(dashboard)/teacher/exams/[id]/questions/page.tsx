@@ -32,7 +32,6 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
     ],
     codeConfig: {
       timeLimit: 2000,
-      memoryLimit: 128000,
       starterCode: "",
       teacherCode: "",
     },
@@ -62,13 +61,11 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
       codeConfig: q.type === "CODE" && q.config
         ? {
             timeLimit: q.config.timeLimit,
-            memoryLimit: q.config.memoryLimit,
             starterCode: q.config.starterCode || "",
             teacherCode: q.config.teacherCode || "",
           }
         : {
             timeLimit: 2000,
-            memoryLimit: 128000,
             starterCode: "",
             teacherCode: "",
           },
@@ -187,7 +184,6 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
           ],
           codeConfig: {
             timeLimit: 2000,
-            memoryLimit: 128000,
             starterCode: "",
             teacherCode: "",
           },
@@ -326,7 +322,6 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
                     ],
                     codeConfig: {
                       timeLimit: 2000,
-                      memoryLimit: 128000,
                       starterCode: "",
                       teacherCode: "",
                     },
@@ -473,18 +468,6 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
                           className="premium-input"
                         />
                       </div>
-                      <div>
-                        <label className="block text-xs text-text-tertiary mb-1">Memory Limit (KB)</label>
-                        <input
-                          type="number"
-                          value={newQuestion.codeConfig.memoryLimit}
-                          onChange={(e) => setNewQuestion({
-                            ...newQuestion,
-                            codeConfig: { ...newQuestion.codeConfig, memoryLimit: parseInt(e.target.value) }
-                          })}
-                          className="premium-input"
-                        />
-                      </div>
                     </div>
                     <div className="grid grid-cols-1 gap-6 mt-4">
                       <div>
@@ -610,8 +593,7 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
                       ],
                       codeConfig: {
                         timeLimit: 2000,
-                        memoryLimit: 128000,
-                        starterCode: "",
+                          starterCode: "",
                         teacherCode: "",
                       },
                       testCases: [
@@ -757,7 +739,7 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
 
                         {q.type === 'CODE' && (
                           <div className="flex gap-4 text-xs text-text-tertiary mt-2 font-mono">
-                            <span>Limit: {q.config?.timeLimit || 2000}ms / {q.config?.memoryLimit || 128000}KB</span>
+                            <span>Time limit: {q.config?.timeLimit || 2000}ms</span>
                             <span>•</span>
                             <span>Test cases: {q.testCases?.length || 0} ({q.testCases?.filter((c: any) => c.isHidden).length || 0} hidden)</span>
                           </div>

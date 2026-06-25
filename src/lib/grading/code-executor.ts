@@ -33,7 +33,6 @@ interface CodeExecutionRequest {
   language: "python" | "javascript";
   testCases: TestCase[];
   timeLimitMs: number;
-  memoryLimitKb: number;
   teacherCode?: string;
 }
 
@@ -218,7 +217,6 @@ async function executeSingleTestCase(
           stdin: input,
           run_timeout: timeLimitMs,
           compile_timeout: 10000,
-          run_memory_limit: -1,
         }),
       });
 

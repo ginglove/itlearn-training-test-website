@@ -134,12 +134,10 @@ export async function POST(
       // 3. If CODE, insert config and test cases
       if (type === "CODE") {
         const tLimit = codeConfig?.timeLimit || 2000;
-        const mLimit = codeConfig?.memoryLimit || 128000;
 
         await tx.insert(codeConfigs).values({
           questionId: q.id,
           timeLimit: tLimit,
-          memoryLimit: mLimit,
           starterCode: codeConfig?.starterCode || "",
           teacherCode: codeConfig?.teacherCode || "",
         });

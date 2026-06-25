@@ -66,7 +66,6 @@ export async function POST(
         expectedOutput: c.outputData,
       })),
       timeLimitMs: config?.timeLimit || 2000,
-      memoryLimitKb: config?.memoryLimit || 128000,
       teacherCode: config?.teacherCode || undefined,
     });
 

@@ -9,7 +9,6 @@ export default function CodingConfigPage({ params }: { params: Promise<{ id: str
   const { id: examId } = use(params);
   const [questionId, setQuestionId] = useState("");
   const [timeLimit, setTimeLimit] = useState(1000);
-  const [memoryLimit, setMemoryLimit] = useState(65536);
   const [starterCode, setStarterCode] = useState("");
   const [teacherCode, setTeacherCode] = useState("");
   const [testCases, setTestCases] = useState([{ inputData: "", outputData: "", isHidden: false }]);
@@ -33,7 +32,6 @@ export default function CodingConfigPage({ params }: { params: Promise<{ id: str
           const firstQ = data.questions[0];
           setQuestionId(firstQ.id);
           setTimeLimit(firstQ.config?.timeLimit || 1000);
-          setMemoryLimit(firstQ.config?.memoryLimit || 65536);
           setStarterCode(firstQ.config?.starterCode || "");
           setTeacherCode(firstQ.config?.teacherCode || "");
           setTestCases(
@@ -55,7 +53,6 @@ export default function CodingConfigPage({ params }: { params: Promise<{ id: str
     const selectedQ = questionsList.find(q => q.id === qId);
     if (selectedQ) {
       setTimeLimit(selectedQ.config?.timeLimit || 1000);
-      setMemoryLimit(selectedQ.config?.memoryLimit || 65536);
       setStarterCode(selectedQ.config?.starterCode || "");
       setTeacherCode(selectedQ.config?.teacherCode || "");
       setTestCases(
@@ -65,7 +62,6 @@ export default function CodingConfigPage({ params }: { params: Promise<{ id: str
       );
     } else {
       setTimeLimit(1000);
-      setMemoryLimit(65536);
       setStarterCode("");
       setTeacherCode("");
       setTestCases([{ inputData: "", outputData: "", isHidden: false }]);
@@ -101,7 +97,6 @@ export default function CodingConfigPage({ params }: { params: Promise<{ id: str
         body: JSON.stringify({
           questionId,
           timeLimit,
-          memoryLimit,
           starterCode,
           teacherCode,
           testCases,
@@ -177,25 +172,15 @@ export default function CodingConfigPage({ params }: { params: Promise<{ id: str
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1.5">Time Limit (ms)</label>
-                <input
-                  type="number"
-                  value={timeLimit}
-                  onChange={(e) => setTimeLimit(parseInt(e.target.value))}
-                  className="premium-input font-mono"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1.5">Memory Limit (KB)</label>
-                <input
-                  type="number"
-                  value={memoryLimit}
-                  onChange={(e) => setMemoryLimit(parseInt(e.target.value))}
-                  className="premium-input font-mono"
-                />
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-text-secondary mb-1.5">Time Limit (ms)</label>
+              <input
+                type="number"
+                value={timeLimit}
+                onChange={(e) => setTimeLimit(parseInt(e.target.value))}
+                className="premium-input font-mono"
+              />
+              <p className="text-text-tertiary text-xs mt-1">Student code is killed if it exceeds this duration. Default: 1000ms.</p>
             </div>
 
             {/* Starter Code */}
