@@ -15,7 +15,7 @@ export async function POST(
 
     const { id: examId } = await params;
     const body = await request.json();
-    const { questionId, timeLimit, memoryLimit, testCases: cases } = body;
+    const { questionId, timeLimit, memoryLimit, starterCode, teacherCode, testCases: cases } = body;
 
     if (!questionId) {
       return NextResponse.json(
@@ -47,13 +47,20 @@ export async function POST(
       if (existingConfig) {
         await tx
           .update(codeConfigs)
-          .set({ timeLimit: timeLimit || 1000, memoryLimit: memoryLimit || 65536 })
+          .set({
+            timeLimit: timeLimit || 1000,
+            memoryLimit: memoryLimit || 65536,
+            starterCode: starterCode ?? existingConfig.starterCode,
+            teacherCode: teacherCode ?? existingConfig.teacherCode,
+          })
           .where(eq(codeConfigs.questionId, questionId));
       } else {
         await tx.insert(codeConfigs).values({
           questionId,
           timeLimit: timeLimit || 1000,
           memoryLimit: memoryLimit || 65536,
+          starterCode: starterCode || null,
+          teacherCode: teacherCode || null,
         });
       }
 
@@ -116,7 +123,15 @@ export async function GET(
         id: q.id,
         title: q.title,
         content: q.content,
-        config: config || null,
+        points: q.points,
+        config: config
+          ? {
+              timeLimit: config.timeLimit,
+              memoryLimit: config.memoryLimit,
+              starterCode: config.starterCode ?? "",
+              teacherCode: config.teacherCode ?? "",
+            }
+          : null,
         testCases: cases,
       });
     }
