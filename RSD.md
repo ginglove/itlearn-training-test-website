@@ -119,10 +119,12 @@ Backend updates password hash, sets `is_first_login = FALSE`, invalidates temp t
 ### 3.3. Exam Monitoring (Teacher)
 The teacher monitoring dashboard (`GET /api/v1/teacher/exams/:id/monitor`) provides real-time session state:
 
-| Student Name | Connection Status | Active Question | Focus Loss Alerts | Score | Actions |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| John Doe | Online | Question 4 (Code) | 0 | 45.00 / 100.00 | Force Submit |
-| Jane Smith | Offline | Question 2 (Quiz) | 3 | 12.50 / 100.00 | Force Submit |
+| Student Name | IP | Focus Losses | Time Elapsed | Progress | Status | Score | Actions |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| John Doe | 192.168.1.1 | 0 | 00:35:22 | 4/6 (66%) ✓ 3 pass ✗ 1 fail | Active | 45.00 / 100.00 | Force Submit |
+| Jane Smith | 192.168.1.2 | 3 | 00:12:05 | 2/6 (33%) ✓ 1 pass ✗ 1 fail | Submitted | 12.50 / 100.00 | Force Submit |
+
+**Progress Column:** Shows `answered/totalQuestions` with a percentage progress bar and a pass/fail breakdown badge. The total question count (`totalQuestions`) is returned by the monitor SSE stream alongside `totalPossibleScore` and `roster`.
 
 ---
 
@@ -168,7 +170,21 @@ The layout is constrained to the viewport (`h-screen`). Navigation uses a left s
 - **Untested Code Warning:** When clicking Submit Exam, if any CODE question has never been run, a modal lists the untested questions and requires the student to confirm ("Submit Anyway") or go back to test ("Go Back & Test").
 
 ### 4.4. UI Notification System (Toast)
-All user-facing feedback (success, error, warning, info) is delivered as slide-in toast pop-ups in the top-right corner. Toasts auto-dismiss after 4 seconds and can be manually dismissed. This applies to all teacher and student pages. No inline banners or `alert()` dialogs are used.
+All user-facing feedback (success, error, warning, info) is delivered as slide-in toast pop-ups in the top-right corner. Toasts auto-dismiss after 4 seconds and can be manually dismissed. This applies to all teacher and student pages, **including the exam workspace** (`/workspace` routes — the sidebar is skipped but `ToastProvider` is still mounted so toasts work during exams). No inline banners or `alert()` dialogs are used.
+
+### 4.5. Confirmation Dialog (ConfirmModal)
+Destructive actions that require explicit user confirmation use a styled `ConfirmModal` component (`src/components/toast.tsx`) instead of the browser-native `confirm()` API. No native `confirm()` calls exist anywhere in the UI.
+
+| Property | Description |
+| :--- | :--- |
+| `variant` | `danger` (rose), `warning` (amber), or `default` (brand blue) |
+| `title` | Short action label shown in the modal header |
+| `description` | Full consequence description shown in the modal body |
+| `confirmLabel` / `cancelLabel` | Customisable button text |
+
+Current usages:
+- **Delete Exam** (`/teacher/exams/:id/edit`): `variant="danger"` — warns that all submissions and grades will be permanently lost.
+- **Remove Question** (`/teacher/exams/:id/questions`): `variant="danger"` — warns that all associated options and test cases will be deleted.
 
 ---
 
@@ -179,7 +195,15 @@ All user-facing feedback (success, error, warning, info) is delivered as slide-i
 - Clone exam: duplicates all settings, questions, options, and test cases.
 - RESTRICTED access: assign specific students to an exam.
 
-### 5.2. Question Builder
+### 5.2. Teacher Page Navigation
+Key teacher pages include header back-navigation buttons for quick traversal:
+
+| Page | Button Label | Destination |
+| :--- | :--- | :--- |
+| Manage Questions (`/teacher/exams/:id/questions`) | ← Back | `/teacher` dashboard |
+| Coding Configuration (`/teacher/exams/:id/coding`) | ← Back to Questions | `/teacher/exams/:id/questions` |
+
+### 5.3. Question Builder
 Teachers can create questions directly in the UI or import via Excel/CSV.
 
 **Supported Question Types:**
@@ -193,7 +217,7 @@ Teachers can create questions directly in the UI or import via Excel/CSV.
 ```
 Import is atomic — all rows succeed or the transaction rolls back.
 
-### 5.3. Coding Task Configuration
+### 5.4. Coding Task Configuration
 Per code question, teachers configure:
 - **Time Limit (ms):** Maximum execution time.
 - **Memory Limit (KB):** Maximum memory usage.
@@ -201,7 +225,7 @@ Per code question, teachers configure:
 - **Teacher Reference Code:** When set, runs dynamically at grading/test time and its stdout becomes the expected output (overriding static `output_data`). This allows the expected output to be generated programmatically.
 - **Test Cases:** Each test case has `input_data`, `output_data`, and `is_hidden` flag. Hidden test cases are used for final grading only; public test cases are shown as samples to students.
 
-### 5.4. Platform Settings (Admin)
+### 5.5. Platform Settings (Admin)
 Teachers configure global settings:
 - Piston API URL and execution mode (Local Fallback / Local Only / API Only)
 - Session IP Binding (on/off)
@@ -410,12 +434,26 @@ Configurable via platform settings:
 - All feedback messages (save success, errors, validation failures) appear as slide-in toast pop-ups in the top-right corner.
 - Toasts auto-dismiss after 4 seconds; can be manually dismissed.
 - Variants: success (green), error (red), warning (amber), info (blue).
-- No `alert()` calls or inline static banners anywhere in the UI.
+- `ToastProvider` is mounted on both teacher and student layouts, including the exam workspace route (which skips the sidebar but retains the provider). This guarantees `useToast()` is available on every page.
+- No `alert()` calls, native `confirm()` calls, or inline static banners anywhere in the UI.
+- Destructive confirmations use the `ConfirmModal` component (see Section 4.5) instead of browser dialogs.
 
 ### 9.5. Code Question Visual Identity
 - CODE questions in the sidebar question map use **amber/yellow** color in all states.
 - QUIZ questions use **brand blue**.
 - This allows students to immediately distinguish question types at a glance.
+
+### 9.6. Student Progress Tracking in Monitor
+- The monitor SSE stream includes `totalQuestions` (integer) alongside `totalPossibleScore` and `roster`.
+- Each roster entry's `details` array lists per-question submissions. `details.length` is the number of questions the student has answered.
+- The **Progress** column renders a progress bar: `answered / totalQuestions` with percentage, plus a `✓ N pass / ✗ N fail` breakdown derived from each `detail.result` field.
+- Progress updates live on every SSE tick without page refresh.
+
+### 9.7. Dynamic Quiz Score Recomputation
+- In both the teacher monitor view (`GET /api/v1/teacher/exams/:id/monitor`) and the student completed-exam view (`GET /api/v1/student/completed/:id`), quiz question scores are **re-derived from selected options at read time** rather than relying solely on the stored `score` value.
+- The partial-credit formula mirrors the grader: if any selected option is incorrect, score = 0; otherwise score = `points × (correctSelected / totalCorrect)`.
+- Unanswered questions (no selected options) fall back to the stored `score`.
+- This guarantees that the displayed score is always consistent with the displayed PASS/FAIL result, even if the stored score was written by an older code path.
 
 ---
 
