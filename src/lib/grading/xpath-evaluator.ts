@@ -25,19 +25,28 @@ export type VerifyResult = {
   snippets: string[];
 };
 
-const BLOCKED_PATTERNS = [
+const MAX_RESPONSE_BYTES = 2 * 1024 * 1024; // 2 MB
+const MAX_SELECTOR_LENGTH = 500;
+
+const PRIVATE_IP_PATTERNS = [
   /^https?:\/\/localhost/i,
   /^https?:\/\/127\./,
   /^https?:\/\/0\./,
   /^https?:\/\/10\./,
+  /^https?:\/\/100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./,
   /^https?:\/\/172\.(1[6-9]|2\d|3[01])\./,
   /^https?:\/\/192\.168\./,
   /^https?:\/\/169\.254\./,
   /^https?:\/\/\[::1\]/,
+  /^https?:\/\/\[fc/i,
+  /^https?:\/\/\[fd/i,
 ];
 
 async function fetchHtml(url: string): Promise<string> {
-  for (const pattern of BLOCKED_PATTERNS) {
+  if (!/^https?:\/\//i.test(url)) {
+    throw new Error("SSRF_BLOCKED: Only http:// and https:// URLs are permitted.");
+  }
+  for (const pattern of PRIVATE_IP_PATTERNS) {
     if (pattern.test(url)) {
       throw new Error("SSRF_BLOCKED: Target URL resolves to a private network address.");
     }
@@ -47,13 +56,24 @@ async function fetchHtml(url: string): Promise<string> {
   try {
     const res = await fetch(url, { signal: controller.signal });
     if (!res.ok) throw new Error(`HTTP ${res.status} fetching target URL`);
-    return await res.text();
+    const contentLength = parseInt(res.headers.get("content-length") ?? "0", 10);
+    if (contentLength > MAX_RESPONSE_BYTES) {
+      throw new Error("SSRF_BLOCKED: Response too large.");
+    }
+    const buffer = await res.arrayBuffer();
+    if (buffer.byteLength > MAX_RESPONSE_BYTES) {
+      throw new Error("SSRF_BLOCKED: Response too large.");
+    }
+    return new TextDecoder().decode(buffer);
   } finally {
     clearTimeout(timeout);
   }
 }
 
 function evaluateSelector(doc: Document, selector: string, selectorType: SelectorType): Element[] {
+  if (selector.length > MAX_SELECTOR_LENGTH) {
+    throw new Error(`Selector exceeds maximum length of ${MAX_SELECTOR_LENGTH} characters.`);
+  }
   if (selectorType === "CSS") {
     try {
       return Array.from(doc.querySelectorAll(selector));

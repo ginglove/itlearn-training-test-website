@@ -23,6 +23,12 @@ export async function POST(
         { status: 400 }
       );
     }
+    if (student_selector.length > 500) {
+      return NextResponse.json(
+        { error: "VALIDATION_ERROR", message: "Selector exceeds maximum length of 500 characters." },
+        { status: 400 }
+      );
+    }
 
     const [exam] = await db.select().from(exams).where(eq(exams.id, examId)).limit(1);
     if (!exam) return NextResponse.json({ error: "NOT_FOUND", message: "Exam not found." }, { status: 404 });

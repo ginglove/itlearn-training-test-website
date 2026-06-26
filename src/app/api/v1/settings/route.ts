@@ -5,8 +5,12 @@ import { platformSettings } from "@/db/schema";
 export async function GET(request: NextRequest) {
   try {
     const userId = request.headers.get("x-user-id");
+    const role = request.headers.get("x-user-role");
     if (!userId) {
       return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+    }
+    if (role !== "TEACHER") {
+      return NextResponse.json({ error: "FORBIDDEN", message: "Only teachers can view settings." }, { status: 403 });
     }
 
     let [settings] = await db.select().from(platformSettings).limit(1);
@@ -87,10 +91,10 @@ export async function PUT(request: NextRequest) {
             focusTrackingEnabled !== undefined
               ? !!focusTrackingEnabled
               : existing.focusTrackingEnabled,
-          autoSaveInterval:
-            autoSaveInterval !== undefined
-              ? parseInt(autoSaveInterval)
-              : existing.autoSaveInterval,
+          autoSaveInterval: (() => {
+            const parsed = parseInt(autoSaveInterval, 10);
+            return autoSaveInterval !== undefined && !isNaN(parsed) && parsed > 0 ? parsed : existing.autoSaveInterval;
+          })(),
           executionMode: executionMode ?? existing.executionMode,
           updatedAt: new Date(),
         })

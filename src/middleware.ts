@@ -19,18 +19,18 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith(route)
   );
 
-  console.log(`[middleware] path=${pathname} NODE_ENV=${process.env.NODE_ENV}`);
 
   if (process.env.NODE_ENV === "development") {
+    if (process.env.NODE_ENV === ("production" as string)) {
+      throw new Error("SECURITY: Dev auth bypass must never run in production.");
+    }
     // Inject dev user headers so API routes have user context
     const devHeaders = new Headers(request.headers);
     if (!devHeaders.has("x-user-id")) {
-      // Determine role from the path being accessed
       const isTeacherPath = teacherRoutes.some((r) => pathname.startsWith(r));
       devHeaders.set("x-user-id", isTeacherPath ? "00000000-0000-0000-0000-000000000001" : "00000000-0000-0000-0000-000000000002");
       devHeaders.set("x-user-role", isTeacherPath ? "TEACHER" : "STUDENT");
     }
-    console.log(`[middleware] dev bypass: x-user-id=${devHeaders.get("x-user-id")}`);
     return NextResponse.next({
       request: { headers: devHeaders },
     });

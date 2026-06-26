@@ -24,13 +24,19 @@ export async function POST(
         { status: 400 }
       );
     }
+    if (unsynced_payloads.length > 200) {
+      return NextResponse.json(
+        { error: "VALIDATION_ERROR", message: "Too many payloads in a single auto-save request." },
+        { status: 400 }
+      );
+    }
 
     const [submission] = await db
       .select()
       .from(examSubmissions)
       .where(eq(examSubmissions.id, subId));
 
-    if (!submission || submission.submittedAt) {
+    if (!submission || submission.studentId !== studentId || submission.examId !== examId || submission.submittedAt) {
       return NextResponse.json(
         { error: "FORBIDDEN", message: "Cannot auto-save. Session invalid or already submitted." },
         { status: 403 }

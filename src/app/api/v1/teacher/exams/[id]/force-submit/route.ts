@@ -9,8 +9,9 @@ import {
   testCases,
   xpathConfigs,
   xpathTestCases,
+  exams,
 } from "@/db/schema";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, and, isNull } from "drizzle-orm";
 import { gradeQuizQuestion } from "@/lib/grading/quiz-grader";
 import { executeCode } from "@/lib/grading/code-executor";
 import { gradeXPathQuestion } from "@/lib/grading/xpath-evaluator";
@@ -21,22 +22,27 @@ export async function POST(
 ) {
   try {
     const teacherId = request.headers.get("x-user-id");
+    const role = request.headers.get("x-user-role");
     if (!teacherId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+    if (role !== "TEACHER") return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
 
     const { id: examId } = await params;
     const body = await request.json();
-    const { studentId } = body;
-    if (!studentId) {
-      return NextResponse.json({ error: "VALIDATION_ERROR", message: "studentId is required." }, { status: 400 });
+    const { submissionId } = body;
+    if (!submissionId) {
+      return NextResponse.json({ error: "VALIDATION_ERROR", message: "submissionId is required." }, { status: 400 });
     }
 
-    const [bySubId] = await db.select().from(examSubmissions).where(eq(examSubmissions.id, studentId)).limit(1);
-    const [activeSubmission] = bySubId
-      ? [bySubId]
-      : await db.select().from(examSubmissions).where(eq(examSubmissions.studentId, studentId)).limit(1);
+    const [activeSubmission] = await db
+      .select({ submission: examSubmissions })
+      .from(examSubmissions)
+      .innerJoin(exams, and(eq(examSubmissions.examId, exams.id), eq(exams.createdBy, teacherId)))
+      .where(and(eq(examSubmissions.id, submissionId), eq(examSubmissions.examId, examId)))
+      .limit(1)
+      .then((rows) => rows.map((r) => r.submission));
 
-    if (!activeSubmission || activeSubmission.examId !== examId) {
-      return NextResponse.json({ error: "NOT_FOUND", message: "No active submission found for this student." }, { status: 404 });
+    if (!activeSubmission) {
+      return NextResponse.json({ error: "NOT_FOUND", message: "No active submission found." }, { status: 404 });
     }
 
     if (activeSubmission.submittedAt) {
@@ -108,16 +114,27 @@ export async function POST(
       }
     }
 
+    const maxPossible = examQuestions.reduce((sum, q) => sum + parseFloat(q.points as string), 0);
+    const safeTotalScore = Math.max(0, Math.min(totalScore, maxPossible));
+
     await db.transaction(async (tx) => {
-      await tx.update(examSubmissions).set({ submittedAt: new Date(), totalScore: totalScore.toFixed(2) }).where(eq(examSubmissions.id, activeSubmission.id));
+      const updated = await tx
+        .update(examSubmissions)
+        .set({ submittedAt: new Date(), totalScore: safeTotalScore.toFixed(2) })
+        .where(and(eq(examSubmissions.id, activeSubmission.id), isNull(examSubmissions.submittedAt)))
+        .returning({ id: examSubmissions.id });
+      if (updated.length === 0) throw new Error("ALREADY_SUBMITTED");
       if (detailInserts.length > 0) {
         await tx.delete(submissionDetails).where(eq(submissionDetails.submissionId, activeSubmission.id));
         await tx.insert(submissionDetails).values(detailInserts);
       }
     });
 
-    return NextResponse.json({ status: "SUCCESS", message: "Student exam has been force-submitted and graded.", totalScore: totalScore.toFixed(2) });
-  } catch (error) {
+    return NextResponse.json({ status: "SUCCESS", message: "Student exam has been force-submitted and graded.", totalScore: safeTotalScore.toFixed(2) });
+  } catch (error: any) {
+    if (error?.message === "ALREADY_SUBMITTED") {
+      return NextResponse.json({ error: "ALREADY_SUBMITTED", message: "This submission is already finalized." }, { status: 400 });
+    }
     console.error("Force-submit error:", error);
     return NextResponse.json({ error: "INTERNAL_ERROR" }, { status: 500 });
   }

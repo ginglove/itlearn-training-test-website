@@ -10,7 +10,7 @@ import {
   xpathConfigs,
   xpathTestCases,
 } from "@/db/schema";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, isNull, and } from "drizzle-orm";
 import { gradeQuizQuestion } from "@/lib/grading/quiz-grader";
 import { executeCode } from "@/lib/grading/code-executor";
 import { gradeXPathQuestion } from "@/lib/grading/xpath-evaluator";
@@ -28,7 +28,6 @@ export async function POST(
     const { id: examId } = await params;
 
     const body = await request.json();
-    console.log("Submit route received body:", body);
     const { submission_id, submissionId, answers, focus_loss_count, close_reason } = body;
     const subId = submission_id ?? submissionId;
     if (!subId) {
@@ -40,7 +39,7 @@ export async function POST(
 
     const [submission] = await db.select().from(examSubmissions).where(eq(examSubmissions.id, subId)).limit(1);
 
-    if (process.env.NODE_ENV !== "development" && (!submission || submission.studentId !== studentId || submission.examId !== examId)) {
+    if (!submission || submission.studentId !== studentId || submission.examId !== examId) {
       return NextResponse.json({ error: "NOT_FOUND", message: "Submission not found or unauthorized." }, { status: 404 });
     }
 
@@ -139,16 +138,31 @@ export async function POST(
       }
     }
 
+    const maxPossible = examQuestions.reduce((sum, q) => sum + parseFloat(q.points as string), 0);
+    const safeTotalScore = Math.max(0, Math.min(totalScore, maxPossible));
+
     await db.transaction(async (tx) => {
-      await tx.update(examSubmissions).set({ submittedAt: new Date(), totalScore: totalScore.toFixed(2), focusLossCount: focus_loss_count ?? 0, closeReason: close_reason ?? null }).where(eq(examSubmissions.id, subId));
+      const updated = await tx
+        .update(examSubmissions)
+        .set({ submittedAt: new Date(), totalScore: safeTotalScore.toFixed(2), focusLossCount: focus_loss_count ?? 0, closeReason: close_reason ?? null })
+        .where(and(eq(examSubmissions.id, subId), isNull(examSubmissions.submittedAt)))
+        .returning({ id: examSubmissions.id });
+
+      if (updated.length === 0) {
+        throw new Error("ALREADY_SUBMITTED");
+      }
+
       if (detailInserts.length > 0) {
         await tx.delete(submissionDetails).where(eq(submissionDetails.submissionId, subId));
         await tx.insert(submissionDetails).values(detailInserts);
       }
     });
 
-    return NextResponse.json({ status: "COMPLETED", submissionId: subId, message: "Your submission has been received and graded successfully.", total_score: totalScore.toFixed(2), submitted_at: new Date().toISOString() }, { status: 200 });
-  } catch (error) {
+    return NextResponse.json({ status: "COMPLETED", submissionId: subId, message: "Your submission has been received and graded successfully.", total_score: safeTotalScore.toFixed(2), submitted_at: new Date().toISOString() }, { status: 200 });
+  } catch (error: any) {
+    if (error?.message === "ALREADY_SUBMITTED") {
+      return NextResponse.json({ error: "ALREADY_SUBMITTED", message: "This exam has already been submitted." }, { status: 400 });
+    }
     console.error("Submit exam error:", error);
     return NextResponse.json({ error: "INTERNAL_ERROR", message: "Failed to process submission" }, { status: 500 });
   }

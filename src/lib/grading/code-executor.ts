@@ -338,7 +338,8 @@ export async function executeCode(
         if (teacherExec.timedOut) {
           expectedOutput = "TEACHER_CODE_TIMEOUT";
         } else if (teacherExec.stderr && teacherExec.exitCode !== 0) {
-          expectedOutput = `TEACHER_CODE_ERROR: ${teacherExec.stderr}`;
+          console.error("Teacher code execution error:", teacherExec.stderr);
+          expectedOutput = "TEACHER_CODE_ERROR";
         } else {
           expectedOutput = teacherExec.stdout;
         }

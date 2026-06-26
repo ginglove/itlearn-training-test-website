@@ -3,9 +3,19 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { hashPassword, validatePasswordComplexity, verifyToken, generateToken } from "@/lib/auth";
 import { eq } from "drizzle-orm";
+import { checkRateLimit } from "@/lib/rate-limiter";
 
 export async function POST(request: NextRequest) {
   try {
+    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? request.headers.get("x-real-ip") ?? "unknown";
+    const rl = checkRateLimit(`pwreset:${ip}`, 5, 60 * 60 * 1000);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: "RATE_LIMITED", message: "Too many password reset attempts. Please try again later." },
+        { status: 429, headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) } }
+      );
+    }
+
     const body = await request.json();
     const { reset_token, new_password } = body;
 

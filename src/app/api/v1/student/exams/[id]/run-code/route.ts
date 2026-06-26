@@ -3,13 +3,14 @@ import { db } from "@/db";
 import { codeConfigs, testCases, exams } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { executeCode } from "@/lib/grading/code-executor";
+import { getUserId } from "@/lib/get-user-id";
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const studentId = request.headers.get("x-user-id");
+    const studentId = getUserId(request, "student");
     if (!studentId) {
       return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
     }
@@ -66,7 +67,6 @@ export async function POST(
         expectedOutput: c.outputData,
       })),
       timeLimitMs: config?.timeLimit || 2000,
-      teacherCode: config?.teacherCode || undefined,
     });
 
     return NextResponse.json({

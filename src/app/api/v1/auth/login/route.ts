@@ -3,9 +3,19 @@ import { db } from "@/db";
 import { users, platformSettings } from "@/db/schema";
 import { verifyPassword, generateToken } from "@/lib/auth";
 import { eq } from "drizzle-orm";
+import { checkRateLimit } from "@/lib/rate-limiter";
 
 export async function POST(request: NextRequest) {
   try {
+    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? request.headers.get("x-real-ip") ?? "unknown";
+    const rl = checkRateLimit(`login:${ip}`, 10, 15 * 60 * 1000);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: "RATE_LIMITED", message: "Too many login attempts. Please try again later." },
+        { status: 429, headers: { "Retry-After": String(Math.ceil(rl.retryAfterMs / 1000)) } }
+      );
+    }
+
     const body = await request.json();
     const { username, password } = body;
 
@@ -24,6 +34,8 @@ export async function POST(request: NextRequest) {
       .limit(1);
 
     if (!user) {
+      // Dummy hash comparison to prevent timing-based username enumeration
+      await verifyPassword(password, "$2b$10$invalidhashpaddinginvalidhashpaddinginvalidhashpadding..");
       return NextResponse.json(
         { error: "UNAUTHORIZED", message: "The username or password provided is incorrect." },
         { status: 401 }
