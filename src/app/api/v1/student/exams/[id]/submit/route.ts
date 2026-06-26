@@ -101,7 +101,7 @@ export async function POST(
         const config = configMap.get(q.id);
         const cases = testCasesMap.get(q.id) ?? [];
         let questionScore = 0;
-        let overallStatus: "AC" | "WA" | "CE" | "RE" | "TLE" = "WA";
+        let overallStatus: "AC" | "WA" | "CE" | "RE" | "TLE" | "OFE" = "WA";
 
         if (cases.length > 0) {
           const executionResult = await executeCode({
