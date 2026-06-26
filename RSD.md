@@ -1,6 +1,6 @@
 # Requirements Specification Document (RSD)
 ## Enterprise Online Quiz, Hybrid Coding & Automation Testing Platform
-**Document Version:** 7.1 (Memory limit removed; stdin UX, vacuous-pass detection, XPATH completed exam display)  
+**Document Version:** 7.2 (Security hardening, XPath test cases, CSS selector support, focus-loss enforcement)  
 **Target Environments:** Python 3.10+, Node.js 18+ LTS  
 **Core Framework Integration:** itlearn.edu.vn Core Platform Standard  
 
@@ -8,56 +8,67 @@
 
 ## Revision History
 
+### Version 7.2 — 2026-06-26
+
+#### 🆕 New
+| Area | Detail |
+| :--- | :--- |
+| **OFE execution status** | New status code `OFE` (Output Limit Exceeded) added to `execution_status` enum. Triggered when a student program produces more than **10,000 characters** of stdout, preventing memory/network overload from runaway print loops. |
+| **256 MB memory hard cap** | Every code execution request now sends `run_memory_limit: 262144` to the Piston API, capping each sandbox at 256 MB. Prevents host-level OOM from infinite allocation loops. |
+| **Focus Loss Enforcement Policy** | Per-exam setting: `LOG_ONLY` (default) or `WARN_AND_LOCK`. In `WARN_AND_LOCK` mode, the 1st and 2nd tab-switch offenses show the student a modal warning; the 3rd offense triggers an immediate, un-bypassable auto-submit flagged with `close_reason: "FOCUS_LOSS_THRESHOLD"`. |
+| **`focus_loss_policy` on exams** | New column on `exams` table (varchar 20, default `"LOG_ONLY"`). Set per-exam via the exam creation form. |
+| **`close_reason` on submissions** | New nullable column on `exam_submissions` (varchar 50). Set to `"FOCUS_LOSS_THRESHOLD"` on auto-submit from focus-loss enforcement. Null on normal or teacher-forced submissions. |
+| **CSS Selector support** | XPath questions now support two selector types: `XPATH` (XPath 1.0) and `CSS` (CSS Selector via `querySelectorAll`). The teacher picks the type per question; students write the corresponding expression. |
+| **XPath test cases (one-to-many)** | New `xpath_test_cases` table replaces the single-config approach in `xpath_configs`. Each XPATH question can have multiple test cases (each with its own target type, target payload, reference selector, and hidden flag), mirroring how `CODE` questions work. |
+| **Hidden XPath test cases** | XPath test cases can be marked hidden. Hidden cases are excluded from the "Run XPath" response but included in final grading at submission, identical to hidden CODE test cases. |
+| **Inline XPATH config in question builder** | Teachers now configure XPath test cases directly inside the question creation/edit form — no separate "XPath Config" page required. Each test case has its own **Verify** button. |
+| **Per-test-case Verify button** | New `POST /api/v1/teacher/exams/:id/xpath-verify` endpoint. Evaluates a single (selectorType, targetType, targetPayload, referenceSelector) tuple and returns match count + up to 5 HTML snippets for teacher review. Verification is advisory — it never blocks saving. |
+| **XPath 1.0 constraint notice in UI** | An amber info banner on the XPath config page warns teachers that the backend evaluator (jsdom) supports only **XPath 1.0**. XPath 2.0/3.0 functions cause a parse error. |
+
+#### 🔄 Changed
+| Area | Detail |
+| :--- | :--- |
+| **`xpath_configs` schema** | Now stores only `selector_type` (XPATH or CSS). The old `target_type`, `target_payload`, and `reference_xpath` columns have been migrated to `xpath_test_cases`. |
+| **`GET /api/v1/student/exams/:id/questions`** | Now returns `focusLossPolicy` alongside questions so the workspace can enforce the exam's anti-cheat policy. |
+| **`POST /api/v1/student/exams/:id/submit`** | Now accepts optional `close_reason` in the body and persists it to `exam_submissions`. |
+| **`POST /api/v1/teacher/exams`** | Now accepts and saves `focusLossPolicy` when creating an exam. |
+| **XPath grading** | `gradeXPathQuestion()` now receives an array of test cases (not a single config), evaluates each independently, and returns per-case results + `scorePercentage`. Score = (passed / total) × points. |
+| **`run-xpath` student endpoint** | Returns per-case results for visible test cases plus `hiddenCount`. |
+| **RSD §7.2 execution pipeline** | Steps 4–6 added: memory cap, OFE detection, time limit. |
+| **RSD §7.3 XPath evaluation** | XPath 1.0 constraint formally documented. CSS selector path added. |
+| **RSD §3.1 Focus Loss Tracker** | Expanded with full `LOG_ONLY` / `WARN_AND_LOCK` enforcement specification. |
+
+#### 🗑️ Removed / Superseded
+| Area | Detail |
+| :--- | :--- |
+| **Separate "XPath Config" page** | Teachers no longer need to navigate to a separate `/teacher/exams/:id/xpath` page to set up test cases. Configuration is now inline in the question builder. |
+| **Single-config XPath approach** | The old model (one URL + one reference XPath per question) is replaced by the multi-test-case model with optional hidden cases. |
+
+---
+
 ### Version 7.1 — 2026-06-25
 
 #### 🆕 New
 | Area | Detail |
 | :--- | :--- |
-| **Stdin injection banner** | Sample Cases tab now shows a persistent info banner explaining that the displayed Input is passed as `stdin` when Run Code is clicked, with language-specific read patterns (`sys.stdin.read()` / `input()` for Python; `fs.readFileSync('/dev/stdin')` / `process.stdin` for JavaScript). |
-| **Stdin column labels** | Sample Cases columns renamed from "Input / Expected Output" to "Input (stdin) / Expected Output (stdout)" for clarity. |
-| **Editor placeholder boilerplate** | When the code editor is blank, the placeholder text now shows a language-specific stdin-reading template (import/read/parse/print scaffold) instead of a generic comment. |
-| **Vacuous-pass detection** | When a student's code runs but prints nothing, and the expected output is also empty (unconfigured), the system now explicitly detects this as a vacuous pass. The Execution Output tab shows an amber **"⚠ No Output Produced"** badge instead of a misleading green "✓ All Passed". |
-| **No-output warning banner** | When vacuous pass is detected, a red inline banner appears: *"Your code ran but produced no output. Make sure you print your result using `console.log()` (JavaScript) or `print()` (Python)."* |
-| **"Not Graded" state** | When all test cases have no configured expected output (neither `outputData` nor Teacher Reference Code set), the tab badge shows amber **"⚠ Not Graded"** so students and teachers understand the result is not meaningful. |
-| **`expectedOutputConfigured` flag** | The `ExecutionResult` object now carries an `expectedOutputConfigured: boolean` field so the frontend can distinguish "empty because not configured" from "intentionally empty". |
-| **`inputData` in execution result** | `ExecutionResult` now carries `inputData: string` (the actual stdin passed to the process). The frontend reads this directly instead of doing fragile index-based lookups on `publicCases[i]`. |
-| **Teacher Reference Code UI** | Teacher coding config page now shows a textarea for **Teacher Reference Code** with an amber warning banner when active: *"Reference code is active. Expected output in test cases below will be ignored during grading."* |
-| **Starter Code UI** | Teacher coding config page now shows a textarea for **Starter Code** (boilerplate pre-loaded into student editor on first open). |
-| **XPATH in completed exam view** | The student completed exam detail drawer now renders XPATH question results, showing the student's submitted XPath expression in an emerald-styled code block alongside the AC/WA result badge. |
-| **XPATH in completed exam API** | `GET /api/v1/student/completed/:id` now includes `studentXpath` in each `submission_detail` row. Previously the field was in the DB but never selected. |
+| **Stdin injection banner** | Sample Cases tab now shows a persistent info banner explaining stdin read patterns. |
+| **Vacuous-pass detection** | When student code produces no output and expected output is also empty, shown as amber "⚠ No Output Produced" instead of misleading green pass. |
+| **Teacher Reference Code UI** | Textarea for reference code with active-warning banner. |
+| **Starter Code UI** | Textarea for boilerplate pre-loaded into student editor. |
+| **XPATH completed exam view** | Completed exam drawer now renders XPATH results with student's submitted selector in emerald code block. |
 
 #### 🔄 Changed
 | Area | Detail |
 | :--- | :--- |
-| **Question type badge colors** | Standardised across all views: `QUIZ` = Blue/Brand, `CODE` = Amber, `XPATH` = Emerald. The completed exam drawer previously used incorrect colours for CODE and XPATH badges. |
-| **Sample Cases layout** | Each test case is now displayed as a full-width stacked card (vertical rows) with a 2-column grid (Input | Expected Output) inside. Previously cases were shown in a horizontal `flex` row which caused layout issues on long inputs. |
-| **Question header sizing** | The CODE question header in the student workspace was reduced (`p-8 → p-4`, `text-xl → text-sm`, `mb-8 → mb-4`) to give more vertical space to the editor and bottom panel. |
-| **Editor height** | Reduced from `h-[600px]` to `h-[540px]` and font from `text-[15px]` to `text-[13px]` to improve fit on smaller screens. |
-| **Bottom panel height** | Increased from `h-52` to `h-72` so more test case results are visible without scrolling. |
-| **Execution Output "Expected" column** | Now shows `"not configured"` (amber) when `outputData` is empty and no Teacher Reference Code is set, instead of `"(empty)"`, making the cause clear. |
-| **Coding config saved fields** | Teacher Reference Code (`teacherCode`) and Starter Code (`starterCode`) are now fully saved and returned by `GET/POST /api/v1/teacher/exams/:id/coding-config`. Previously these columns existed in the DB but the API never read or wrote them. |
-| **Section 5.3 coding config spec** | Replaced the single-sentence description with a full table showing each configurable field, whether it is enforced, and its purpose. |
-| **Section 7.2 execution pipeline** | Expanded with a 4-step flow covering stdin injection, stdout comparison, vacuous-pass detection, and time limit enforcement. |
-| **Section 9 behavioural specs** | Expanded from 4 to 9 items covering vacuous-pass, stdin injection, starter code pre-fill, memory limit removal, and XPATH completed exam display. |
-
-#### ❌ No Longer
-| Area | Detail |
-| :--- | :--- |
-| **Memory Limit field (UI)** | Removed from the Teacher Coding Config page and the Question Builder (add/edit question form). The field showed a KB value that was never applied to code execution. |
-| **Memory Limit in APIs** | `memoryLimit` is no longer read, written, or returned by: `POST/GET /api/v1/teacher/exams/:id/coding-config`, `POST /api/v1/teacher/exams/:id/questions`, `PUT /api/v1/teacher/exams/:id/questions/:id`, `POST /api/v1/teacher/exams/:id/clone`. |
-| **`memoryLimitKb` in executor** | Removed from the `CodeExecutionRequest` interface in `code-executor.ts`. The Piston API call no longer sends `run_memory_limit`. |
-| **Memory Limit in run/submit/force-submit** | `run-code`, `submit`, `force-submit`, and `execute-code` API routes no longer pass `memoryLimitKb` to `executeCode()`. |
-| **Index-based public case lookup** | The frontend no longer uses `publicCases[i]` to retrieve the input for a result row. Input comes directly from `r.inputData` in the execution result. |
-| **`run_memory_limit: -1` Piston param** | Removed from the Piston API payload. Piston's default (unlimited) applies. |
-
-> **Note on `memory_limit` DB column:** The column still exists in the `code_configs` table and retains its default value (`65536`). No migration is required. It is simply ignored at runtime.
+| **Memory Limit field removed from UI** | Never enforced; removed from all forms and APIs. DB column `memory_limit` retained with default but ignored at runtime. |
+| **Question type badge colors** | Standardised: QUIZ = Blue, CODE = Amber, XPATH = Emerald. |
 
 ---
 
 ## 1. System Overview & Scope
 
 ### 1.1. Purpose
-The Online Quiz and Coding Practice Platform is a unified web-based assessment application designed to automate theoretical, practical programming, and UI automation (XPath) examinations. The platform minimizes manual grading overhead, implements strict academic integrity controls, and delivers real-time monitoring and analytics to instructors.
+The Online Quiz and Coding Practice Platform is a unified web-based assessment application designed to automate theoretical, practical programming, and UI automation (XPath/CSS) examinations. The platform minimizes manual grading overhead, implements strict academic integrity controls, and delivers real-time monitoring and analytics to instructors.
 
 ### 1.2. High-Level System Architecture
 The platform is built on a Next.js full-stack architecture with API routes handling business logic and a PostgreSQL database (via Drizzle ORM) as the primary datastore.
@@ -89,7 +100,7 @@ The platform is built on a Next.js full-stack architecture with API routes handl
 
 ### 2.1. Role Definitions
 - **Teacher (Evaluator):** Administers exams, designs question banks, configures test cases and runtime limits, registers student cohorts, monitors live sessions, and reviews grading reports.
-- **Student (Candidate):** Authenticates via instructor-provisioned credentials, participates in scheduled exam sessions, writes code, selects quiz answers, tests XPath locators, and reviews results after submission.
+- **Student (Candidate):** Authenticates via instructor-provisioned credentials, participates in scheduled exam sessions, writes code, selects quiz answers, tests XPath/CSS locators, and reviews results after submission.
 
 ### 2.2. Enforced Authentication & First-Time Lifecycle
 Self-registration is disabled. All student credentials are provisioned by the teacher via CSV/Excel import.
@@ -101,60 +112,65 @@ Instructor uploads CSV/Excel with: `student_id`, `full_name`, `email`.
 On `POST /api/v1/auth/login`, if `is_first_login` is `TRUE`, the API returns a `FORCE_PASSWORD_RESET` status. The system forces the student to create a new password meeting strict complexity requirements (`>=8 chars, 1 Upper, 1 Lower, 1 Digit, 1 Special`). Backend updates password hash, sets `is_first_login = FALSE`, and redirects to dashboard.
 
 ### 2.3. Role Permissions & Action Matrix
-To enforce strict data boundaries, the platform utilizes a rigid Role-Based Access Control (RBAC) model verified via JWT middleware.
 
-**Legend:**
-*   **✅ Full Access**
-*   **👀 View Only**
-*   **👤 Self Only** (Can only perform action on own data/assigned exams)
-*   **❌ No Access** (`403 Forbidden`)
+**Legend:** ✅ Full Access · 👀 View Only · 👤 Self Only · ❌ No Access
 
 | System Module & Action | Teacher (Evaluator) | Student (Candidate) |
 | :--- | :---: | :---: |
 | **1. Identity & Account Lifecycle** | | |
-| Login & Authenticate via Session Token | ✅ Full Access | ✅ Full Access |
-| Force First-Login Password Reset Flow | ❌ No Access | 👤 Self Only |
-| Update Personal Profile & Password | 👤 Self Only | 👤 Self Only |
-| Bulk Import Student Accounts | ✅ Full Access | ❌ No Access |
+| Login & Authenticate via Session Token | ✅ | ✅ |
+| Force First-Login Password Reset Flow | ❌ | 👤 |
+| Update Personal Profile & Password | 👤 | 👤 |
+| Bulk Import Student Accounts | ✅ | ❌ |
 | **2. Exam Management** | | |
-| Create, Update, Delete, Clone Exams | ✅ Full Access | ❌ No Access |
-| Configure Exam Access (ALL / RESTRICTED)| ✅ Full Access | ❌ No Access |
-| View Available / Assigned Exams | 👀 View Only | 👤 Self Only |
+| Create, Update, Delete, Clone Exams | ✅ | ❌ |
+| Configure Exam Access (ALL / RESTRICTED) | ✅ | ❌ |
+| Configure Focus Loss Policy per Exam | ✅ | ❌ |
+| View Available / Assigned Exams | 👀 | 👤 |
 | **3. Question Bank & Test Configurations** | | |
-| Create/Edit/Delete QUIZ, CODE, XPATH | ✅ Full Access | ❌ No Access |
-| Configure Hidden vs. Public Test Cases | ✅ Full Access | ❌ No Access |
-| Run "Verify Configuration" for Code/XPath | ✅ Full Access | ❌ No Access |
-| View Question Content & Public Test Cases | ✅ Full Access | 👀 View Only *(During Exam)* |
+| Create/Edit/Delete QUIZ, CODE, XPATH questions | ✅ | ❌ |
+| Configure Hidden vs. Public Test Cases | ✅ | ❌ |
+| Run per-test-case Verify (XPath/CSS) | ✅ | ❌ |
+| View Question Content & Public Test Cases | ✅ | 👀 *(During Exam)* |
 | **4. Live Exam Workspace & Execution** | | |
-| Start / Resume Exam Session | ❌ No Access | 👤 Self Only |
-| Execute Sandbox (Run Code / Run XPath) | ❌ No Access | 👤 Self Only |
-| Submit Final Exam & Acknowledge Warnings| ❌ No Access | 👤 Self Only |
+| Start / Resume Exam Session | ❌ | 👤 |
+| Execute Sandbox (Run Code / Run XPath) | ❌ | 👤 |
+| Submit Final Exam & Acknowledge Warnings | ❌ | 👤 |
 | **5. Live Monitoring & Auto-Grading** | | |
-| Access Real-Time SSE Monitor Dashboard | ✅ Full Access | ❌ No Access |
-| Force-Submit an Active Student's Exam | ✅ Full Access | ❌ No Access |
-| View Final Grades & Execution Results | ✅ Full Access | 👤 Self Only |
-| View Hidden Test Case Results | ✅ Full Access | ❌ No Access |
+| Access Real-Time SSE Monitor Dashboard | ✅ | ❌ |
+| Force-Submit an Active Student's Exam | ✅ | ❌ |
+| View Final Grades & Execution Results | ✅ | 👤 |
+| View Hidden Test Case Results | ✅ | ❌ |
 | **6. Global Platform Settings** | | |
-| Configure Piston API Sandbox & Focus Modes| ✅ Full Access | ❌ No Access |
+| Configure Piston API, Focus Tracking, Auto-Save | ✅ | ❌ |
 
 ---
 
 ## 3. Security, Monitoring & Anti-Cheat Subsystem
 
 ### 3.1. Client-Side Telemetry & Event Hooks
-- **Focus Loss Tracker:** Monitors `blur` events. Each focus loss increments the counter. Behaviour depends on the per-exam **Focus Loss Policy** (per RSD_improvement.md §2.1):
-  - `LOG_ONLY` (default): Focus losses are recorded and reported on the monitor dashboard. No student-facing penalty.
-  - `WARN_AND_LOCK`: 1st and 2nd offenses display a modal warning to the student. The **3rd offense** triggers an immediate, un-bypassable auto-submit (`POST /api/v1/student/exams/:id/submit`) with `close_reason: "FOCUS_LOSS_THRESHOLD"` recorded on the submission record.
-- **Focus Loss Policy Configuration:** Teachers set the policy per exam via the exam creation form. Stored as `focus_loss_policy` on the `exams` table.
-- **Session IP Binding (configurable):** Client IP is recorded at submission start. Platform settings allow enabling/disabling enforcement.
+
+**Focus Loss Tracker**
+
+The workspace listens for window `blur` events (tab switches, alt-tab). Each event increments the `focusLossCount` counter. Behaviour is determined by the per-exam **Focus Loss Policy** set by the teacher at exam creation:
+
+| Policy | Student Experience | Submission Effect |
+| :--- | :--- | :--- |
+| `LOG_ONLY` *(default)* | No modal shown. Counter visible to teacher on monitor. | `focus_loss_count` recorded on submission. |
+| `WARN_AND_LOCK` | **Offense 1 & 2:** Modal warning shown — student must dismiss to continue. **Offense 3:** Immediate, un-bypassable auto-submit. | `close_reason: "FOCUS_LOSS_THRESHOLD"` recorded on the submission record. |
+
+The policy is stored as `focus_loss_policy` on the `exams` table and returned by `GET /api/v1/student/exams/:id/questions` so the workspace can apply it client-side without an additional round-trip.
+
+**Session IP Binding (configurable)**
+Client IP is recorded at submission start. Platform settings allow enabling/disabling enforcement.
 
 ### 3.2. Network Interruption & Session Resilience
-- **Auto-Save Engine:** Drafts (code, xpath, and quiz selections) are automatically synced to the database every N seconds (configurable in platform settings, default 15s).
+- **Auto-Save Engine:** Drafts (code, xpath/css selector, quiz selections) are automatically synced to the database every N seconds (configurable in platform settings, default 15 s).
 - **Resume on Re-entry:** Drafts are restored from the database via `GET /api/v1/student/exams/:id/draft`.
-- **Shuffle Order Persistence:** `isShuffled = TRUE` randomizes order on first load, saves to `exam_submissions.question_order`, and persists exactly on all subsequent loads.
+- **Shuffle Order Persistence:** `isShuffled = TRUE` randomizes order on first load, saves to `exam_submissions.question_order`, and restores exactly on all subsequent loads.
 
 ### 3.3. Exam Monitoring (Teacher)
-The monitor dashboard (`GET /api/v1/teacher/exams/:id/monitor`) provides real-time SSE session states including Focus Losses, Progress, Score, and active status.
+The monitor dashboard (`GET /api/v1/teacher/exams/:id/monitor`) provides real-time SSE session states including Focus Losses, Progress, Score, `close_reason`, and active status per student.
 
 ---
 
@@ -169,71 +185,90 @@ The monitor dashboard (`GET /api/v1/teacher/exams/:id/monitor`) provides real-ti
 |  Questions Map                    |                                             |
 |                                   |           ACTIVE WORKSPACE                  |
 |  [1][2][3]     ← QUIZ (blue)     |                                             |
-|  [4][5]        ← CODE (yellow)   |                                             |
+|  [4][5]        ← CODE (amber)    |                                             |
 |  [6][7]        ← XPATH (green)   |                                             |
 +-----------------------------------+---------------------------------------------+
 ```
 
 ### 4.2. Mode A: Quiz View (Blue)
-- Displays question text and selectable option cards (radio for single, checkbox for multiple correct).
+Displays question text and selectable option cards (radio for single correct, checkbox for multiple correct).
 
-### 4.3. Mode B: Integrated Code Editor (Amber/Yellow)
+### 4.3. Mode B: Integrated Code Editor (Amber)
 - Full-height code editor with language selector (Python 3 / JavaScript).
 - Editor placeholder shows language-specific stdin-reading boilerplate when no code has been entered.
 - Bottom panel with **Sample Cases** and **Execution Output** tabs.
-- **Sample Cases tab:** Displays each public test case as a full-width card with two columns: **Input (stdin)** and **Expected Output (stdout)**. A banner at the top of the tab explains that the displayed input is passed as `stdin` when the student clicks Run Code, and shows the correct language-specific read pattern (`sys.stdin.read()` for Python; `fs.readFileSync('/dev/stdin')` for JavaScript).
-- **Run Code button:** Executes code against public test cases. Untested code throws a warning modal on exam submission.
+- **Sample Cases tab:** Displays each public test case as a card with **Input (stdin)** and **Expected Output (stdout)** columns. A banner explains stdin injection and shows the correct read pattern for each language.
+- **Run Code button:** Executes code against public test cases. Untested code triggers a warning modal at submission.
 - **Execution Output tab:**
-  - If student code produced no stdout, shows an amber "⚠ No Output Produced" badge and a red inline banner: *"Your code ran but produced no output. Make sure you print your result using `console.log()` (JavaScript) or `print()` (Python)."*
-  - If expected output was never configured, shows an amber "⚠ Not Graded" badge instead of a green pass badge.
-  - Real passes (student output matches expected output) show a green "✓ All Passed" badge with per-case AC indicators.
-  - Each result row shows: **Input**, **Expected**, **Your Output**, execution time, and any stderr.
+  - `OFE`: Amber "Output Limit Exceeded" badge — student printed more than 10,000 characters.
+  - No output: Amber "⚠ No Output Produced" badge + red banner advising `print()` / `console.log()`.
+  - Unconfigured expected output: Amber "⚠ Not Graded" badge.
+  - Pass: Green "✓ All Passed" badge with per-case AC indicators.
 
-### 4.4. Mode C: XPath Automation Workspace (Emerald/Green)
-- **Split-Pane Layout:**
-  - **Left Pane (Target Preview):** An `<iframe>` displaying the target URL, or a read-only syntax-highlighted block for raw HTML snippets.
-  - **Right Pane:** Question description and a single-line input field for the `student_xpath`.
-- **Test Locator Button:** Executes the XPath against the target.
-- **Output Console:** Shows AC/WA/CE status and renders a truncated list of `outerHTML` snippets showing exactly what elements the student's XPath selected.
+### 4.4. Mode C: XPath / CSS Automation Workspace (Emerald)
+- **Question pane:** Displays question description and an input field labelled by selector type (XPath expression or CSS selector).
+- **Run XPath / Run CSS button:** Evaluates the student's expression against all visible test cases and shows per-case AC/WA/CE status + matched element count.
+- **Output Console:** Shows AC/WA/CE status per test case and renders matched `outerHTML` snippets.
+- Hidden test cases are not shown during the session; they are evaluated at final submission.
 
 ### 4.5. UI Notification & Confirmation Systems
-- All user-facing feedback is delivered as slide-in toast pop-ups (auto-dismiss after 4s). No inline banners or `alert()` dialogs.
-- Destructive actions use a styled `ConfirmModal` component instead of the browser-native `confirm()` API.
+- All user-facing feedback is delivered as slide-in toast pop-ups (auto-dismiss after 4 s).
+- Destructive actions use a styled `ConfirmModal` component.
+- Focus-loss warnings (in `WARN_AND_LOCK` mode) use a blocking modal that cannot be dismissed by clicking the backdrop.
 
 ---
 
 ## 5. Evaluator/Teacher Management Panel & Data Ingestion
 
 ### 5.1. Exam Management
-- Create, edit, delete, and clone exams. RESTRICTED access allows assigning specific students.
+- Create, edit, delete, and clone exams.
+- **Focus Loss Policy** is set at exam creation (dropdown: `Log Only` / `Warn & Lock`).
+- RESTRICTED access allows assigning specific students.
 
 ### 5.2. Question Builder
 **Supported Question Types:**
 - `QUIZ`: Multiple choice (single/multiple correct).
-- `CODE`: Programming task with starter code, reference code, limits, and test cases.
-- `XPATH`: UI Automation task targeting a URL or HTML snippet with a reference locator.
+- `CODE`: Programming task with starter code, reference code, time limit, and test cases.
+- `XPATH`: UI Automation task with one or more test cases targeting URLs or HTML snippets, using either XPath 1.0 or CSS selectors.
+
+All three types are configured inline in the question creation/edit form. No separate configuration pages are needed.
 
 ### 5.2.1. Question Import
-Teachers can download a CSV/Excel template and bulk-import questions into an exam via file upload. The template endpoint (`GET /api/v1/teacher/questions/template`) returns the file, and the import is handled by `POST /api/v1/teacher/exams/:id/import-questions`.
+Teachers can download a CSV/Excel template and bulk-import questions via `POST /api/v1/teacher/exams/:id/import-questions`.
 
 ### 5.3. Coding Task Configuration
-Teachers configure the following fields for each CODE question. **Every field saved here is enforced at runtime** — no cosmetic-only settings exist.
 
 | Field | Enforced | Description |
 | :--- | :---: | :--- |
-| **Time Limit (ms)** | ✅ | Student process is killed (TLE) if it exceeds this duration. Default: 1000 ms. |
-| **Starter Code** | ✅ | Pre-filled boilerplate loaded into the student's editor on first open. If blank, the editor shows language-specific stdin-reading placeholder text. |
-| **Teacher Reference Code** | ✅ | If provided, the system runs this code against each test case input at grading time to generate expected output dynamically. Overrides the "Expected Output" column in test cases. An amber warning banner appears in the UI when active. |
-| **Test Cases** | ✅ | Each test case has **Standard Input** (passed as stdin to the student's code), **Expected Output** (compared to stdout), and a **Hidden** flag (hidden cases are evaluated on submit but not shown in the Sample Cases tab). |
+| **Time Limit (ms)** | ✅ | Process killed (TLE) if exceeded. Default: 1000 ms. |
+| **Starter Code** | ✅ | Pre-filled boilerplate loaded into the student editor on first open. |
+| **Teacher Reference Code** | ✅ | Run against each test input at grading time to generate expected output dynamically. Overrides "Expected Output" column. |
+| **Test Cases** | ✅ | Each has **Standard Input** (stdin), **Expected Output** (stdout comparison), and a **Hidden** flag. |
 
-> **Memory Limit has been removed.** It was previously a configurable field but was never enforced by the execution engine. It has been removed from the UI and all API routes to eliminate misleading configuration.
+> **Memory Limit:** Removed from the UI and API in v7.1 as it was never enforced. A hard 256 MB cap is now applied globally to all executions (see §7.2).
 
-### 5.4. XPath Task Configuration
-Teachers configure:
-- **Target Type:** `URL` or `Raw HTML Snippet`.
-- **Target Payload:** The actual URL or HTML string.
-- **Reference XPath:** The correct locator.
-- **Verify Configuration Action:** A required pre-flight check to test that the target URL is reachable and the reference XPath successfully selects elements before saving.
+### 5.4. XPath / CSS Automation Task Configuration
+
+Teachers configure XPATH questions inline in the question builder. Each question has:
+
+| Setting | Description |
+| :--- | :--- |
+| **Selector Type** | `XPATH` (XPath 1.0 expressions) or `CSS` (CSS selectors via `querySelectorAll`). |
+| **Test Cases** | One or more test cases, each with its own target, reference selector, and hidden flag. |
+
+Each test case has:
+
+| Field | Description |
+| :--- | :--- |
+| **Target Type** | `HTML Snippet` — paste rendered HTML from DevTools; or `URL` — fetch the page's raw HTML at evaluation time. |
+| **Target Payload** | The HTML string or URL. |
+| **Reference Selector** | The correct XPath or CSS expression (teacher's answer key). |
+| **Hidden** | If true, excluded from "Run XPath" responses but evaluated at final submission. |
+| **Verify button** | Calls `POST /api/v1/teacher/exams/:id/xpath-verify` per test case. Returns match count and up to 5 matched `outerHTML` snippets. Verification is **advisory** — 0 matches shows a warning but never blocks saving. |
+
+> **XPath 1.0 Constraint:** The backend evaluator (jsdom) supports **only XPath 1.0**. Avoid `fn:matches()`, `string-join()`, regex predicates, or any XPath 2.0/3.0 syntax — these will return a parse error at evaluation time. Use CSS selector type for flexible class/attribute matching.
+
+> **JS-Rendered Pages:** jsdom loads static HTML only — JavaScript is not executed. For pages where content is rendered by JavaScript, use **HTML Snippet** mode and paste the rendered HTML from browser DevTools (right-click → Inspect → copy `outerHTML` of the parent container).
 
 ---
 
@@ -242,71 +277,106 @@ Teachers configure:
 ### 6.1. Entity Relationship Overview
 
 ```text
-   +------------------+         +------------------+         +----------------------+
-   |      users       |         |      exams       |         |   exam_submissions   |
-   +------------------+         +------------------+         +----------------------+
-   | PK id (UUID)     |<--------| FK created_by    |         | PK id (UUID)         |
-   |    ...           |         |    ...           |         | FK student_id        |
-   +------------------+         +------------------+         |    question_order    |
-                                         |                   +----------------------+
-                                         v
+   +------------------+         +-----------------------------+         +-----------------------------+
+   |      users       |         |           exams             |         |      exam_submissions       |
+   +------------------+         +-----------------------------+         +-----------------------------+
+   | PK id (UUID)     |<--------| FK created_by               |<--------| FK exam_id                  |
+   |    username      |         |    title                    |         | FK student_id               |
+   |    role          |         |    duration                 |         |    start_at                 |
+   +------------------+         |    focus_loss_policy        |         |    submitted_at             |
+                                |    access_type (ALL/REST.)  |         |    focus_loss_count         |
+                                +-----------------------------+         |    close_reason (nullable)  |
+                                            |                           +-----------------------------+
+                                            v
                                 +------------------+
                                 |    questions     |
                                 +------------------+
                                 | PK id (UUID)     |
+                                | FK exam_id       |
                                 |    type (Enum)   | -- 'QUIZ', 'CODE', 'XPATH'
+                                |    points        |
                                 +------------------+
                                          |
          +-------------------------------+-------------------------------+
          |                               |                               |
          v                               v                               v
-+------------------+          +--------------------+         +--------------------+
-|   quiz_options   |          |    code_configs    |         |    xpath_configs   |
-+------------------+          +--------------------+         +--------------------+
-                              | FK question_id     |         | FK question_id     |
-                              |    time_limit      |         |    target_type     |
-                              |    starter_code    |         |    target_payload  |
-                              |    teacher_code    |         |    reference_xpath |
-                              | *memory_limit (DB  |         +--------------------+
-                              |  col, not enforced)|
-                              +--------------------+
-                                         |
-                              +--------------------+
-                              |    test_cases      |
++------------------+          +--------------------+         +---------------------+
+|   quiz_options   |          |    code_configs    |         |    xpath_configs     |
++------------------+          +--------------------+         +---------------------+
+| FK question_id   |          | FK question_id     |         | FK question_id      |
+| option_text      |          |    time_limit      |         |    selector_type    |
+| is_correct       |          |    starter_code    |         |    (XPATH | CSS)    |
++------------------+          |    teacher_code    |         +---------------------+
+                              | *memory_limit (DB  |                   |
+                              |  col, not enforced)|                   v
+                              +--------------------+         +---------------------+
+                                       |                     |  xpath_test_cases   |
+                              +--------------------+         +---------------------+
+                              |    test_cases      |         | FK question_id      |
+                              +--------------------+         |    target_type      |
+                              | FK question_id     |         |    target_payload   |
+                              |    input_data      |         |    ref_selector     |
+                              |    output_data     |         |    is_hidden        |
+                              |    is_hidden       |         +---------------------+
                               +--------------------+
 ```
+
+### 6.2. Enum Types
+
+| Enum | Values |
+| :--- | :--- |
+| `user_role` | `TEACHER`, `STUDENT` |
+| `question_type` | `QUIZ`, `CODE`, `XPATH` |
+| `execution_status` | `AC`, `WA`, `CE`, `RE`, `TLE`, `OFE` |
+
+### 6.3. Key Column Notes
+
+| Table | Column | Note |
+| :--- | :--- | :--- |
+| `exams` | `focus_loss_policy` | `LOG_ONLY` (default) or `WARN_AND_LOCK`. |
+| `exam_submissions` | `close_reason` | `NULL` on normal submission; `"FOCUS_LOSS_THRESHOLD"` on auto-submit from focus-lock enforcement. |
+| `code_configs` | `memory_limit` | DB column retained (default 65536) but **not enforced**. Ignored at runtime. A global 256 MB cap is applied instead (see §7.2). |
+| `xpath_configs` | `selector_type` | `XPATH` or `CSS`. Determines which evaluator (`document.evaluate` vs `querySelectorAll`) is used. |
 
 ---
 
 ## 7. Automatic Grading Architecture
 
 ### 7.1. Quiz Auto-Grading
-Proportional partial credit. If any selected option is incorrect, score = 0.
+Proportional partial credit. If any selected option is incorrect, score = 0 for that question.
 
 ### 7.2. Code Execution Pipeline
-Code is run via Piston API/Local Fallback. Outputs are compared using float-tolerance normalization (e.g., `440000.0000006` == `440000`). Supports AC / WA / CE / RE / TLE status codes.
+Code is executed via Piston API (primary) with a Local Fallback child-process executor. Outputs are compared with float-tolerance normalization (`440000.0000006 == 440000`).
+
+**Status codes:** `AC` · `WA` · `CE` · `RE` · `TLE` · `OFE`
 
 **Execution flow:**
-1. Test case `inputData` is written to the child process's **stdin** before the process starts. Students must read from stdin to receive the input (e.g., `sys.stdin.read()` in Python, `fs.readFileSync('/dev/stdin')` in JavaScript).
-2. The process's **stdout** is captured and compared against `outputData` (or the Teacher Reference Code's output if configured).
-3. If the student's code exits without printing anything, stdout is `""`. If the expected output is also `""` (unconfigured), the grader would naively return AC — this is called a **vacuous pass** and is explicitly detected and displayed as "⚠ No Output Produced" (amber) rather than a green pass badge.
-4. **Memory Cap (per RSD_improvement.md §1.1):** A hard ceiling of **256 MB** per execution container is enforced via `run_memory_limit: 262144` in the Piston API payload. The local fallback also enforces this ceiling where OS-level `maxBuffer` applies.
-5. **Output Flood Mitigation (per RSD_improvement.md §1.2):** If a program produces more than **10,000 characters** of stdout output, execution is terminated and the test case receives status `OFE` (Output Limit Exceeded). This prevents memory and network overload from runaway print loops.
-6. The Time Limit is enforced via `run_timeout`. The process is killed with SIGTERM/SIGKILL on timeout → TLE status.
+1. Test case `inputData` is written to the child process's **stdin** before the process starts. Students must read from stdin (`sys.stdin.read()` in Python; `fs.readFileSync('/dev/stdin')` in JavaScript).
+2. The process's **stdout** is captured and compared against `outputData` (or Teacher Reference Code output if configured).
+3. If the student's code exits without printing anything and expected output is also empty, the grader detects a **vacuous pass** and displays "⚠ No Output Produced" (amber) rather than a green pass badge.
+4. **Memory Cap:** Every execution request sends `run_memory_limit: 262144` (256 MB) to the Piston API. This prevents host-level OOM from infinite memory allocation loops.
+5. **Output Flood Mitigation (OFE):** If `stdout` exceeds **10,000 characters**, execution output is discarded and the test case is marked `OFE`. This prevents megabyte-scale stdout from overloading server memory and the Next.js frontend.
+6. **Time Limit:** Enforced via `run_timeout`. Process is killed with SIGTERM/SIGKILL on expiry → `TLE`.
 
-### 7.3. XPath Shared DOM Evaluation
-Unlike code execution, XPath verification does not require an isolated container. It relies on a **Shared Virtual DOM Architecture**.
-1. Backend fetches the `target_payload` and loads it into a single `jsdom` instance.
-2. The **Teacher's Reference XPath** is evaluated to get a NodeList.
-3. The **Student's Input XPath** is evaluated to get a NodeList.
-4. If lengths match and exact DOM node memory references perfectly align, the system awards full points (AC).
+### 7.3. XPath / CSS Shared DOM Evaluation
+XPath and CSS grading does not require an isolated container. It uses a **Shared Virtual DOM** via jsdom on the server.
+
+**Evaluation flow:**
+1. For each test case, the backend loads `target_payload` into a fresh `jsdom` instance (fetching the URL if `target_type = URL`; parsing raw HTML if `target_type = HTML`).
+2. The **Teacher's Reference Selector** is evaluated using the appropriate engine:
+   - `XPATH`: `document.evaluate(selector, doc, null, XPathResult.ORDERED_NODE_ITERATOR_TYPE, null)`
+   - `CSS`: `doc.querySelectorAll(selector)`
+3. The **Student's Selector** is evaluated the same way.
+4. If the count of matched elements matches AND each selected node is identical by DOM reference, the test case is `AC`. Otherwise `WA`.
+5. Score = (AC test cases / total test cases) × question points.
 
 **Security Constraints:**
-- **SSRF Protection:** Fetch requests aggressively block internal network IPs (`127.0.0.1`, `10.x.x.x`, `169.254.169.254`).
-- **Timeouts:** 5-second strict timeout on target HTML fetches.
+- **SSRF Protection:** URL fetch requests block all private/internal network ranges (`127.0.0.0/8`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `169.254.0.0/16`, `::1`).
+- **Fetch Timeout:** 5-second hard timeout on URL target fetches.
+- **No JS Execution:** jsdom parses static HTML only. JavaScript within the page is not executed. Teachers should use HTML Snippet mode for JS-rendered content.
 
-**XPath Standard Constraint (per RSD_improvement.md §4.1):**
-> UI automation criteria evaluations are strictly restricted to the **XPath 1.0 specification standard** due to the technical limitations of the backend JSDOM engine wrapper. XPath 2.0/3.0 functions (e.g. `fn:matches()`, `string-join()`, regex predicates) are **not supported** and will produce a parse error. Teachers designing questions should use CSS selector type for flexible class/attribute matching, or restrict XPath expressions to XPath 1.0 syntax.
+**XPath Standard Constraint:**
+> Selector evaluations are strictly restricted to the **XPath 1.0 specification standard** due to jsdom's engine limitations. XPath 2.0/3.0 functions — `fn:matches()`, `string-join()`, regex predicates, etc. — are **not supported** and will produce a parse error. Use CSS selector type for flexible class/attribute matching.
 
 ---
 
@@ -323,30 +393,31 @@ Unlike code execution, XPath verification does not require an isolated container
 | :--- | :--- | :--- |
 | GET | `/api/v1/student/exams` | List available / assigned exams |
 | POST | `/api/v1/student/exams/:id/start` | Create or resume an exam submission session |
-| GET | `/api/v1/student/exams/:id/questions` | Fetch questions (with shuffle persistence) |
+| GET | `/api/v1/student/exams/:id/questions` | Fetch questions + `focusLossPolicy` (with shuffle persistence) |
 | GET | `/api/v1/student/exams/:id/draft` | Restore saved draft answers |
-| POST | `/api/v1/student/exams/:id/auto-save` | Persist draft answers (Quiz, Code) |
+| POST | `/api/v1/student/exams/:id/auto-save` | Persist draft answers |
 | POST | `/api/v1/student/exams/:id/run-code` | Execute code against public test cases |
-| POST | `/api/v1/student/exams/:id/run-xpath` | Evaluate XPath against target DOM |
-| POST | `/api/v1/student/exams/:id/submit` | Finalize and grade exam |
-| POST | `/api/v1/student/exams/:id/exit` | Save draft and exit exam without submitting |
+| POST | `/api/v1/student/exams/:id/run-xpath` | Evaluate XPath/CSS selector against visible test cases |
+| POST | `/api/v1/student/exams/:id/submit` | Finalize and grade exam; accepts optional `close_reason` |
+| POST | `/api/v1/student/exams/:id/exit` | Save draft and exit without submitting |
 | GET | `/api/v1/student/completed` | List completed/submitted exams |
 | GET | `/api/v1/student/completed/:id` | Get detailed result for a completed exam |
-| PUT | `/api/v1/student/update-profile` | Update student's own profile (name, email) |
+| PUT | `/api/v1/student/update-profile` | Update student's own profile |
 | POST | `/api/v1/student/change-password` | Change student's own password |
 
 ### 8.3. Teacher Endpoints
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
-| GET/POST | `/api/v1/teacher/exams` | List all exams / create a new exam |
+| GET/POST | `/api/v1/teacher/exams` | List all exams / create exam (with `focusLossPolicy`) |
 | GET/PUT/DELETE | `/api/v1/teacher/exams/:id` | Get, update, or delete an exam |
 | POST | `/api/v1/teacher/exams/:id/clone` | Clone an existing exam |
-| GET/POST | `/api/v1/teacher/exams/:id/questions` | List / create questions |
+| GET/POST | `/api/v1/teacher/exams/:id/questions` | List / create questions (CODE + XPATH config inline) |
 | GET/PUT/DELETE | `/api/v1/teacher/exams/:id/questions/:questionId` | Get, update, or delete a specific question |
 | GET/POST | `/api/v1/teacher/exams/:id/coding-config` | Get / set code config and test cases |
-| GET/POST | `/api/v1/teacher/exams/:id/xpath-config` | Get / set XPath config and verify payload |
-| POST | `/api/v1/teacher/exams/:id/import-questions` | Bulk import questions from CSV/Excel template |
-| GET | `/api/v1/teacher/exams/:id/monitor` | Real-time SSE exam monitoring |
+| GET/POST | `/api/v1/teacher/exams/:id/xpath-config` | Get / set XPath test cases per question |
+| POST | `/api/v1/teacher/exams/:id/xpath-verify` | Verify a single XPath/CSS test case (advisory — never blocks save) |
+| POST | `/api/v1/teacher/exams/:id/import-questions` | Bulk import questions from CSV/Excel |
+| GET | `/api/v1/teacher/exams/:id/monitor` | Real-time SSE exam monitoring (includes `close_reason`) |
 | POST | `/api/v1/teacher/exams/:id/force-submit` | Force-submit and grade an active student's exam |
 | GET/POST | `/api/v1/teacher/students` | List students / bulk import |
 | GET/PUT | `/api/v1/teacher/students/:id` | Get or update a specific student |
@@ -360,22 +431,29 @@ Unlike code execution, XPath verification does not require an isolated container
 
 ## 9. Key Behavioral Specifications
 
-1. **Exam Shuffle Persistence:** Shuffled order is generated once per student and persisted to `exam_submissions.question_order` for resume stability.
-2. **Untested Code Warning:** If any `CODE` question lacks a run result at submission time, a modal requires the student to "Go Back & Test" or "Submit Anyway".
-3. **Dynamic Quiz Score Recomputation:** In monitor/result views, quiz scores are re-derived from selected options at read time to guarantee consistency with the displayed PASS/FAIL UI badge.
-4. **Question Type Visual Identity:** `QUIZ` = Blue/Brand, `CODE` = Amber, `XPATH` = Emerald Green — applied consistently across question maps, UI badges, and completed exam result drawers.
-5. **Vacuous Pass Detection:** When both `actualOutput` and `expectedOutput` are empty strings after a code run, the result is flagged as a vacuous pass. The Execution Output tab displays an amber "⚠ No Output Produced" badge instead of a green "✓ All Passed", and a red banner advises the student to add a `print()` or `console.log()` call.
-6. **Stdin Input Injection:** When Run Code is triggered, each test case's `inputData` is written to the student code process's stdin before execution begins. The Sample Cases tab displays a banner explaining this and showing the language-appropriate stdin-reading pattern.
-7. **Starter Code Pre-fill:** If a Teacher Reference Code or Starter Code is configured for a CODE question, the starter code is pre-loaded into the student's editor on first open. On subsequent opens, the student's saved draft takes priority.
-8. **No Memory Limit Enforcement:** Memory limit is not enforced by the platform. Only the Time Limit is a hard constraint on code execution.
-9. **XPATH Completed Exam Display:** The completed exam detail view renders XPATH question results with the student's submitted XPath expression shown in an emerald-styled code block, alongside AC/WA status from grading.
+1. **Exam Shuffle Persistence:** Shuffled order is generated once per student, saved to `exam_submissions.question_order`, and restored exactly on all subsequent loads.
+2. **Untested Code Warning:** If any `CODE` question has no run result at submission time, a modal prompts "Go Back & Test" or "Submit Anyway".
+3. **Dynamic Quiz Score Recomputation:** Quiz scores are re-derived from selected options at read time for consistency with the displayed PASS/FAIL badge.
+4. **Question Type Visual Identity:** `QUIZ` = Blue/Brand · `CODE` = Amber · `XPATH` = Emerald — applied consistently across all views.
+5. **Vacuous Pass Detection:** When both `actualOutput` and `expectedOutput` are empty after a code run, the result is flagged amber with "⚠ No Output Produced" and a banner advising `print()` / `console.log()`.
+6. **Stdin Input Injection:** Each test case's `inputData` is written to the student code process's stdin before execution. The Sample Cases tab displays the correct language-specific read pattern.
+7. **Starter Code Pre-fill:** Starter code is pre-loaded into the student editor on first open. On subsequent opens, the saved draft takes priority.
+8. **Memory Hard Cap (256 MB):** All code executions are capped at 256 MB RAM via `run_memory_limit: 262144` in the Piston request. No user-facing configuration; applied globally.
+9. **Output Limit (OFE):** If a student program produces more than 10,000 characters of stdout, the test case is immediately marked `OFE` (Output Limit Exceeded) and graded as wrong.
+10. **Focus Loss Enforcement:** In `WARN_AND_LOCK` mode, the workspace shows a modal warning on the 1st and 2nd tab-switch offenses. The 3rd offense triggers an automatic, un-bypassable submit recorded with `close_reason: "FOCUS_LOSS_THRESHOLD"`.
+11. **XPath/CSS Hidden Test Cases:** Hidden test cases are withheld from "Run XPath" responses but evaluated at final submission, identical to hidden CODE test cases.
+12. **XPath Verification is Advisory:** The per-test-case Verify button reports match count and HTML snippets but never blocks saving. A 0-match result shows a warning explaining the JS-rendering limitation.
+13. **XPATH Completed Exam Display:** The completed exam detail view renders XPATH question results with the student's submitted selector in an emerald code block alongside AC/WA status and matched element count.
 
 ---
 
 ## 10. Deployment & Infrastructure
 - **Frontend + API:** Next.js 14+ (App Router), Node.js 18+ runtime
 - **Database:** Neon PostgreSQL (serverless) accessed via Drizzle ORM
-- **Migrations:** Applied via `npm run db:setup` or `psql` executing `src/db/migrations/*.sql`
-- **Code Sandbox:** External Piston API or local Express fallback worker.
+- **Migrations:** Apply incremental SQL files from `src/db/migrations/` in Neon SQL Editor, or run `init.sql` for a fresh environment
+- **Code Sandbox:** External Piston API (`https://emkc.org/api/v2/piston`) or local child-process fallback (not sandboxed — production should use Piston or a Docker-isolated local runner)
+- **XPath Evaluator:** Server-side `jsdom` — no container required; runs inline in the Next.js API route process
 
---- END OF FILE RSD.md ---
+---
+
+*END OF RSD.md — Version 7.2*
