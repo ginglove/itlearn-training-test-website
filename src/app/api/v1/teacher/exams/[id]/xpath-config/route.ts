@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { xpathConfigs, questions } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
-import { verifyReferenceXPath } from "@/lib/grading/xpath-evaluator";
+import { xpathConfigs, xpathTestCases, questions } from "@/db/schema";
+import { eq, and, inArray } from "drizzle-orm";
 
 export async function GET(
   request: NextRequest,
@@ -19,14 +18,33 @@ export async function GET(
       .from(questions)
       .where(and(eq(questions.examId, examId), eq(questions.type, "XPATH")));
 
-    const enriched = [];
-    for (const q of xpathQuestions) {
-      const [config] = await db
-        .select()
-        .from(xpathConfigs)
-        .where(eq(xpathConfigs.questionId, q.id));
-      enriched.push({ id: q.id, title: q.title, content: q.content, config: config ?? null });
+    if (xpathQuestions.length === 0) {
+      return NextResponse.json({ status: "SUCCESS", questions: [] });
     }
+
+    const qIds = xpathQuestions.map((q) => q.id);
+
+    const [configs, cases] = await Promise.all([
+      db.select().from(xpathConfigs).where(inArray(xpathConfigs.questionId, qIds)),
+      db.select().from(xpathTestCases).where(inArray(xpathTestCases.questionId, qIds)),
+    ]);
+
+    const configMap = new Map(configs.map((c) => [c.questionId, c]));
+    const casesMap = new Map<string, typeof xpathTestCases.$inferSelect[]>();
+    for (const tc of cases) {
+      const list = casesMap.get(tc.questionId) ?? [];
+      list.push(tc);
+      casesMap.set(tc.questionId, list);
+    }
+
+    const enriched = xpathQuestions.map((q) => ({
+      id: q.id,
+      title: q.title,
+      content: q.content,
+      selectorType: configMap.get(q.id)?.selectorType ?? "XPATH",
+      testCases: casesMap.get(q.id) ?? [],
+      isConfigured: (casesMap.get(q.id)?.length ?? 0) > 0,
+    }));
 
     return NextResponse.json({ status: "SUCCESS", questions: enriched });
   } catch (error) {
@@ -45,20 +63,17 @@ export async function POST(
 
     const { id: examId } = await params;
     const body = await request.json();
-    const { questionId, targetType, targetPayload, referenceXpath, verify } = body;
+    const { questionId, selectorType, testCases: cases } = body;
 
-    if (!questionId || !targetType || !targetPayload || !referenceXpath) {
+    if (!questionId || !selectorType || !Array.isArray(cases) || cases.length === 0) {
       return NextResponse.json(
-        { error: "VALIDATION_ERROR", message: "questionId, targetType, targetPayload, and referenceXpath are required." },
+        { error: "VALIDATION_ERROR", message: "questionId, selectorType, and at least one testCase are required." },
         { status: 400 }
       );
     }
 
-    if (!["URL", "HTML"].includes(targetType)) {
-      return NextResponse.json(
-        { error: "VALIDATION_ERROR", message: "targetType must be URL or HTML." },
-        { status: 400 }
-      );
+    if (!["XPATH", "CSS"].includes(selectorType)) {
+      return NextResponse.json({ error: "VALIDATION_ERROR", message: "selectorType must be XPATH or CSS." }, { status: 400 });
     }
 
     const [question] = await db
@@ -73,35 +88,34 @@ export async function POST(
       );
     }
 
-    // Run pre-flight verification if requested — advisory only, never blocks save
-    let verifyWarning: string | null = null;
-    if (verify) {
-      const result = await verifyReferenceXPath({ targetType, targetPayload, referenceXpath });
-      if (!result.ok) {
-        // Return warning details but still allow the save to proceed
-        verifyWarning = result.message;
+    for (const tc of cases) {
+      if (!tc.targetType || !tc.targetPayload || !tc.referenceSelector) {
+        return NextResponse.json(
+          { error: "VALIDATION_ERROR", message: "Each test case needs targetType, targetPayload, and referenceSelector." },
+          { status: 400 }
+        );
       }
     }
 
-    // Upsert config
-    const [existing] = await db
-      .select()
-      .from(xpathConfigs)
-      .where(eq(xpathConfigs.questionId, questionId));
+    await db.transaction(async (tx) => {
+      await tx
+        .insert(xpathConfigs)
+        .values({ questionId, selectorType })
+        .onConflictDoUpdate({ target: xpathConfigs.questionId, set: { selectorType } });
 
-    if (existing) {
-      await db
-        .update(xpathConfigs)
-        .set({ targetType, targetPayload, referenceXpath })
-        .where(eq(xpathConfigs.questionId, questionId));
-    } else {
-      await db.insert(xpathConfigs).values({ questionId, targetType, targetPayload, referenceXpath });
-    }
-
-    return NextResponse.json({
-      status: "SUCCESS",
-      ...(verifyWarning ? { warning: verifyWarning } : {}),
+      await tx.delete(xpathTestCases).where(eq(xpathTestCases.questionId, questionId));
+      await tx.insert(xpathTestCases).values(
+        cases.map((tc: any) => ({
+          questionId,
+          targetType: tc.targetType,
+          targetPayload: tc.targetPayload,
+          referenceSelector: tc.referenceSelector,
+          isHidden: !!tc.isHidden,
+        }))
+      );
     });
+
+    return NextResponse.json({ status: "SUCCESS" });
   } catch (error) {
     console.error("Save xpath config error:", error);
     return NextResponse.json({ error: "INTERNAL_ERROR" }, { status: 500 });

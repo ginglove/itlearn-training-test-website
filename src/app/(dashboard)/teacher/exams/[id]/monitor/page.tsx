@@ -170,6 +170,16 @@ export default function CodingMonitorPage({ params }: { params: Promise<{ id: st
         <div className="mb-8 flex justify-between items-end border-b border-border-strong pb-6">
           <div>
             <div className="flex items-center gap-2 text-text-tertiary text-sm mb-2">
+              <button
+                onClick={() => router.back()}
+                className="flex items-center gap-1 hover:text-white transition-colors"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+                Back
+              </button>
+              <span>›</span>
               <button onClick={() => router.push("/teacher")} className="hover:text-white transition-colors">Exams</button>
               <span>›</span>
               <span className="text-text-secondary">Live Monitor</span>

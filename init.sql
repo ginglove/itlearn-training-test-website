@@ -16,7 +16,7 @@ DROP TYPE IF EXISTS "public"."question_type" CASCADE;
 DROP TYPE IF EXISTS "public"."user_role" CASCADE;
 
 -- Enums
-CREATE TYPE "public"."execution_status" AS ENUM('AC', 'WA', 'CE', 'RE', 'TLE');
+CREATE TYPE "public"."execution_status" AS ENUM('AC', 'WA', 'CE', 'RE', 'TLE', 'OFE');
 CREATE TYPE "public"."question_type" AS ENUM('QUIZ', 'CODE', 'XPATH');
 CREATE TYPE "public"."user_role" AS ENUM('TEACHER', 'STUDENT');
 
@@ -44,6 +44,7 @@ CREATE TABLE "exams" (
 	"is_shuffled" boolean DEFAULT false NOT NULL,
 	"allowed_attempts" integer DEFAULT 1 NOT NULL,
 	"access_type" varchar(20) DEFAULT 'ALL' NOT NULL,
+	"focus_loss_policy" varchar(20) DEFAULT 'LOG_ONLY' NOT NULL,
 	"created_by" uuid NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
@@ -93,6 +94,7 @@ CREATE TABLE "exam_submissions" (
 	"total_score" numeric(5, 2) DEFAULT '0.00',
 	"client_ip" varchar(45) NOT NULL,
 	"focus_loss_count" integer DEFAULT 0 NOT NULL,
+	"close_reason" varchar(50),
 	"attempt" integer DEFAULT 1 NOT NULL
 );
 

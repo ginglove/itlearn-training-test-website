@@ -19,7 +19,7 @@ interface TestCase {
 
 interface ExecutionResult {
   testCaseId: string;
-  status: "AC" | "WA" | "CE" | "RE" | "TLE";
+  status: "AC" | "WA" | "CE" | "RE" | "TLE" | "OFE";
   inputData: string;
   actualOutput: string;
   expectedOutput: string;
@@ -40,7 +40,7 @@ interface CodeExecutionResponse {
   results: ExecutionResult[];
   totalPassed: number;
   totalTestCases: number;
-  overallStatus: "AC" | "WA" | "CE" | "RE" | "TLE";
+  overallStatus: "AC" | "WA" | "CE" | "RE" | "TLE" | "OFE";
   scorePercentage: number;
 }
 
@@ -159,9 +159,10 @@ async function executeLocalSingleTestCase(
 
         const timedOut = error ? (error as any).killed || error.signal === "SIGTERM" : false;
         const exitCode = error ? error.code ?? 1 : 0;
+        const trimmedStdout = stdout.trim();
 
         resolve({
-          stdout: stdout.trim(),
+          stdout: trimmedStdout.length > 10000 ? "\x00OFE" : trimmedStdout,
           stderr: stderr.trim(),
           exitCode,
           timedOut,
@@ -216,6 +217,7 @@ async function executeSingleTestCase(
           files: [{ name: `solution.${language === "python" ? "py" : "js"}`, content: sourceCode }],
           stdin: input,
           run_timeout: timeLimitMs,
+          run_memory_limit: 262144,
           compile_timeout: 10000,
         }),
       });
@@ -264,9 +266,10 @@ async function executeSingleTestCase(
 
   const run = data.run;
   const timedOut = run.signal === "SIGKILL" || executionTimeMs > timeLimitMs;
+  const rawStdout = (run.stdout || "").trim();
 
   return {
-    stdout: (run.stdout || "").trim(),
+    stdout: rawStdout.length > 10000 ? "\x00OFE" : rawStdout,
     stderr: (run.stderr || "").trim(),
     exitCode: run.code ?? 1,
     timedOut,
@@ -335,7 +338,8 @@ export async function executeCode(
         if (teacherExec.timedOut) {
           expectedOutput = "TEACHER_CODE_TIMEOUT";
         } else if (teacherExec.stderr && teacherExec.exitCode !== 0) {
-          expectedOutput = `TEACHER_CODE_ERROR: ${teacherExec.stderr}`;
+          console.error("Teacher code execution error:", teacherExec.stderr);
+          expectedOutput = "TEACHER_CODE_ERROR";
         } else {
           expectedOutput = teacherExec.stdout;
         }
@@ -352,7 +356,9 @@ export async function executeCode(
 
       let status: ExecutionResult["status"];
 
-      if (hasCompileError) {
+      if (execution.stdout === "\x00OFE") {
+        status = "OFE";
+      } else if (hasCompileError) {
         status = "CE";
       } else if (execution.stderr && execution.exitCode !== 0 && !execution.timedOut) {
         // Check if it's a compile/syntax error vs runtime error
@@ -411,6 +417,7 @@ export async function executeCode(
   let overallStatus: CodeExecutionResponse["overallStatus"] = "AC";
   if (results.some((r) => r.status === "CE")) overallStatus = "CE";
   else if (results.some((r) => r.status === "TLE")) overallStatus = "TLE";
+  else if (results.some((r) => r.status === "OFE")) overallStatus = "OFE";
   else if (results.some((r) => r.status === "RE")) overallStatus = "RE";
   else if (results.some((r) => r.status === "WA")) overallStatus = "WA";
 

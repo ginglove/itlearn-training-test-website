@@ -57,7 +57,7 @@ export async function PUT(
 
     const { id: examId } = await params;
     const body = await request.json();
-    const { title, description, duration, startTime, endTime, isShuffled, allowedAttempts, accessType, sessionType, assignedStudents } = body;
+    const { title, description, duration, startTime, endTime, isShuffled, allowedAttempts, accessType, assignedStudents } = body;
 
     // Verify ownership
     const [exam] = await db
@@ -70,6 +70,23 @@ export async function PUT(
       return NextResponse.json({ error: "NOT_FOUND", message: "Exam not found" }, { status: 404 });
     }
 
+    // Validate time ordering
+    const resolvedStart = startTime ? new Date(startTime) : exam.startTime;
+    const resolvedEnd = endTime ? new Date(endTime) : exam.endTime;
+    if (resolvedStart >= resolvedEnd) {
+      return NextResponse.json({ error: "VALIDATION_ERROR", message: "startTime must be before endTime." }, { status: 400 });
+    }
+
+    // Validate numeric fields
+    const parsedDuration = duration !== undefined ? parseInt(duration, 10) : exam.duration;
+    const parsedAttempts = allowedAttempts !== undefined ? parseInt(allowedAttempts, 10) : exam.allowedAttempts;
+    if (isNaN(parsedDuration) || parsedDuration < 1) {
+      return NextResponse.json({ error: "VALIDATION_ERROR", message: "duration must be a positive integer." }, { status: 400 });
+    }
+    if (isNaN(parsedAttempts) || parsedAttempts < 1) {
+      return NextResponse.json({ error: "VALIDATION_ERROR", message: "allowedAttempts must be a positive integer." }, { status: 400 });
+    }
+
     await db.transaction(async (tx) => {
       // Update exam
       await tx
@@ -77,13 +94,12 @@ export async function PUT(
         .set({
           title: title ?? exam.title,
           description: description !== undefined ? description : exam.description,
-          duration: duration !== undefined ? parseInt(duration) : exam.duration,
-          startTime: startTime ? new Date(startTime) : exam.startTime,
-          endTime: endTime ? new Date(endTime) : exam.endTime,
+          duration: parsedDuration,
+          startTime: resolvedStart,
+          endTime: resolvedEnd,
           isShuffled: isShuffled !== undefined ? !!isShuffled : exam.isShuffled,
-          allowedAttempts: allowedAttempts !== undefined ? parseInt(allowedAttempts) : exam.allowedAttempts,
+          allowedAttempts: parsedAttempts,
           accessType: accessType ?? exam.accessType,
-          sessionType: sessionType ?? exam.sessionType,
         })
         .where(eq(exams.id, examId));
 

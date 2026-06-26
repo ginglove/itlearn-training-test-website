@@ -9,13 +9,20 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
   const { id: examId } = use(params);
   
   const [questions, setQuestions] = useState<any[]>([]);
+  const [examTitle, setExamTitle] = useState<string>("");
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
   const [focusLosses, setFocusLosses] = useState(0);
+  const [focusLossPolicy, setFocusLossPolicy] = useState("LOG_ONLY");
+  const [showFocusWarning, setShowFocusWarning] = useState(false);
+  const [focusWarningOffense, setFocusWarningOffense] = useState(0);
+  const focusLossPolicyRef = useRef("LOG_ONLY");
   const [timeLeft, setTimeLeft] = useState(3600);
+  const [timerReady, setTimerReady] = useState(false);
+  const [timeExpired, setTimeExpired] = useState(false);
   const showToast = useToast();
   const [runResults, setRunResults] = useState<Record<string, any>>({});
   const [isRunning, setIsRunning] = useState(false);
@@ -39,6 +46,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
     }
 
     const fetchQuestions = async () => {
+      let timeAlreadyExpired = false;
       try {
         const [questionsRes, draftRes] = await Promise.all([
           fetch(`/api/v1/student/exams/${examId}/questions`),
@@ -50,6 +58,8 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
 
         if (questionsRes.ok) {
           setQuestions(questionsData.questions);
+          if (questionsData.examTitle) setExamTitle(questionsData.examTitle);
+          if (questionsData.focusLossPolicy) { setFocusLossPolicy(questionsData.focusLossPolicy); focusLossPolicyRef.current = questionsData.focusLossPolicy; }
 
           // Build a map of saved draft answers keyed by questionId
           const draftMap: Record<string, any> = {};
@@ -82,17 +92,25 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
         // Compute remaining time from startAt + examDuration stored by the exams list page
         const startAt = sessionStorage.getItem(`exam_${examId}_start_at`);
         const durationMins = parseInt(sessionStorage.getItem(`exam_${examId}_duration`) || "60", 10);
+        let remaining = durationMins * 60;
         if (startAt) {
           const elapsed = Math.floor((Date.now() - new Date(startAt).getTime()) / 1000);
-          const remaining = Math.max(0, durationMins * 60 - elapsed);
-          setTimeLeft(remaining);
+          remaining = durationMins * 60 - elapsed;
+        }
+
+        if (remaining <= 0) {
+          timeAlreadyExpired = true;
+          setTimeLeft(0);
         } else {
-          setTimeLeft(durationMins * 60);
+          setTimeLeft(remaining);
+          setTimerReady(true);
         }
       } catch (err) {
         console.error(err);
       } finally {
         setIsLoading(false);
+        // Trigger expiry after answers are loaded and the loading spinner is dismissed
+        if (timeAlreadyExpired) setTimeExpired(true);
       }
     };
 
@@ -115,14 +133,45 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
   useEffect(() => {
     if (settings && !settings.focusTrackingEnabled) return;
 
+
     const handleBlur = () => {
-      setFocusLosses(prev => prev + 1);
-      // In a real app, send a quick ping to backend to increment focus loss
+      setFocusLosses(prev => {
+        const next = prev + 1;
+        if (focusLossPolicyRef.current === "WARN_AND_LOCK") {
+          if (next <= 2) {
+            setFocusWarningOffense(next);
+            setShowFocusWarning(true);
+          }
+          // 3rd offense handled by useEffect watching focusLosses
+        }
+        return next;
+      });
     };
 
     window.addEventListener("blur", handleBlur);
     return () => window.removeEventListener("blur", handleBlur);
   }, [settings]);
+
+  // Submit when time expires (naturally or because time ran out while student was away)
+  useEffect(() => {
+    if (!timeExpired || isSubmitting) return;
+    handleSubmit();
+  }, [timeExpired]);
+
+  // Auto-submit on 3rd focus loss when WARN_AND_LOCK policy is active
+  useEffect(() => {
+    if (focusLosses >= 3 && focusLossPolicy === "WARN_AND_LOCK") {
+      const payloads = Object.entries(answers).map(([qId, ans]) => ({ question_id: qId, ...ans }));
+      fetch(`/api/v1/student/exams/${examId}/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ submission_id: submissionId, focus_loss_count: focusLosses, close_reason: "FOCUS_LOSS_THRESHOLD", answers: payloads }),
+      }).finally(() => {
+        sessionStorage.removeItem(`exam_${examId}_submission_id`);
+        router.push("/student/exams");
+      });
+    }
+  }, [focusLosses]);
 
   // Auto-Save Drafts
   useEffect(() => {
@@ -149,20 +198,21 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
     return () => clearInterval(interval);
   }, [answers, examId, submissionId, questions.length, settings]);
 
-  // Timer
+  // Timer — only starts after fetchQuestions has set the real remaining time
   useEffect(() => {
+    if (!timerReady) return;
     const timer = setInterval(() => {
       setTimeLeft(prev => {
         if (prev <= 1) {
           clearInterval(timer);
-          handleSubmit();
+          setTimeExpired(true);
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [timerReady]);
 
   const handleOptionToggle = (qId: string, optionId: string, isMultiple: boolean) => {
     setAnswers(prev => {
@@ -266,6 +316,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
         body: JSON.stringify({
           submission_id: submissionId,
           focus_loss_count: focusLosses,
+          close_reason: null,
           answers: payloads
         })
       });
@@ -315,6 +366,25 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
     );
   }
 
+  if (timeExpired) {
+    return (
+      <div className="min-h-screen bg-bg-base flex items-center justify-center p-6">
+        <div className="glass-card p-8 max-w-md w-full text-center">
+          <div className="w-14 h-14 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center mx-auto mb-4">
+            <svg className="w-7 h-7 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-bold text-white mb-2">Time&apos;s Up</h2>
+          <p className="text-text-secondary text-sm mb-6">
+            Your exam time has expired. Your saved answers are being submitted now.
+          </p>
+          <div className="w-6 h-6 border-2 border-rose-500/30 border-t-rose-500 rounded-full animate-spin mx-auto" />
+        </div>
+      </div>
+    );
+  }
+
   const currentQ = questions[currentIndex];
   const runResult = currentQ ? runResults[currentQ.id] ?? null : null;
   if (!currentQ) return null;
@@ -334,7 +404,12 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
           <div className="w-8 h-8 bg-bg-surface-elevated border border-border-strong rounded-lg flex items-center justify-center overflow-hidden p-1 shrink-0">
             <img src="/Logo_2.png" alt="ITLearn Logo" className="w-full h-full object-contain" />
           </div>
-          <span className="text-white font-medium text-sm">Exam Session</span>
+          <div className="flex flex-col min-w-0">
+            <span className="text-[10px] text-text-tertiary uppercase tracking-wider leading-none">Exam Session</span>
+            <span className="text-white font-semibold text-sm truncate max-w-[260px]" title={examTitle || undefined}>
+              {examTitle || "Loading…"}
+            </span>
+          </div>
         </div>
 
         <div className="flex items-center gap-6">
@@ -709,19 +784,17 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                         }`}
                       >
                         Execution Output
-                        {runResult && !runResult.error && (
-                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                            runResult.results?.every((r: any) => !r.actualOutput && !r.expectedOutput)
-                              ? "bg-amber-500/20 text-amber-400"
-                              : runResult.results?.every((r: any) => !r.expectedOutputConfigured)
-                              ? "bg-amber-500/20 text-amber-400"
-                              : runResult.overallStatus === "AC"
-                              ? "bg-emerald-500/20 text-emerald-400"
-                              : "bg-rose-500/20 text-rose-400"
-                          }`}>
-                            {runResult.totalPassed}/{runResult.totalTestCases}
-                          </span>
-                        )}
+                        {runResult && !runResult.error && (() => {
+                          const isWarn = runResult.results?.every((r: any) => !r.actualOutput && !r.expectedOutput) || runResult.results?.every((r: any) => !r.expectedOutputConfigured);
+                          const isPass = !isWarn && runResult.overallStatus === "AC";
+                          return (
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              isWarn ? "bg-amber-500/20 text-amber-400" : isPass ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"
+                            }`}>
+                              {isWarn ? "?" : isPass ? "✓" : "✕"} {runResult.totalPassed}/{runResult.totalTestCases}
+                            </span>
+                          );
+                        })()}
                       </button>
                     </div>
 
@@ -806,16 +879,37 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                                 runResult.overallStatus === "CE" ? "bg-amber-500/15 text-amber-400 border border-amber-500/30" :
                                 "bg-rose-500/15 text-rose-400 border border-rose-500/30";
 
+                              const bannerBg =
+                                overallIsProblematic ? "bg-amber-500/10 border-amber-500/30" :
+                                runResult.overallStatus === "AC" ? "bg-emerald-500/10 border-emerald-500/30" :
+                                runResult.overallStatus === "CE" ? "bg-amber-500/10 border-amber-500/30" :
+                                "bg-rose-500/10 border-rose-500/30";
+                              const bannerIcon =
+                                overallIsProblematic ? (
+                                  <svg className="w-5 h-5 shrink-0 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+                                ) : runResult.overallStatus === "AC" ? (
+                                  <svg className="w-5 h-5 shrink-0 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                ) : (
+                                  <svg className="w-5 h-5 shrink-0 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                );
+
                               return (
                                 <div className="space-y-3">
-                                  {/* Overall status */}
-                                  <div className="flex items-center gap-3">
-                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${statusClass}`}>
-                                      {statusLabel}
-                                    </span>
-                                    <span className="text-text-tertiary text-xs font-mono">
-                                      {runResult.totalPassed}/{runResult.totalTestCases} passed
-                                    </span>
+                                  {/* Overall status banner */}
+                                  <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${bannerBg}`}>
+                                    {bannerIcon}
+                                    <div className="flex-1 min-w-0">
+                                      <div className={`text-sm font-bold ${statusClass.includes("emerald") ? "text-emerald-300" : statusClass.includes("amber") ? "text-amber-300" : "text-rose-300"}`}>
+                                        {statusLabel}
+                                      </div>
+                                      <div className="text-xs text-text-tertiary mt-0.5 font-mono">
+                                        {runResult.totalPassed} of {runResult.totalTestCases} test case{runResult.totalTestCases !== 1 ? "s" : ""} passed
+                                      </div>
+                                    </div>
+                                    {/* Score pill */}
+                                    <div className={`text-lg font-black tabular-nums ${statusClass.includes("emerald") ? "text-emerald-400" : statusClass.includes("amber") ? "text-amber-400" : "text-rose-400"}`}>
+                                      {runResult.totalPassed}/{runResult.totalTestCases}
+                                    </div>
                                   </div>
 
                                   {/* Contextual warnings */}
@@ -853,16 +947,37 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                                       : "bg-rose-500/15 text-rose-400 border-rose-500/30";
                                     const badgeLabel = vacuous ? "?" : r.status;
 
+                                    const caseIsPass = r.status === "AC" && !vacuous;
+                                    const caseLabel = vacuous ? "?" : caseIsPass ? "PASS" : r.status === "TLE" ? "TLE" : r.status === "CE" ? "CE" : r.status === "RE" ? "RE" : "FAIL";
+                                    const caseHeaderBg = vacuous
+                                      ? "bg-amber-500/10 border-amber-500/20"
+                                      : caseIsPass
+                                      ? "bg-emerald-500/10 border-emerald-500/20"
+                                      : r.status === "CE" ? "bg-amber-500/10 border-amber-500/20"
+                                      : "bg-rose-500/10 border-rose-500/20";
+                                    const caseLabelColor = vacuous
+                                      ? "text-amber-400"
+                                      : caseIsPass ? "text-emerald-400"
+                                      : r.status === "CE" ? "text-amber-400"
+                                      : "text-rose-400";
+
                                     return (
-                                      <div key={i} className="bg-bg-base border border-border-strong rounded-lg overflow-hidden">
-                                        <div className="flex items-center justify-between px-3 py-2 border-b border-border-strong bg-bg-surface-elevated/40">
-                                          <span className="text-xs font-semibold text-text-secondary">Test Case {i + 1}</span>
+                                      <div key={i} className={`bg-bg-base rounded-lg overflow-hidden border ${caseIsPass ? "border-emerald-500/20" : vacuous ? "border-amber-500/20" : "border-rose-500/20"}`}>
+                                        <div className={`flex items-center justify-between px-3 py-2 border-b ${caseIsPass ? "border-emerald-500/20" : vacuous ? "border-amber-500/20" : "border-rose-500/20"} ${caseHeaderBg}`}>
+                                          <div className="flex items-center gap-2">
+                                            {caseIsPass ? (
+                                              <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                            ) : (
+                                              <svg className={`w-4 h-4 ${caseLabelColor}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                                            )}
+                                            <span className="text-xs font-semibold text-text-secondary">Test Case {i + 1}</span>
+                                          </div>
                                           <div className="flex items-center gap-2">
                                             {r.executionTimeMs > 0 && (
                                               <span className="text-[10px] text-text-tertiary font-mono">{r.executionTimeMs}ms</span>
                                             )}
-                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${badgeClass}`}>
-                                              {badgeLabel}
+                                            <span className={`text-xs font-black px-2.5 py-0.5 rounded-full ${caseLabelColor} ${caseIsPass ? "bg-emerald-500/15" : vacuous ? "bg-amber-500/15" : r.status === "CE" ? "bg-amber-500/15" : "bg-rose-500/15"}`}>
+                                              {caseLabel}
                                             </span>
                                           </div>
                                         </div>
@@ -924,6 +1039,34 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
         </main>
       </div>
       
+      {/* Focus Loss Warning Modal (WARN_AND_LOCK policy) */}
+      {showFocusWarning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="bg-bg-surface border border-rose-500/40 rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-rose-500/15 flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+              </div>
+              <div>
+                <h3 className="text-white font-semibold text-base">Tab Switch Detected</h3>
+                <p className="text-rose-400 text-sm mt-0.5">Warning {focusWarningOffense} of 2</p>
+              </div>
+            </div>
+            <p className="text-text-secondary text-sm mb-2">
+              You left the exam window. This event has been logged and reported to your instructor.
+            </p>
+            {focusWarningOffense >= 2 && (
+              <p className="text-rose-400 text-sm font-semibold mb-2">
+                ⚠ This is your final warning. A third tab switch will automatically submit your exam.
+              </p>
+            )}
+            <button onClick={() => setShowFocusWarning(false)} className="w-full premium-btn-primary py-2.5 text-sm mt-2">
+              I understand — return to exam
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Untested Code Warning Modal */}
       {showUntestedWarning && (() => {
         const untested = questions.map((q, idx) => ({ q, idx })).filter(({ q }) => q.type === "CODE" && !runResults[q.id]);
