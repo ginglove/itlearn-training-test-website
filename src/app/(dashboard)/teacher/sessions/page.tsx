@@ -5,7 +5,18 @@ import { useRouter } from "next/navigation";
 
 /* ─────────────────────────── helpers ─────────────────────────────────────── */
 function todayISO() {
-  return new Date().toISOString().slice(0, 10);
+  // Use local date (not UTC) so teachers in UTC+7 see the correct "today"
+  const d = new Date();
+  return [
+    d.getFullYear(),
+    String(d.getMonth() + 1).padStart(2, "0"),
+    String(d.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+// Client UTC offset in minutes (e.g. +420 for UTC+7 Vietnam)
+function tzOffsetMinutes() {
+  return -new Date().getTimezoneOffset(); // getTimezoneOffset returns negative for UTC+
 }
 
 function fmt(dt: string | Date | null): string {
@@ -92,18 +103,22 @@ export default function SessionsPage() {
   const [date, setDate] = useState(todayISO());
   const [sessions, setSessions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [autoRefresh, setAutoRefresh] = useState(true);
 
   const fetchSessions = useCallback(async (d: string) => {
     try {
-      const res = await fetch(`/api/v1/teacher/sessions?date=${d}`);
+      setFetchError(null);
+      const res = await fetch(`/api/v1/teacher/sessions?date=${d}&tz=${tzOffsetMinutes()}`);
+      const data = await res.json();
       if (res.ok) {
-        const data = await res.json();
         setSessions(data.sessions ?? []);
+      } else {
+        setFetchError(data.message ?? `Server error ${res.status}`);
       }
-    } catch {
-      // network error — keep stale data
+    } catch (err) {
+      setFetchError("Network error — could not reach server.");
     } finally {
       setIsLoading(false);
     }
@@ -213,6 +228,16 @@ export default function SessionsPage() {
           </button>
         </div>
       </div>
+
+      {/* Error */}
+      {fetchError && !isLoading && (
+        <div className="flex items-start gap-3 bg-rose-500/10 border border-rose-500/20 rounded-xl px-4 py-3 text-rose-400 text-sm mb-4">
+          <svg className="w-4 h-4 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+          </svg>
+          <span>Failed to load sessions: {fetchError}</span>
+        </div>
+      )}
 
       {/* Loading */}
       {isLoading ? (

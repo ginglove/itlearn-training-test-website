@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { exams, examSubmissions, users, questions } from "@/db/schema";
-import { eq, and, gte, lt, sql } from "drizzle-orm";
+import { eq, and, gte, lt, inArray, sum } from "drizzle-orm";
 
 export async function GET(request: NextRequest) {
   try {
@@ -9,21 +9,23 @@ export async function GET(request: NextRequest) {
     if (!teacherId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
 
     const { searchParams } = new URL(request.url);
-    const dateParam = searchParams.get("date"); // YYYY-MM-DD in local time; we query by UTC day boundaries
+    const dateParam = searchParams.get("date"); // YYYY-MM-DD
+    // tzOffset is the client's UTC offset in minutes (e.g. +420 for UTC+7)
+    const tzOffset = parseInt(searchParams.get("tz") ?? "0", 10);
 
-    // Parse the requested date; default to today (UTC)
-    let dayStart: Date;
-    let dayEnd: Date;
-    if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
-      dayStart = new Date(`${dateParam}T00:00:00.000Z`);
-      dayEnd   = new Date(`${dateParam}T23:59:59.999Z`);
-    } else {
-      const now = new Date();
-      dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0));
-      dayEnd   = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
-    }
+    // Convert the local date to UTC boundaries
+    // e.g. date=2026-06-26, tz=420 → start = 2026-06-25T17:00:00Z, end = 2026-06-26T17:00:00Z
+    const resolvedDate = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)
+      ? dateParam
+      : new Date().toISOString().slice(0, 10);
 
-    // All exams owned by this teacher that had any submission starting on the selected date
+    const localMidnight = new Date(`${resolvedDate}T00:00:00.000Z`);
+    const offsetMs = tzOffset * 60 * 1000;
+    // day start in UTC = midnight local time shifted back by tz offset
+    const dayStart = new Date(localMidnight.getTime() - offsetMs);
+    const dayEnd   = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000); // exactly +24h
+
+    // All exams owned by this teacher with submissions starting on the selected date
     const rows = await db
       .select({
         examId:      exams.id,
@@ -55,23 +57,27 @@ export async function GET(request: NextRequest) {
       )
       .orderBy(exams.startTime, users.fullName);
 
-    // Aggregate per-exam totals and build per-student list
+    if (rows.length === 0) {
+      return NextResponse.json({ status: "SUCCESS", date: resolvedDate, sessions: [] });
+    }
+
+    // Fetch total possible score per exam using inArray (safe UUID handling)
+    const examIds = [...new Set(rows.map(r => r.examId))];
+    const scoreSums = await db
+      .select({ examId: questions.examId, total: sum(questions.points) })
+      .from(questions)
+      .where(inArray(questions.examId, examIds))
+      .groupBy(questions.examId);
+    const scoreSumMap = new Map(scoreSums.map(r => [r.examId, r.total ?? "0"]));
+
+    // Build per-exam aggregated structure
     const examMap = new Map<string, {
       examId: string; examTitle: string; startTime: Date; endTime: Date; duration: number;
       totalStarted: number; totalCompleted: number; totalPossibleScore: string;
       students: any[];
     }>();
 
-    // Fetch total possible score per exam (sum of question points)
-    const examIds = [...new Set(rows.map(r => r.examId))];
-    const scoreSums = examIds.length
-      ? await db
-          .select({ examId: questions.examId, total: sql<string>`sum(${questions.points})` })
-          .from(questions)
-          .where(sql`${questions.examId} = ANY(${examIds}::uuid[])`)
-          .groupBy(questions.examId)
-      : [];
-    const scoreSumMap = new Map(scoreSums.map(r => [r.examId, r.total ?? "0"]));
+    const PASS_MARK = 50; // percent
 
     for (const r of rows) {
       if (!examMap.has(r.examId)) {
@@ -91,26 +97,28 @@ export async function GET(request: NextRequest) {
       exam.totalStarted += 1;
       if (r.submittedAt) exam.totalCompleted += 1;
 
-      const pct = r.submittedAt && Number(exam.totalPossibleScore) > 0
-        ? (Number(r.totalScore ?? 0) / Number(exam.totalPossibleScore)) * 100
+      const possibleScore = Number(exam.totalPossibleScore);
+      const pct = r.submittedAt && possibleScore > 0
+        ? (Number(r.totalScore ?? 0) / possibleScore) * 100
         : null;
-      const passMark = 50;
 
       exam.students.push({
-        submissionId: r.subId,
-        studentId:    r.studentId,
-        studentName:  r.studentName,
-        username:     r.username,
-        startAt:      r.subStartAt,
-        submittedAt:  r.submittedAt,
-        totalScore:   r.totalScore,
+        submissionId:       r.subId,
+        studentId:          r.studentId,
+        studentName:        r.studentName,
+        username:           r.username,
+        startAt:            r.subStartAt,
+        submittedAt:        r.submittedAt,
+        totalScore:         r.totalScore,
         totalPossibleScore: exam.totalPossibleScore,
-        percentScore: pct !== null ? Math.round(pct * 10) / 10 : null,
-        result:       r.submittedAt ? (pct !== null && pct >= passMark ? "PASS" : "FAIL") : "NOT_COMPLETED",
-        focusLossCount: r.focusLoss,
-        closeReason:  r.closeReason,
-        attempt:      r.attempt,
-        clientIp:     r.clientIp,
+        percentScore:       pct !== null ? Math.round(pct * 10) / 10 : null,
+        result:             r.submittedAt
+                              ? (pct !== null && pct >= PASS_MARK ? "PASS" : "FAIL")
+                              : "NOT_COMPLETED",
+        focusLossCount:     r.focusLoss,
+        closeReason:        r.closeReason,
+        attempt:            r.attempt,
+        clientIp:           r.clientIp,
       });
     }
 
@@ -118,9 +126,9 @@ export async function GET(request: NextRequest) {
       (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
     );
 
-    return NextResponse.json({ status: "SUCCESS", date: dateParam ?? dayStart.toISOString().slice(0, 10), sessions });
+    return NextResponse.json({ status: "SUCCESS", date: resolvedDate, sessions });
   } catch (error) {
     console.error("Sessions monitor error:", error);
-    return NextResponse.json({ error: "INTERNAL_ERROR" }, { status: 500 });
+    return NextResponse.json({ error: "INTERNAL_ERROR", message: String(error) }, { status: 500 });
   }
 }
