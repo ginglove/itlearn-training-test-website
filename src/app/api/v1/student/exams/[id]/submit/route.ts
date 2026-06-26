@@ -109,7 +109,6 @@ export async function POST(
             language: answer.language as "python" | "javascript",
             testCases: cases.map((c: any) => ({ id: c.id, input: c.inputData, expectedOutput: c.outputData })),
             timeLimitMs: config?.timeLimit || 2000,
-            memoryLimitKb: config?.memoryLimit || 128000,
             teacherCode: config?.teacherCode || undefined,
           });
           questionScore = (executionResult.scorePercentage / 100) * parseFloat(q.points as string);

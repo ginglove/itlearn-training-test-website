@@ -86,7 +86,7 @@ export async function POST(
         let questionScore = 0;
         let overallStatus: "AC" | "WA" | "CE" | "RE" | "TLE" = "WA";
         if (draft?.sourceCode && cases.length > 0) {
-          const execResult = await executeCode({ sourceCode: draft.sourceCode, language: (draft.language ?? "python") as "python" | "javascript", testCases: cases.map((c: any) => ({ id: c.id, input: c.inputData, expectedOutput: c.outputData })), timeLimitMs: config?.timeLimit ?? 2000, memoryLimitKb: config?.memoryLimit ?? 128000, teacherCode: config?.teacherCode ?? undefined });
+          const execResult = await executeCode({ sourceCode: draft.sourceCode, language: (draft.language ?? "python") as "python" | "javascript", testCases: cases.map((c: any) => ({ id: c.id, input: c.inputData, expectedOutput: c.outputData })), timeLimitMs: config?.timeLimit ?? 2000, teacherCode: config?.teacherCode ?? undefined });
           questionScore = (execResult.scorePercentage / 100) * parseFloat(q.points as string);
           overallStatus = execResult.overallStatus;
         }
