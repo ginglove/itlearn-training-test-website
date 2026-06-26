@@ -301,12 +301,12 @@ export default function XPathConfigPage({ params }: { params: Promise<{ id: stri
 
                         {/* Verify result */}
                         {tc.verifyResult && (
-                          <div className={`px-3 py-2.5 rounded-lg text-xs border ${tc.verifyResult.ok ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" : "bg-rose-500/10 border-rose-500/20 text-rose-400"}`}>
+                          <div className={`px-3 py-2.5 rounded-lg text-xs border min-w-0 overflow-hidden ${tc.verifyResult.ok ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" : "bg-rose-500/10 border-rose-500/20 text-rose-400"}`}>
                             {tc.verifyResult.ok ? `✓ ${tc.verifyResult.message}` : `✕ ${tc.verifyResult.message}`}
                             {tc.verifyResult.ok && tc.verifyResult.snippets.length > 0 && (
                               <div className="mt-2 space-y-1">
                                 {tc.verifyResult.snippets.slice(0, 2).map((s, si) => (
-                                  <code key={si} className="block bg-emerald-900/20 rounded px-2 py-1 text-[10px] truncate">{s}</code>
+                                  <code key={si} className="block bg-emerald-900/20 rounded px-2 py-1 text-[10px] break-all whitespace-pre-wrap overflow-hidden w-full">{s}</code>
                                 ))}
                               </div>
                             )}
