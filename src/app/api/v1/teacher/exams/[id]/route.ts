@@ -57,7 +57,7 @@ export async function PUT(
 
     const { id: examId } = await params;
     const body = await request.json();
-    const { title, description, duration, startTime, endTime, isShuffled, allowedAttempts, accessType, sessionType, assignedStudents } = body;
+    const { title, description, duration, startTime, endTime, isShuffled, allowedAttempts, accessType, assignedStudents } = body;
 
     // Verify ownership
     const [exam] = await db
@@ -83,7 +83,6 @@ export async function PUT(
           isShuffled: isShuffled !== undefined ? !!isShuffled : exam.isShuffled,
           allowedAttempts: allowedAttempts !== undefined ? parseInt(allowedAttempts) : exam.allowedAttempts,
           accessType: accessType ?? exam.accessType,
-          sessionType: sessionType ?? exam.sessionType,
         })
         .where(eq(exams.id, examId));
 
