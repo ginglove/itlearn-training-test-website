@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { title, description, duration, startTime, endTime, isShuffled, allowedAttempts, accessType, focusLossPolicy, assignedStudents } = body;
+    const { title, description, duration, startTime, endTime, isShuffled, allowedAttempts, accessType, sessionType, focusLossPolicy, assignedStudents } = body;
 
     if (!title || !duration || !startTime || !endTime) {
       return NextResponse.json(
@@ -58,6 +58,7 @@ export async function POST(request: NextRequest) {
           isShuffled: !!isShuffled,
           allowedAttempts: allowedAttempts !== undefined ? parseInt(allowedAttempts) : 1,
           accessType: accessType || "ALL",
+          sessionType: sessionType || "QUIZ",
           focusLossPolicy: focusLossPolicy || "LOG_ONLY",
           createdBy: teacherId,
         })
