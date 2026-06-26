@@ -20,6 +20,8 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
   const [focusWarningOffense, setFocusWarningOffense] = useState(0);
   const focusLossPolicyRef = useRef("LOG_ONLY");
   const [timeLeft, setTimeLeft] = useState(3600);
+  const [timerReady, setTimerReady] = useState(false);
+  const [timeExpired, setTimeExpired] = useState(false);
   const showToast = useToast();
   const [runResults, setRunResults] = useState<Record<string, any>>({});
   const [isRunning, setIsRunning] = useState(false);
@@ -43,6 +45,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
     }
 
     const fetchQuestions = async () => {
+      let timeAlreadyExpired = false;
       try {
         const [questionsRes, draftRes] = await Promise.all([
           fetch(`/api/v1/student/exams/${examId}/questions`),
@@ -87,17 +90,25 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
         // Compute remaining time from startAt + examDuration stored by the exams list page
         const startAt = sessionStorage.getItem(`exam_${examId}_start_at`);
         const durationMins = parseInt(sessionStorage.getItem(`exam_${examId}_duration`) || "60", 10);
+        let remaining = durationMins * 60;
         if (startAt) {
           const elapsed = Math.floor((Date.now() - new Date(startAt).getTime()) / 1000);
-          const remaining = Math.max(0, durationMins * 60 - elapsed);
-          setTimeLeft(remaining);
+          remaining = durationMins * 60 - elapsed;
+        }
+
+        if (remaining <= 0) {
+          timeAlreadyExpired = true;
+          setTimeLeft(0);
         } else {
-          setTimeLeft(durationMins * 60);
+          setTimeLeft(remaining);
+          setTimerReady(true);
         }
       } catch (err) {
         console.error(err);
       } finally {
         setIsLoading(false);
+        // Trigger expiry after answers are loaded and the loading spinner is dismissed
+        if (timeAlreadyExpired) setTimeExpired(true);
       }
     };
 
@@ -139,6 +150,12 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
     return () => window.removeEventListener("blur", handleBlur);
   }, [settings]);
 
+  // Submit when time expires (naturally or because time ran out while student was away)
+  useEffect(() => {
+    if (!timeExpired || isSubmitting) return;
+    handleSubmit();
+  }, [timeExpired]);
+
   // Auto-submit on 3rd focus loss when WARN_AND_LOCK policy is active
   useEffect(() => {
     if (focusLosses >= 3 && focusLossPolicy === "WARN_AND_LOCK") {
@@ -179,20 +196,21 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
     return () => clearInterval(interval);
   }, [answers, examId, submissionId, questions.length, settings]);
 
-  // Timer
+  // Timer — only starts after fetchQuestions has set the real remaining time
   useEffect(() => {
+    if (!timerReady) return;
     const timer = setInterval(() => {
       setTimeLeft(prev => {
         if (prev <= 1) {
           clearInterval(timer);
-          handleSubmit();
+          setTimeExpired(true);
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [timerReady]);
 
   const handleOptionToggle = (qId: string, optionId: string, isMultiple: boolean) => {
     setAnswers(prev => {
@@ -342,6 +360,25 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
     return (
       <div className="min-h-screen bg-bg-base flex items-center justify-center">
         <div className="w-8 h-8 border-2 border-brand-500/30 border-t-brand-500 rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (timeExpired) {
+    return (
+      <div className="min-h-screen bg-bg-base flex items-center justify-center p-6">
+        <div className="glass-card p-8 max-w-md w-full text-center">
+          <div className="w-14 h-14 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center mx-auto mb-4">
+            <svg className="w-7 h-7 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-bold text-white mb-2">Time&apos;s Up</h2>
+          <p className="text-text-secondary text-sm mb-6">
+            Your exam time has expired. Your saved answers are being submitted now.
+          </p>
+          <div className="w-6 h-6 border-2 border-rose-500/30 border-t-rose-500 rounded-full animate-spin mx-auto" />
+        </div>
       </div>
     );
   }
