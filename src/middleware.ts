@@ -11,6 +11,23 @@ const teacherRoutes = ["/api/v1/teacher", "/teacher"];
 // Routes specific to students
 const studentRoutes = ["/api/v1/student", "/student"];
 
+/**
+ * Returns true if two IPs are on the same /24 (IPv4) or same /48 (IPv6) subnet,
+ * or if they are identical. This tolerates minor DHCP/NAT IP changes within the
+ * same local network while still blocking access from a completely different network.
+ */
+function ipSubnetMatch(bound: string, current: string): boolean {
+  if (bound === current) return true;
+  // IPv4: compare first 3 octets (a.b.c.*)
+  const v4 = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
+  if (v4.test(bound) && v4.test(current)) {
+    return bound.split(".").slice(0, 3).join(".") === current.split(".").slice(0, 3).join(".");
+  }
+  // IPv6: compare first 6 groups (covers /48 prefix)
+  const normalise = (ip: string) => ip.toLowerCase().replace(/::$/, "");
+  return normalise(bound).split(":").slice(0, 6).join(":") === normalise(current).split(":").slice(0, 6).join(":");
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -87,7 +104,7 @@ export async function middleware(request: NextRequest) {
       request.headers.get("x-real-ip") ||
       "unknown";
 
-    if (payload.boundIp !== "unknown" && clientIp !== "unknown" && payload.boundIp !== clientIp) {
+    if (payload.boundIp !== "unknown" && clientIp !== "unknown" && !ipSubnetMatch(payload.boundIp, clientIp)) {
       if (pathname.startsWith("/api/")) {
         return NextResponse.json(
           {
