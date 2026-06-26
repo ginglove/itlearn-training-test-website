@@ -1,4 +1,4 @@
-import {
+﻿import {
   pgTable,
   uuid,
   varchar,
@@ -22,6 +22,7 @@ export const executionStatusEnum = pgEnum("execution_status", [
   "CE",
   "RE",
   "TLE",
+  "OFE",
 ]);
 
 // ── Users ──────────────────────────────────────────────────────────────────────
@@ -45,13 +46,13 @@ export const exams = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     title: varchar("title", { length: 150 }).notNull(),
     description: text("description"),
-    duration: integer("duration").notNull(), // minutes
+    duration: integer("duration").notNull(),
     startTime: timestamp("start_time", { withTimezone: true }).notNull(),
     endTime: timestamp("end_time", { withTimezone: true }).notNull(),
     isShuffled: boolean("is_shuffled").notNull().default(false),
     allowedAttempts: integer("allowed_attempts").default(1).notNull(),
     accessType: varchar("access_type", { length: 20 }).default("ALL").notNull(),
-    sessionType: varchar("session_type", { length: 20 }).default("QUIZ").notNull(),
+    focusLossPolicy: varchar("focus_loss_policy", { length: 20 }).notNull().default("LOG_ONLY"),
     createdBy: uuid("created_by")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
@@ -100,8 +101,8 @@ export const codeConfigs = pgTable("code_configs", {
     .unique()
     .notNull()
     .references(() => questions.id, { onDelete: "cascade" }),
-  timeLimit: integer("time_limit").notNull().default(1000), // ms
-  memoryLimit: integer("memory_limit").notNull().default(65536), // KB (64MB)
+  timeLimit: integer("time_limit").notNull().default(1000),
+  memoryLimit: integer("memory_limit").notNull().default(65536),
   starterCode: text("starter_code"),
   teacherCode: text("teacher_code"),
 });
@@ -113,10 +114,24 @@ export const xpathConfigs = pgTable("xpath_configs", {
     .unique()
     .notNull()
     .references(() => questions.id, { onDelete: "cascade" }),
-  targetType: varchar("target_type", { length: 10 }).notNull().default("URL"), // 'URL' | 'HTML'
-  targetPayload: text("target_payload").notNull(),
-  referenceXpath: text("reference_xpath").notNull(),
+  selectorType: varchar("selector_type", { length: 10 }).notNull().default("XPATH"),
 });
+
+// ── XPath Test Cases ───────────────────────────────────────────────────────────
+export const xpathTestCases = pgTable(
+  "xpath_test_cases",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    questionId: uuid("question_id")
+      .notNull()
+      .references(() => questions.id, { onDelete: "cascade" }),
+    targetType: varchar("target_type", { length: 10 }).notNull().default("HTML"),
+    targetPayload: text("target_payload").notNull(),
+    referenceSelector: text("reference_selector").notNull(),
+    isHidden: boolean("is_hidden").notNull().default(false),
+  },
+  (table) => [index("idx_xpath_test_cases_question_id").on(table.questionId)]
+);
 
 // ── Test Cases ─────────────────────────────────────────────────────────────────
 export const testCases = pgTable(
@@ -154,6 +169,7 @@ export const examSubmissions = pgTable(
     ),
     clientIp: varchar("client_ip", { length: 45 }).notNull(),
     focusLossCount: integer("focus_loss_count").notNull().default(0),
+    closeReason: varchar("close_reason", { length: 50 }),
     attempt: integer("attempt").default(1).notNull(),
   },
   (table) => [
@@ -223,10 +239,9 @@ export const platformSettings = pgTable("platform_settings", {
   ipBinding: boolean("ip_binding").notNull().default(true),
   passwordResetEnforced: boolean("password_reset_enforced").notNull().default(true),
   focusTrackingEnabled: boolean("focus_tracking_enabled").notNull().default(true),
-  autoSaveInterval: integer("auto_save_interval").notNull().default(15), // seconds
+  autoSaveInterval: integer("auto_save_interval").notNull().default(15),
   executionMode: varchar("execution_mode", { length: 30 }).notNull().default("LOCAL_FALLBACK"),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
 });
-

@@ -15,6 +15,10 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
   const [focusLosses, setFocusLosses] = useState(0);
+  const [focusLossPolicy, setFocusLossPolicy] = useState("LOG_ONLY");
+  const [showFocusWarning, setShowFocusWarning] = useState(false);
+  const [focusWarningOffense, setFocusWarningOffense] = useState(0);
+  const focusLossPolicyRef = useRef("LOG_ONLY");
   const [timeLeft, setTimeLeft] = useState(3600);
   const showToast = useToast();
   const [runResults, setRunResults] = useState<Record<string, any>>({});
@@ -50,6 +54,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
 
         if (questionsRes.ok) {
           setQuestions(questionsData.questions);
+          if (questionsData.focusLossPolicy) { setFocusLossPolicy(questionsData.focusLossPolicy); focusLossPolicyRef.current = questionsData.focusLossPolicy; }
 
           // Build a map of saved draft answers keyed by questionId
           const draftMap: Record<string, any> = {};
@@ -115,14 +120,39 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
   useEffect(() => {
     if (settings && !settings.focusTrackingEnabled) return;
 
+
     const handleBlur = () => {
-      setFocusLosses(prev => prev + 1);
-      // In a real app, send a quick ping to backend to increment focus loss
+      setFocusLosses(prev => {
+        const next = prev + 1;
+        if (focusLossPolicyRef.current === "WARN_AND_LOCK") {
+          if (next <= 2) {
+            setFocusWarningOffense(next);
+            setShowFocusWarning(true);
+          }
+          // 3rd offense handled by useEffect watching focusLosses
+        }
+        return next;
+      });
     };
 
     window.addEventListener("blur", handleBlur);
     return () => window.removeEventListener("blur", handleBlur);
   }, [settings]);
+
+  // Auto-submit on 3rd focus loss when WARN_AND_LOCK policy is active
+  useEffect(() => {
+    if (focusLosses >= 3 && focusLossPolicy === "WARN_AND_LOCK") {
+      const payloads = Object.entries(answers).map(([qId, ans]) => ({ question_id: qId, ...ans }));
+      fetch(`/api/v1/student/exams/${examId}/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ submission_id: submissionId, focus_loss_count: focusLosses, close_reason: "FOCUS_LOSS_THRESHOLD", answers: payloads }),
+      }).finally(() => {
+        sessionStorage.removeItem(`exam_${examId}_submission_id`);
+        router.push("/student/exams");
+      });
+    }
+  }, [focusLosses]);
 
   // Auto-Save Drafts
   useEffect(() => {
@@ -266,6 +296,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
         body: JSON.stringify({
           submission_id: submissionId,
           focus_loss_count: focusLosses,
+          close_reason: null,
           answers: payloads
         })
       });
@@ -924,6 +955,34 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
         </main>
       </div>
       
+      {/* Focus Loss Warning Modal (WARN_AND_LOCK policy) */}
+      {showFocusWarning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="bg-bg-surface border border-rose-500/40 rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-rose-500/15 flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+              </div>
+              <div>
+                <h3 className="text-white font-semibold text-base">Tab Switch Detected</h3>
+                <p className="text-rose-400 text-sm mt-0.5">Warning {focusWarningOffense} of 2</p>
+              </div>
+            </div>
+            <p className="text-text-secondary text-sm mb-2">
+              You left the exam window. This event has been logged and reported to your instructor.
+            </p>
+            {focusWarningOffense >= 2 && (
+              <p className="text-rose-400 text-sm font-semibold mb-2">
+                ⚠ This is your final warning. A third tab switch will automatically submit your exam.
+              </p>
+            )}
+            <button onClick={() => setShowFocusWarning(false)} className="w-full premium-btn-primary py-2.5 text-sm mt-2">
+              I understand — return to exam
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Untested Code Warning Modal */}
       {showUntestedWarning && (() => {
         const untested = questions.map((q, idx) => ({ q, idx })).filter(({ q }) => q.type === "CODE" && !runResults[q.id]);

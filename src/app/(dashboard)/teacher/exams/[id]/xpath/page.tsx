@@ -143,6 +143,10 @@ export default function XPathConfigPage({ params }: { params: Promise<{ id: stri
           <p className="text-text-secondary mt-1 text-sm">
             Set the target URL or HTML and define the reference XPath locator for each XPATH question.
           </p>
+          <div className="mt-3 flex items-start gap-2 bg-amber-500/8 border border-amber-500/20 rounded-lg px-4 py-2.5 text-xs text-amber-400 max-w-2xl">
+            <svg className="w-3.5 h-3.5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            <span><strong>XPath 1.0 only.</strong> The backend evaluator (jsdom) supports only XPath 1.0. Avoid XPath 2.0/3.0 functions such as <code className="font-mono bg-amber-500/10 px-1 rounded">fn:matches()</code>, <code className="font-mono bg-amber-500/10 px-1 rounded">string-join()</code>, or regex predicates — these will cause a parse error. Use CSS selector type for class/attribute matching flexibility.</span>
+          </div>
         </div>
 
         {questionsList.length === 0 ? (

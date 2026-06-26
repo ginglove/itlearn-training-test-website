@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { questions, quizOptions, codeConfigs, testCases, exams, xpathConfigs } from "@/db/schema";
-import { eq, asc, and } from "drizzle-orm";
+import { questions, quizOptions, codeConfigs, testCases, exams, xpathConfigs, xpathTestCases } from "@/db/schema";
+import { eq, asc, and, inArray } from "drizzle-orm";
 
 export async function GET(
   request: NextRequest,
@@ -15,7 +15,6 @@ export async function GET(
 
     const { id: examId } = await params;
 
-    // Verify ownership
     const [exam] = await db.select().from(exams).where(and(eq(exams.id, examId), eq(exams.createdBy, teacherId))).limit(1);
     if (!exam) {
       return NextResponse.json({ error: "NOT_FOUND", message: "Exam not found" }, { status: 404 });
@@ -27,54 +26,49 @@ export async function GET(
       .where(eq(questions.examId, examId))
       .orderBy(asc(questions.sortOrder));
 
-    const enrichedQuestions = [];
+    const qIds = examQuestions.map((q) => q.id);
+    if (qIds.length === 0) return NextResponse.json({ status: "SUCCESS", questions: [] });
 
-    for (const q of examQuestions) {
-      if (q.type === "QUIZ") {
-        const options = await db
-          .select()
-          .from(quizOptions)
-          .where(eq(quizOptions.questionId, q.id));
+    const [allOptions, allCodeConfigs, allTestCases, allXpathConfigs, allXpathTestCases] = await Promise.all([
+      db.select().from(quizOptions).where(inArray(quizOptions.questionId, qIds)),
+      db.select().from(codeConfigs).where(inArray(codeConfigs.questionId, qIds)),
+      db.select().from(testCases).where(inArray(testCases.questionId, qIds)),
+      db.select().from(xpathConfigs).where(inArray(xpathConfigs.questionId, qIds)),
+      db.select().from(xpathTestCases).where(inArray(xpathTestCases.questionId, qIds)),
+    ]);
 
-        enrichedQuestions.push({ ...q, options });
-      } else if (q.type === "CODE") {
-        const [config] = await db
-          .select()
-          .from(codeConfigs)
-          .where(eq(codeConfigs.questionId, q.id))
-          .limit(1);
-
-        const cases = await db
-          .select()
-          .from(testCases)
-          .where(eq(testCases.questionId, q.id));
-
-        enrichedQuestions.push({
-          ...q,
-          config: config || null,
-          testCases: cases,
-        });
-      } else if (q.type === "XPATH") {
-        const [config] = await db
-          .select()
-          .from(xpathConfigs)
-          .where(eq(xpathConfigs.questionId, q.id))
-          .limit(1);
-
-        enrichedQuestions.push({
-          ...q,
-          xpathConfig: config || null,
-        });
-      }
+    const optionsMap = new Map();
+    for (const o of allOptions) {
+      const list = optionsMap.get(o.questionId) ?? [];
+      list.push(o);
+      optionsMap.set(o.questionId, list);
     }
+    const codeConfigMap = new Map(allCodeConfigs.map((c) => [c.questionId, c]));
+    const testCasesMap = new Map();
+    for (const tc of allTestCases) {
+      const list = testCasesMap.get(tc.questionId) ?? [];
+      list.push(tc);
+      testCasesMap.set(tc.questionId, list);
+    }
+    const xpathConfigMap = new Map(allXpathConfigs.map((c) => [c.questionId, c]));
+    const xpathTCMap = new Map();
+    for (const tc of allXpathTestCases) {
+      const list = xpathTCMap.get(tc.questionId) ?? [];
+      list.push(tc);
+      xpathTCMap.set(tc.questionId, list);
+    }
+
+    const enrichedQuestions = examQuestions.map((q) => {
+      if (q.type === "QUIZ") return { ...q, options: optionsMap.get(q.id) ?? [] };
+      if (q.type === "CODE") return { ...q, config: codeConfigMap.get(q.id) ?? null, testCases: testCasesMap.get(q.id) ?? [] };
+      if (q.type === "XPATH") return { ...q, xpathConfig: { selectorType: xpathConfigMap.get(q.id)?.selectorType ?? "XPATH", testCases: xpathTCMap.get(q.id) ?? [] } };
+      return q;
+    });
 
     return NextResponse.json({ status: "SUCCESS", questions: enrichedQuestions });
   } catch (error) {
     console.error("Fetch exam questions error:", error);
-    return NextResponse.json(
-      { error: "INTERNAL_ERROR", message: "Failed to fetch questions" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "INTERNAL_ERROR", message: "Failed to fetch questions" }, { status: 500 });
   }
 }
 
@@ -90,66 +84,38 @@ export async function POST(
 
     const { id: examId } = await params;
     const body = await request.json();
-    const { type, title, content, points, sortOrder, options, codeConfig, testCases: cases } = body;
+    const { type, title, content, points, sortOrder, options, codeConfig, testCases: cases, xpathConfig } = body;
 
     if (!type || !title || !content || points === undefined) {
-      return NextResponse.json(
-        { error: "VALIDATION_ERROR", message: "Missing required fields" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "VALIDATION_ERROR", message: "Missing required fields" }, { status: 400 });
     }
 
-    // Verify ownership
     const [exam] = await db.select().from(exams).where(and(eq(exams.id, examId), eq(exams.createdBy, teacherId))).limit(1);
     if (!exam) {
       return NextResponse.json({ error: "NOT_FOUND", message: "Exam not found" }, { status: 404 });
     }
 
     const newQuestion = await db.transaction(async (tx) => {
-      // 1. Insert question
       const [q] = await tx
         .insert(questions)
-        .values({
-          examId,
-          type,
-          title,
-          content,
-          points: points.toString(),
-          sortOrder: sortOrder !== undefined ? parseInt(sortOrder) : 0,
-        })
+        .values({ examId, type, title, content, points: points.toString(), sortOrder: sortOrder !== undefined ? parseInt(sortOrder) : 0 })
         .returning();
 
-      // 2. If QUIZ, insert options
-      if (type === "QUIZ" && Array.isArray(options)) {
-        if (options.length > 0) {
-          const quizOptionValues = options.map((opt: any) => ({
-            questionId: q.id,
-            optionText: opt.optionText,
-            isCorrect: !!opt.isCorrect,
-          }));
-          await tx.insert(quizOptions).values(quizOptionValues);
+      if (type === "QUIZ" && Array.isArray(options) && options.length > 0) {
+        await tx.insert(quizOptions).values(options.map((opt: any) => ({ questionId: q.id, optionText: opt.optionText, isCorrect: !!opt.isCorrect })));
+      }
+
+      if (type === "CODE") {
+        await tx.insert(codeConfigs).values({ questionId: q.id, timeLimit: codeConfig?.timeLimit || 2000, memoryLimit: codeConfig?.memoryLimit || 128000, starterCode: codeConfig?.starterCode || "", teacherCode: codeConfig?.teacherCode || "" });
+        if (Array.isArray(cases) && cases.length > 0) {
+          await tx.insert(testCases).values(cases.map((c: any) => ({ questionId: q.id, inputData: c.inputData, outputData: c.outputData, isHidden: !!c.isHidden })));
         }
       }
 
-      // 3. If CODE, insert config and test cases
-      if (type === "CODE") {
-        const tLimit = codeConfig?.timeLimit || 2000;
-
-        await tx.insert(codeConfigs).values({
-          questionId: q.id,
-          timeLimit: tLimit,
-          starterCode: codeConfig?.starterCode || "",
-          teacherCode: codeConfig?.teacherCode || "",
-        });
-
-        if (Array.isArray(cases) && cases.length > 0) {
-          const testCaseValues = cases.map((c: any) => ({
-            questionId: q.id,
-            inputData: c.inputData,
-            outputData: c.outputData,
-            isHidden: !!c.isHidden,
-          }));
-          await tx.insert(testCases).values(testCaseValues);
+      if (type === "XPATH" && xpathConfig) {
+        await tx.insert(xpathConfigs).values({ questionId: q.id, selectorType: xpathConfig.selectorType ?? "XPATH" });
+        if (Array.isArray(xpathConfig.testCases) && xpathConfig.testCases.length > 0) {
+          await tx.insert(xpathTestCases).values(xpathConfig.testCases.map((tc: any) => ({ questionId: q.id, targetType: tc.targetType ?? "HTML", targetPayload: tc.targetPayload, referenceSelector: tc.referenceSelector, isHidden: !!tc.isHidden })));
         }
       }
 
@@ -159,9 +125,6 @@ export async function POST(
     return NextResponse.json({ status: "SUCCESS", question: newQuestion }, { status: 201 });
   } catch (error) {
     console.error("Create question error:", error);
-    return NextResponse.json(
-      { error: "INTERNAL_ERROR", message: "Failed to create question" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "INTERNAL_ERROR", message: "Failed to create question" }, { status: 500 });
   }
 }

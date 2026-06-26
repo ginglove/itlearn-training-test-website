@@ -99,7 +99,7 @@ export async function GET(
       }
     }
 
-    return NextResponse.json({ status: "SUCCESS", questions: enrichedQuestions });
+    return NextResponse.json({ status: "SUCCESS", questions: enrichedQuestions, focusLossPolicy: exam.focusLossPolicy ?? "LOG_ONLY" });
   } catch (error) {
     console.error("Fetch questions error:", error);
     return NextResponse.json(

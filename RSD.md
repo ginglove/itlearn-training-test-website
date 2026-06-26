@@ -142,7 +142,10 @@ To enforce strict data boundaries, the platform utilizes a rigid Role-Based Acce
 ## 3. Security, Monitoring & Anti-Cheat Subsystem
 
 ### 3.1. Client-Side Telemetry & Event Hooks
-- **Focus Loss Tracker:** Monitors `blur` events. Each focus loss increments the counter and displays an on-screen warning.
+- **Focus Loss Tracker:** Monitors `blur` events. Each focus loss increments the counter. Behaviour depends on the per-exam **Focus Loss Policy** (per RSD_improvement.md §2.1):
+  - `LOG_ONLY` (default): Focus losses are recorded and reported on the monitor dashboard. No student-facing penalty.
+  - `WARN_AND_LOCK`: 1st and 2nd offenses display a modal warning to the student. The **3rd offense** triggers an immediate, un-bypassable auto-submit (`POST /api/v1/student/exams/:id/submit`) with `close_reason: "FOCUS_LOSS_THRESHOLD"` recorded on the submission record.
+- **Focus Loss Policy Configuration:** Teachers set the policy per exam via the exam creation form. Stored as `focus_loss_policy` on the `exams` table.
 - **Session IP Binding (configurable):** Client IP is recorded at submission start. Platform settings allow enabling/disabling enforcement.
 
 ### 3.2. Network Interruption & Session Resilience
@@ -287,7 +290,9 @@ Code is run via Piston API/Local Fallback. Outputs are compared using float-tole
 1. Test case `inputData` is written to the child process's **stdin** before the process starts. Students must read from stdin to receive the input (e.g., `sys.stdin.read()` in Python, `fs.readFileSync('/dev/stdin')` in JavaScript).
 2. The process's **stdout** is captured and compared against `outputData` (or the Teacher Reference Code's output if configured).
 3. If the student's code exits without printing anything, stdout is `""`. If the expected output is also `""` (unconfigured), the grader would naively return AC — this is called a **vacuous pass** and is explicitly detected and displayed as "⚠ No Output Produced" (amber) rather than a green pass badge.
-4. The Time Limit is the only resource constraint enforced. The process is killed with SIGTERM/SIGKILL on timeout → TLE status.
+4. **Memory Cap (per RSD_improvement.md §1.1):** A hard ceiling of **256 MB** per execution container is enforced via `run_memory_limit: 262144` in the Piston API payload. The local fallback also enforces this ceiling where OS-level `maxBuffer` applies.
+5. **Output Flood Mitigation (per RSD_improvement.md §1.2):** If a program produces more than **10,000 characters** of stdout output, execution is terminated and the test case receives status `OFE` (Output Limit Exceeded). This prevents memory and network overload from runaway print loops.
+6. The Time Limit is enforced via `run_timeout`. The process is killed with SIGTERM/SIGKILL on timeout → TLE status.
 
 ### 7.3. XPath Shared DOM Evaluation
 Unlike code execution, XPath verification does not require an isolated container. It relies on a **Shared Virtual DOM Architecture**.
@@ -299,6 +304,9 @@ Unlike code execution, XPath verification does not require an isolated container
 **Security Constraints:**
 - **SSRF Protection:** Fetch requests aggressively block internal network IPs (`127.0.0.1`, `10.x.x.x`, `169.254.169.254`).
 - **Timeouts:** 5-second strict timeout on target HTML fetches.
+
+**XPath Standard Constraint (per RSD_improvement.md §4.1):**
+> UI automation criteria evaluations are strictly restricted to the **XPath 1.0 specification standard** due to the technical limitations of the backend JSDOM engine wrapper. XPath 2.0/3.0 functions (e.g. `fn:matches()`, `string-join()`, regex predicates) are **not supported** and will produce a parse error. Teachers designing questions should use CSS selector type for flexible class/attribute matching, or restrict XPath expressions to XPath 1.0 syntax.
 
 ---
 

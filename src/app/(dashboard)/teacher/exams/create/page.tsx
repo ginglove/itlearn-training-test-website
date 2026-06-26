@@ -14,6 +14,7 @@ export default function CreateExamPage() {
     endTime: "",
     isShuffled: false,
     sessionType: "QUIZ",
+    focusLossPolicy: "LOG_ONLY",
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
@@ -131,6 +132,18 @@ export default function CreateExamPage() {
                   <option value="FINAL">Final Exam</option>
                 </select>
               </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-text-secondary mb-1.5">Focus Loss Policy</label>
+              <select
+                value={formData.focusLossPolicy}
+                onChange={(e) => setFormData({ ...formData, focusLossPolicy: e.target.value })}
+                className="premium-input bg-bg-surface-elevated text-white w-full"
+              >
+                <option value="LOG_ONLY">Log Only — Track tab switches, no penalty</option>
+                <option value="WARN_AND_LOCK">Warn &amp; Lock — Warn twice, auto-submit on 3rd tab switch</option>
+              </select>
             </div>
 
             <div className="flex items-center">
