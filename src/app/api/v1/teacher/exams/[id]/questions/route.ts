@@ -27,7 +27,7 @@ export async function GET(
       .orderBy(asc(questions.sortOrder));
 
     const qIds = examQuestions.map((q) => q.id);
-    if (qIds.length === 0) return NextResponse.json({ status: "SUCCESS", questions: [] });
+    if (qIds.length === 0) return NextResponse.json({ status: "SUCCESS", questions: [], examTitle: exam.title });
 
     const [allOptions, allCodeConfigs, allTestCases, allXpathConfigs, allXpathTestCases] = await Promise.all([
       db.select().from(quizOptions).where(inArray(quizOptions.questionId, qIds)),
@@ -65,7 +65,7 @@ export async function GET(
       return q;
     });
 
-    return NextResponse.json({ status: "SUCCESS", questions: enrichedQuestions });
+    return NextResponse.json({ status: "SUCCESS", questions: enrichedQuestions, examTitle: exam.title });
   } catch (error) {
     console.error("Fetch exam questions error:", error);
     return NextResponse.json({ error: "INTERNAL_ERROR", message: "Failed to fetch questions" }, { status: 500 });

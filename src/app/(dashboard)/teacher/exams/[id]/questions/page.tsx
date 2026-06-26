@@ -9,6 +9,7 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
   const { id: examId } = use(params);
   
   const [questions, setQuestions] = useState<any[]>([]);
+  const [examTitle, setExamTitle] = useState<string>("");
   const showToast = useToast();
   const [isFetching, setIsFetching] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
@@ -85,6 +86,7 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
       if (res.ok) {
         const data = await res.json();
         setQuestions(data.questions || []);
+        if (data.examTitle) setExamTitle(data.examTitle);
       }
     } catch (err) {
       console.error("Failed to fetch questions:", err);
@@ -278,9 +280,12 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
             <div className="flex items-center gap-2 text-text-tertiary text-sm mb-2">
               <button onClick={() => router.push("/teacher")} className="hover:text-white transition-colors">Exams</button>
               <span>›</span>
-              <span className="text-text-secondary">Manage Questions</span>
+              {examTitle && <><span className="text-text-secondary truncate max-w-[220px]" title={examTitle}>{examTitle}</span><span>›</span></>}
+              <span className="text-text-secondary">Questions</span>
             </div>
-            <h1 className="text-2xl md:text-3xl font-bold text-white">Manage Questions</h1>
+            <h1 className="text-2xl md:text-3xl font-bold text-white">
+              {examTitle || "Manage Questions"}
+            </h1>
             <p className="text-text-secondary mt-1 text-sm">Add, edit, or delete questions for this exam.</p>
           </div>
           <div className="flex flex-wrap gap-2 items-center">

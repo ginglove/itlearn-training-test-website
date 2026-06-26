@@ -9,6 +9,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
   const { id: examId } = use(params);
   
   const [questions, setQuestions] = useState<any[]>([]);
+  const [examTitle, setExamTitle] = useState<string>("");
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -57,6 +58,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
 
         if (questionsRes.ok) {
           setQuestions(questionsData.questions);
+          if (questionsData.examTitle) setExamTitle(questionsData.examTitle);
           if (questionsData.focusLossPolicy) { setFocusLossPolicy(questionsData.focusLossPolicy); focusLossPolicyRef.current = questionsData.focusLossPolicy; }
 
           // Build a map of saved draft answers keyed by questionId
@@ -402,7 +404,12 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
           <div className="w-8 h-8 bg-bg-surface-elevated border border-border-strong rounded-lg flex items-center justify-center overflow-hidden p-1 shrink-0">
             <img src="/Logo_2.png" alt="ITLearn Logo" className="w-full h-full object-contain" />
           </div>
-          <span className="text-white font-medium text-sm">Exam Session</span>
+          <div className="flex flex-col min-w-0">
+            <span className="text-[10px] text-text-tertiary uppercase tracking-wider leading-none">Exam Session</span>
+            <span className="text-white font-semibold text-sm truncate max-w-[260px]" title={examTitle || undefined}>
+              {examTitle || "Loading…"}
+            </span>
+          </div>
         </div>
 
         <div className="flex items-center gap-6">
@@ -777,19 +784,17 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                         }`}
                       >
                         Execution Output
-                        {runResult && !runResult.error && (
-                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                            runResult.results?.every((r: any) => !r.actualOutput && !r.expectedOutput)
-                              ? "bg-amber-500/20 text-amber-400"
-                              : runResult.results?.every((r: any) => !r.expectedOutputConfigured)
-                              ? "bg-amber-500/20 text-amber-400"
-                              : runResult.overallStatus === "AC"
-                              ? "bg-emerald-500/20 text-emerald-400"
-                              : "bg-rose-500/20 text-rose-400"
-                          }`}>
-                            {runResult.totalPassed}/{runResult.totalTestCases}
-                          </span>
-                        )}
+                        {runResult && !runResult.error && (() => {
+                          const isWarn = runResult.results?.every((r: any) => !r.actualOutput && !r.expectedOutput) || runResult.results?.every((r: any) => !r.expectedOutputConfigured);
+                          const isPass = !isWarn && runResult.overallStatus === "AC";
+                          return (
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              isWarn ? "bg-amber-500/20 text-amber-400" : isPass ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"
+                            }`}>
+                              {isWarn ? "?" : isPass ? "✓" : "✕"} {runResult.totalPassed}/{runResult.totalTestCases}
+                            </span>
+                          );
+                        })()}
                       </button>
                     </div>
 
@@ -874,16 +879,37 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                                 runResult.overallStatus === "CE" ? "bg-amber-500/15 text-amber-400 border border-amber-500/30" :
                                 "bg-rose-500/15 text-rose-400 border border-rose-500/30";
 
+                              const bannerBg =
+                                overallIsProblematic ? "bg-amber-500/10 border-amber-500/30" :
+                                runResult.overallStatus === "AC" ? "bg-emerald-500/10 border-emerald-500/30" :
+                                runResult.overallStatus === "CE" ? "bg-amber-500/10 border-amber-500/30" :
+                                "bg-rose-500/10 border-rose-500/30";
+                              const bannerIcon =
+                                overallIsProblematic ? (
+                                  <svg className="w-5 h-5 shrink-0 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+                                ) : runResult.overallStatus === "AC" ? (
+                                  <svg className="w-5 h-5 shrink-0 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                ) : (
+                                  <svg className="w-5 h-5 shrink-0 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                );
+
                               return (
                                 <div className="space-y-3">
-                                  {/* Overall status */}
-                                  <div className="flex items-center gap-3">
-                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${statusClass}`}>
-                                      {statusLabel}
-                                    </span>
-                                    <span className="text-text-tertiary text-xs font-mono">
-                                      {runResult.totalPassed}/{runResult.totalTestCases} passed
-                                    </span>
+                                  {/* Overall status banner */}
+                                  <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${bannerBg}`}>
+                                    {bannerIcon}
+                                    <div className="flex-1 min-w-0">
+                                      <div className={`text-sm font-bold ${statusClass.includes("emerald") ? "text-emerald-300" : statusClass.includes("amber") ? "text-amber-300" : "text-rose-300"}`}>
+                                        {statusLabel}
+                                      </div>
+                                      <div className="text-xs text-text-tertiary mt-0.5 font-mono">
+                                        {runResult.totalPassed} of {runResult.totalTestCases} test case{runResult.totalTestCases !== 1 ? "s" : ""} passed
+                                      </div>
+                                    </div>
+                                    {/* Score pill */}
+                                    <div className={`text-lg font-black tabular-nums ${statusClass.includes("emerald") ? "text-emerald-400" : statusClass.includes("amber") ? "text-amber-400" : "text-rose-400"}`}>
+                                      {runResult.totalPassed}/{runResult.totalTestCases}
+                                    </div>
                                   </div>
 
                                   {/* Contextual warnings */}
@@ -921,16 +947,37 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                                       : "bg-rose-500/15 text-rose-400 border-rose-500/30";
                                     const badgeLabel = vacuous ? "?" : r.status;
 
+                                    const caseIsPass = r.status === "AC" && !vacuous;
+                                    const caseLabel = vacuous ? "?" : caseIsPass ? "PASS" : r.status === "TLE" ? "TLE" : r.status === "CE" ? "CE" : r.status === "RE" ? "RE" : "FAIL";
+                                    const caseHeaderBg = vacuous
+                                      ? "bg-amber-500/10 border-amber-500/20"
+                                      : caseIsPass
+                                      ? "bg-emerald-500/10 border-emerald-500/20"
+                                      : r.status === "CE" ? "bg-amber-500/10 border-amber-500/20"
+                                      : "bg-rose-500/10 border-rose-500/20";
+                                    const caseLabelColor = vacuous
+                                      ? "text-amber-400"
+                                      : caseIsPass ? "text-emerald-400"
+                                      : r.status === "CE" ? "text-amber-400"
+                                      : "text-rose-400";
+
                                     return (
-                                      <div key={i} className="bg-bg-base border border-border-strong rounded-lg overflow-hidden">
-                                        <div className="flex items-center justify-between px-3 py-2 border-b border-border-strong bg-bg-surface-elevated/40">
-                                          <span className="text-xs font-semibold text-text-secondary">Test Case {i + 1}</span>
+                                      <div key={i} className={`bg-bg-base rounded-lg overflow-hidden border ${caseIsPass ? "border-emerald-500/20" : vacuous ? "border-amber-500/20" : "border-rose-500/20"}`}>
+                                        <div className={`flex items-center justify-between px-3 py-2 border-b ${caseIsPass ? "border-emerald-500/20" : vacuous ? "border-amber-500/20" : "border-rose-500/20"} ${caseHeaderBg}`}>
+                                          <div className="flex items-center gap-2">
+                                            {caseIsPass ? (
+                                              <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                                            ) : (
+                                              <svg className={`w-4 h-4 ${caseLabelColor}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                                            )}
+                                            <span className="text-xs font-semibold text-text-secondary">Test Case {i + 1}</span>
+                                          </div>
                                           <div className="flex items-center gap-2">
                                             {r.executionTimeMs > 0 && (
                                               <span className="text-[10px] text-text-tertiary font-mono">{r.executionTimeMs}ms</span>
                                             )}
-                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${badgeClass}`}>
-                                              {badgeLabel}
+                                            <span className={`text-xs font-black px-2.5 py-0.5 rounded-full ${caseLabelColor} ${caseIsPass ? "bg-emerald-500/15" : vacuous ? "bg-amber-500/15" : r.status === "CE" ? "bg-amber-500/15" : "bg-rose-500/15"}`}>
+                                              {caseLabel}
                                             </span>
                                           </div>
                                         </div>
