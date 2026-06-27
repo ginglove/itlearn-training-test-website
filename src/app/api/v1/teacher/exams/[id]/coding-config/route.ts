@@ -15,7 +15,7 @@ export async function POST(
 
     const { id: examId } = await params;
     const body = await request.json();
-    const { questionId, timeLimit, starterCode, teacherCode, testCases: cases } = body;
+    const { questionId, timeLimit, starterCode, teacherCode, wrapperCode, testCases: cases } = body;
 
     if (!questionId) {
       return NextResponse.json(
@@ -51,6 +51,7 @@ export async function POST(
             timeLimit: timeLimit || 1000,
             starterCode: starterCode ?? existingConfig.starterCode,
             teacherCode: teacherCode ?? existingConfig.teacherCode,
+            wrapperCode: wrapperCode ?? existingConfig.wrapperCode,
           })
           .where(eq(codeConfigs.questionId, questionId));
       } else {
@@ -59,6 +60,7 @@ export async function POST(
           timeLimit: timeLimit || 1000,
           starterCode: starterCode || null,
           teacherCode: teacherCode || null,
+          wrapperCode: wrapperCode || null,
         });
       }
 
@@ -127,6 +129,7 @@ export async function GET(
               timeLimit: config.timeLimit,
               starterCode: config.starterCode ?? "",
               teacherCode: config.teacherCode ?? "",
+              wrapperCode: config.wrapperCode ?? "",
             }
           : null,
         testCases: cases,

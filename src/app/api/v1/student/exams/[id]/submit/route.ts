@@ -109,6 +109,7 @@ export async function POST(
             testCases: cases.map((c: any) => ({ id: c.id, input: c.inputData, expectedOutput: c.outputData })),
             timeLimitMs: config?.timeLimit || 2000,
             teacherCode: config?.teacherCode || undefined,
+            wrapperCode: config?.wrapperCode || undefined,
           });
           questionScore = (executionResult.scorePercentage / 100) * parseFloat(q.points as string);
           overallStatus = executionResult.overallStatus;

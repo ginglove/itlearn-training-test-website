@@ -64,6 +64,7 @@ export async function POST(request: NextRequest) {
         expectedOutput: c.outputData
       })),
       timeLimitMs: config?.timeLimit || 1000,
+      wrapperCode: config?.wrapperCode || undefined,
     });
 
     // 5. Calculate final score based on question points

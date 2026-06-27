@@ -67,6 +67,7 @@ export async function POST(
         expectedOutput: c.outputData,
       })),
       timeLimitMs: config?.timeLimit || 2000,
+      wrapperCode: config?.wrapperCode || undefined,
     });
 
     return NextResponse.json({

@@ -34,6 +34,7 @@ interface CodeExecutionRequest {
   testCases: TestCase[];
   timeLimitMs: number;
   teacherCode?: string;
+  wrapperCode?: string;
 }
 
 interface CodeExecutionResponse {
@@ -309,6 +310,11 @@ export async function executeCode(
   let hasCompileError = false;
   let compileErrorMsg = "";
 
+  // Combine student code with optional wrapper (appended, so the function is defined first)
+  const effectiveSource = request.wrapperCode?.trim()
+    ? `${request.sourceCode}\n${request.wrapperCode}`
+    : request.sourceCode;
+
   // Fetch dynamic Piston URL and execution mode from settings
   let pistonApiUrl = DEFAULT_PISTON_API_URL;
   let executionMode = "LOCAL_FALLBACK";
@@ -346,7 +352,7 @@ export async function executeCode(
       }
 
       const execution = await executeSingleTestCase(
-        request.sourceCode,
+        effectiveSource,
         request.language,
         testCase.input,
         request.timeLimitMs,
