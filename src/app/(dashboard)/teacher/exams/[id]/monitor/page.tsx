@@ -115,6 +115,7 @@ export default function CodingMonitorPage({ params }: { params: Promise<{ id: st
   const [totalQuestions, setTotalQuestions] = useState(0);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [forceSubmitting, setForceSubmitting] = useState<string | null>(null);
+  const [regrading, setRegrading] = useState<string | null>(null);
 
   useEffect(() => {
     let eventSource: EventSource;
@@ -156,6 +157,28 @@ export default function CodingMonitorPage({ params }: { params: Promise<{ id: st
       alert("Network error. Please try again.");
     } finally {
       setForceSubmitting(null);
+    }
+  };
+
+  const handleRegrade = async (submissionId: string) => {
+    if (!confirm("Re-grade this submission? This will re-run all grading logic and update the score.")) return;
+    setRegrading(submissionId);
+    try {
+      const res = await fetch(`/api/v1/teacher/exams/${examId}/regrade`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ submissionId }),
+      });
+      const d = await res.json();
+      if (res.ok) {
+        alert(`Re-graded successfully. New score: ${d.totalScore} / ${d.maxPossible}`);
+      } else {
+        alert(d.message ?? "Re-grade failed.");
+      }
+    } catch {
+      alert("Network error. Please try again.");
+    } finally {
+      setRegrading(null);
     }
   };
 
@@ -289,12 +312,21 @@ export default function CodingMonitorPage({ params }: { params: Promise<{ id: st
 
                         <td className="p-4">
                           {student.submittedAt ? (
-                            <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-2.5 py-1 rounded-lg">
-                              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                              </svg>
-                              Submitted
-                            </span>
+                            <div className="flex flex-col gap-1.5">
+                              <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-2.5 py-1 rounded-lg">
+                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                </svg>
+                                Submitted
+                              </span>
+                              <button
+                                onClick={() => handleRegrade(student.id)}
+                                disabled={regrading === student.id}
+                                className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-400 border border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10 px-2 py-0.5 rounded-md transition-colors disabled:opacity-50"
+                              >
+                                {regrading === student.id ? "Re-grading..." : "⟳ Re-grade"}
+                              </button>
+                            </div>
                           ) : (
                             <div className="flex flex-col gap-1.5">
                               <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-brand-500/10 border border-brand-500/20 text-brand-400 px-2.5 py-1 rounded-lg">
