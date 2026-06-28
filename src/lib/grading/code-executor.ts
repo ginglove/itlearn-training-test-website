@@ -326,7 +326,7 @@ function buildAutoHarness(sourceCode: string, language: string, funcName: string
   if (language === "javascript") {
     return `${sourceCode}
 ;(function(){
-  var __lines__ = require('fs').readFileSync('/dev/stdin','utf8').trim().split('\\n').filter(Boolean);
+  var __lines__ = require('fs').readFileSync(0,'utf8').trim().split('\\n').filter(Boolean);
   var __parse__ = function(l){
     if(l.trim()==='true') return true;
     if(l.trim()==='false') return false;
@@ -482,8 +482,8 @@ export async function executeCode(
             pistonApiUrl,
             executionMode
           );
-          // Only use harness result if it produced output without errors
-          if (harnessExec.stdout && !harnessExec.stderr) {
+          // Use harness result if it produced output and exited cleanly
+          if (harnessExec.stdout && harnessExec.exitCode === 0 && !harnessExec.timedOut) {
             execution = harnessExec;
           }
         }
