@@ -106,7 +106,6 @@ export const codeConfigs = pgTable("code_configs", {
   memoryLimit: integer("memory_limit").notNull().default(65536),
   starterCode: text("starter_code"),
   teacherCode: text("teacher_code"),
-  wrapperCode: text("wrapper_code"),
 });
 
 // ── XPath Configs ──────────────────────────────────────────────────────────────

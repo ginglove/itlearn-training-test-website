@@ -34,7 +34,6 @@ interface CodeExecutionRequest {
   testCases: TestCase[];
   timeLimitMs: number;
   teacherCode?: string;
-  wrapperCode?: string;
 }
 
 interface CodeExecutionResponse {
@@ -172,10 +171,13 @@ async function executeLocalSingleTestCase(
       }
     );
 
-    if (input) {
-      child.stdin?.write(input);
+    if (child.stdin) {
+      // Always write input (even empty string) so the process gets a proper stdin stream.
+      // Ensure input ends with a newline so Python's input() / readline() does not hang.
+      const payload = input.endsWith("\n") ? input : input + "\n";
+      child.stdin.write(payload);
+      child.stdin.end();
     }
-    child.stdin?.end();
   });
 }
 
@@ -281,26 +283,38 @@ async function executeSingleTestCase(
 function normalizeNumber(token: string): string {
   const num = Number(token);
   if (!isNaN(num) && token.trim() !== "") {
-    // Round to 6 significant digits to absorb floating-point noise
-    return parseFloat(num.toPrecision(6)).toString();
+    // Round to 9 significant digits to absorb floating-point noise without
+    // mangling large integers (e.g. 12345678 must stay 12345678, not 12345700)
+    return parseFloat(num.toPrecision(9)).toString();
   }
   return token;
 }
 
 function normalizeLine(line: string): string {
-  // Split on boundaries between digits/dots and non-numeric characters,
-  // normalize each numeric token, then rejoin.
-  return line.replace(/[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?/g, (match) =>
+  // Case-fold Python/Java booleans so True/False match true/false anywhere in the line
+  const boolFolded = line.replace(/\bTrue\b/g, "true").replace(/\bFalse\b/g, "false");
+  // Normalize numeric tokens to absorb floating-point noise
+  return boolFolded.replace(/[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?/g, (match) =>
     normalizeNumber(match)
   );
 }
 
 function normalizeOutput(output: string): string {
-  return output
-    .split("\n")
-    .map((line: string) => normalizeLine(line.trimEnd()))
-    .join("\n")
-    .trim();
+  return (
+    output
+      // Normalise Windows (\r\n) and old-Mac (\r) line endings to \n
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n")
+      .split("\n")
+      .map((line: string) => {
+        // Trim BOTH leading and trailing whitespace from each line so that
+        // indented output (e.g. a console.log inside a function block) still
+        // matches the unindented expected value
+        return normalizeLine(line.trim());
+      })
+      .join("\n")
+      .trim()
+  );
 }
 
 export async function executeCode(
@@ -309,11 +323,6 @@ export async function executeCode(
   const results: ExecutionResult[] = [];
   let hasCompileError = false;
   let compileErrorMsg = "";
-
-  // Combine student code with optional wrapper (appended, so the function is defined first)
-  const effectiveSource = request.wrapperCode?.trim()
-    ? `${request.sourceCode}\n${request.wrapperCode}`
-    : request.sourceCode;
 
   // Fetch dynamic Piston URL and execution mode from settings
   let pistonApiUrl = DEFAULT_PISTON_API_URL;
@@ -352,7 +361,7 @@ export async function executeCode(
       }
 
       const execution = await executeSingleTestCase(
-        effectiveSource,
+        request.sourceCode,
         request.language,
         testCase.input,
         request.timeLimitMs,

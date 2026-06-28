@@ -11,7 +11,6 @@ export default function CodingConfigPage({ params }: { params: Promise<{ id: str
   const [timeLimit, setTimeLimit] = useState(1000);
   const [starterCode, setStarterCode] = useState("");
   const [teacherCode, setTeacherCode] = useState("");
-  const [wrapperCode, setWrapperCode] = useState("");
   const [testCases, setTestCases] = useState([{ inputData: "", outputData: "", isHidden: false }]);
   const [isLoading, setIsLoading] = useState(false);
   const showToast = useToast();
@@ -35,7 +34,6 @@ export default function CodingConfigPage({ params }: { params: Promise<{ id: str
           setTimeLimit(firstQ.config?.timeLimit || 1000);
           setStarterCode(firstQ.config?.starterCode || "");
           setTeacherCode(firstQ.config?.teacherCode || "");
-          setWrapperCode(firstQ.config?.wrapperCode || "");
           setTestCases(
             firstQ.testCases?.length > 0
               ? firstQ.testCases
@@ -57,7 +55,6 @@ export default function CodingConfigPage({ params }: { params: Promise<{ id: str
       setTimeLimit(selectedQ.config?.timeLimit || 1000);
       setStarterCode(selectedQ.config?.starterCode || "");
       setTeacherCode(selectedQ.config?.teacherCode || "");
-      setWrapperCode(selectedQ.config?.wrapperCode || "");
       setTestCases(
         selectedQ.testCases?.length > 0
           ? selectedQ.testCases
@@ -67,7 +64,6 @@ export default function CodingConfigPage({ params }: { params: Promise<{ id: str
       setTimeLimit(1000);
       setStarterCode("");
       setTeacherCode("");
-      setWrapperCode("");
       setTestCases([{ inputData: "", outputData: "", isHidden: false }]);
     }
   };
@@ -103,7 +99,6 @@ export default function CodingConfigPage({ params }: { params: Promise<{ id: str
           timeLimit,
           starterCode,
           teacherCode,
-          wrapperCode,
           testCases,
         }),
       });
@@ -226,33 +221,6 @@ export default function CodingConfigPage({ params }: { params: Promise<{ id: str
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M12 3a9 9 0 100 18A9 9 0 0012 3z" />
                   </svg>
                   Reference code is active. Expected output in test cases below will be ignored during grading.
-                </div>
-              )}
-            </div>
-
-            {/* Wrapper Code */}
-            <div className="pt-6 border-t border-border-strong">
-              <div className="mb-3">
-                <h3 className="text-base font-bold text-white">
-                  Wrapper Code
-                  <span className="text-text-tertiary font-normal text-sm ml-2">(optional — appended after student code)</span>
-                </h3>
-                <p className="text-text-tertiary text-xs mt-0.5">
-                  Code appended to the student&apos;s submission before execution. Use this to call the student&apos;s function with stdin input and print the result. For example: <code className="bg-bg-surface-elevated px-1 rounded text-brand-400">const n = parseInt(require(&apos;fs&apos;).readFileSync(&apos;/dev/stdin&apos;,&apos;utf8&apos;).trim()); console.log(isEven(n));</code>
-                </p>
-              </div>
-              <textarea
-                value={wrapperCode}
-                onChange={(e) => setWrapperCode(e.target.value)}
-                className="premium-input font-mono text-sm min-h-[120px] w-full"
-                placeholder={"// JavaScript example:\nconst input = require('fs').readFileSync('/dev/stdin','utf8').trim();\nconsole.log(isEven(parseInt(input)));\n\n# Python example:\nimport sys\nn = int(sys.stdin.read().strip())\nprint(is_even(n))"}
-              />
-              {wrapperCode.trim() && (
-                <div className="mt-2 flex items-center gap-2 text-xs text-blue-400 bg-blue-500/10 border border-blue-500/20 rounded-lg px-3 py-2">
-                  <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M12 3a9 9 0 100 18A9 9 0 0012 3z" />
-                  </svg>
-                  Wrapper code is active. It will be appended to student code before execution.
                 </div>
               )}
             </div>
