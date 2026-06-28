@@ -33,7 +33,6 @@ export async function GET(
         focusLossCount: examSubmissions.focusLossCount,
         examTitle: exams.title,
         examDescription: exams.description,
-        examEndTime: exams.endTime,
         totalPossibleScore: sql<string>`(
           SELECT COALESCE(SUM(q.points), 0)
           FROM questions q
@@ -106,8 +105,6 @@ export async function GET(
       optionLookup[opt.questionId][opt.id] = { text: opt.optionText, isCorrect: opt.isCorrect };
     }
 
-    const examEnded = submission.examEndTime ? new Date() > new Date(submission.examEndTime) : true;
-
     // Enrich details
     const details = rawDetails.map((d) => {
       if (d.questionType === "QUIZ") {
@@ -135,12 +132,10 @@ export async function GET(
 
         return { ...d, score: computedScore, selectedTexts, correctTexts, result };
       } else {
-        // CODE or XPATH — redact source until exam has ended
+        // CODE or XPATH — always show student's own submitted code/xpath
         const result = d.status === null ? "NOT COMPLETED" : d.status === "AC" ? "PASS" : "FAIL";
         return {
           ...d,
-          sourceCode: examEnded ? d.sourceCode : null,
-          studentXpath: examEnded ? d.studentXpath : null,
           selectedTexts: [],
           correctTexts: [],
           result,
