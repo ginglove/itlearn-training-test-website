@@ -28,16 +28,22 @@ export async function POST(
 
     const { id: examId } = await params;
     const body = await request.json();
-    const { submissionId } = body;
-    if (!submissionId) {
-      return NextResponse.json({ error: "VALIDATION_ERROR", message: "submissionId is required." }, { status: 400 });
+    const { submissionId, studentId } = body;
+    if (!submissionId && !studentId) {
+      return NextResponse.json({ error: "VALIDATION_ERROR", message: "submissionId or studentId is required." }, { status: 400 });
     }
 
     const [activeSubmission] = await db
       .select({ submission: examSubmissions })
       .from(examSubmissions)
       .innerJoin(exams, and(eq(examSubmissions.examId, exams.id), eq(exams.createdBy, teacherId)))
-      .where(and(eq(examSubmissions.id, submissionId), eq(examSubmissions.examId, examId)))
+      .where(
+        and(
+          submissionId ? eq(examSubmissions.id, submissionId) : eq(examSubmissions.studentId, studentId),
+          eq(examSubmissions.examId, examId),
+          isNull(examSubmissions.submittedAt)
+        )
+      )
       .limit(1)
       .then((rows) => rows.map((r) => r.submission));
 

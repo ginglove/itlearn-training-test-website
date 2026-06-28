@@ -328,26 +328,49 @@ function buildAutoHarness(sourceCode: string, language: string, funcName: string
   if (language === "javascript") {
     return `${sourceCode}
 ;(function(){
-  var __lines__ = require('fs').readFileSync(0,'utf8').trim().split('\\n').filter(Boolean);
-  var __parse__ = function(l){
-    if(l.trim()==='true') return true;
-    if(l.trim()==='false') return false;
-    var n = Number(l.trim());
-    return isNaN(n) ? l.trim() : n;
-  };
+  var __raw__ = require('fs').readFileSync(0,'utf8').trim();
   var __args__;
-  if(__lines__.length === 1){
-    var __parts__ = __lines__[0].trim().split(/\\s+/);
-    // Only split into multiple args when ALL parts are numeric.
-    // If any part is non-numeric, pass the whole line as one string argument
-    // so that inputs like "a b c" are not wrongly split into ["a","b","c"].
-    var __allNum__ = __parts__.length > 1 && __parts__.every(function(p){ var n=Number(p.trim()); return !isNaN(n) && p.trim()!==''; });
-    __args__ = __allNum__ ? __parts__.map(__parse__) : [__parse__(__lines__[0])];
-  } else {
-    __args__ = __lines__.map(__parse__);
+  // Try eval() first: handles JS object/array literals and JSON from stdin.
+  // Falls back to line-based parsing for simple primitive inputs.
+  try {
+    var __val__ = eval('(' + __raw__ + ')');
+    __args__ = [__val__];
+  } catch(__e__) {
+    var __lines__ = __raw__.split('\\n').filter(Boolean);
+    var __parse__ = function(l){
+      if(l.trim()==='true') return true;
+      if(l.trim()==='false') return false;
+      var n = Number(l.trim());
+      return isNaN(n) ? l.trim() : n;
+    };
+    if(__lines__.length === 1){
+      var __parts__ = __lines__[0].trim().split(/\\s+/);
+      // Only split into multiple args when ALL parts are numeric.
+      var __allNum__ = __parts__.length > 1 && __parts__.every(function(p){ var n=Number(p.trim()); return !isNaN(n) && p.trim()!==''; });
+      __args__ = __allNum__ ? __parts__.map(__parse__) : [__parse__(__lines__[0])];
+    } else {
+      __args__ = __lines__.map(__parse__);
+    }
+  }
+  // Format objects/arrays to match JS object-literal style expected by teachers.
+  // Primitives fall through to console.log as before.
+  function __fmt__(v){
+    if(Array.isArray(v)){
+      if(v.length===0) return '[]';
+      return '[\\n'+v.map(function(x){ return '  '+__fmt__(x); }).join(',\\n')+'\\n]';
+    }
+    if(v!==null && typeof v==='object'){
+      var p=Object.keys(v).map(function(k){ return k+': '+__fmt__(v[k]); });
+      return '{ '+p.join(', ')+' }';
+    }
+    if(typeof v==='string') return JSON.stringify(v);
+    return String(v);
   }
   var __r__ = ${funcName}.apply(null, __args__);
-  if(__r__ !== undefined && __r__ !== null) console.log(__r__);
+  if(__r__ !== undefined && __r__ !== null){
+    if(typeof __r__ === 'object') console.log(__fmt__(__r__));
+    else console.log(__r__);
+  }
 })();`;
   }
 
