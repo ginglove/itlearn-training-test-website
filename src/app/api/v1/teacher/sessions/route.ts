@@ -73,11 +73,12 @@ export async function GET(request: NextRequest) {
     // Build per-exam aggregated structure
     const examMap = new Map<string, {
       examId: string; examTitle: string; startTime: Date; endTime: Date; duration: number;
-      totalStarted: number; totalCompleted: number; totalPossibleScore: string;
-      students: any[];
+      totalStarted: number; totalCompleted: number; totalPending: number; totalCancelled: number;
+      totalPossibleScore: string; students: any[];
     }>();
 
     const PASS_MARK = 50; // percent
+    const now = new Date();
 
     for (const r of rows) {
       if (!examMap.has(r.examId)) {
@@ -89,18 +90,38 @@ export async function GET(request: NextRequest) {
           duration: r.duration,
           totalStarted: 0,
           totalCompleted: 0,
+          totalPending: 0,
+          totalCancelled: 0,
           totalPossibleScore: scoreSumMap.get(r.examId) ?? "0",
           students: [],
         });
       }
       const exam = examMap.get(r.examId)!;
       exam.totalStarted += 1;
-      if (r.submittedAt) exam.totalCompleted += 1;
+      if (r.submittedAt) {
+        exam.totalCompleted += 1;
+      } else if (now > exam.endTime) {
+        exam.totalCancelled += 1;
+      } else if (r.closeReason === "SAVE_AND_EXIT") {
+        exam.totalPending += 1;
+      }
 
       const possibleScore = Number(exam.totalPossibleScore);
       const pct = r.submittedAt && possibleScore > 0
         ? (Number(r.totalScore ?? 0) / possibleScore) * 100
         : null;
+
+      const examClosed = now > exam.endTime;
+      let submissionStatus: "SUBMITTED" | "IN_PROGRESS" | "PENDING" | "CANCELLED";
+      if (r.submittedAt) {
+        submissionStatus = "SUBMITTED";
+      } else if (examClosed) {
+        submissionStatus = "CANCELLED";
+      } else if (r.closeReason === "SAVE_AND_EXIT") {
+        submissionStatus = "PENDING";
+      } else {
+        submissionStatus = "IN_PROGRESS";
+      }
 
       exam.students.push({
         submissionId:       r.subId,
@@ -115,6 +136,7 @@ export async function GET(request: NextRequest) {
         result:             r.submittedAt
                               ? (pct !== null && pct >= PASS_MARK ? "PASS" : "FAIL")
                               : "NOT_COMPLETED",
+        submissionStatus,
         focusLossCount:     r.focusLoss,
         closeReason:        r.closeReason,
         attempt:            r.attempt,
