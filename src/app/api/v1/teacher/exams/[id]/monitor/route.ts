@@ -7,13 +7,14 @@ import {
   quizOptions,
   submissionDetails,
   xpathConfigs,
+  exams,
 } from "@/db/schema";
 import { eq, sql, inArray } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
 async function buildSnapshot(examId: string) {
-  // Total possible score and question count for this exam
+  // Total possible score, question count, and exam close date
   const [totalPossibleRow] = await db
     .select({
       total: sql<string>`COALESCE(SUM(${questions.points}), 0)`,
@@ -24,7 +25,14 @@ async function buildSnapshot(examId: string) {
   const totalPossibleScore = totalPossibleRow?.total ?? "0";
   const totalQuestions = Number(totalPossibleRow?.count ?? 0);
 
-  // All submissions with elapsed time
+  const [examRow] = await db
+    .select({ endTime: exams.endTime })
+    .from(exams)
+    .where(eq(exams.id, examId))
+    .limit(1);
+  const examEndTime = examRow?.endTime ?? null;
+
+  // All submissions with elapsed time, closeReason for status derivation
   const submissions = await db
     .select({
       id: examSubmissions.id,
@@ -36,6 +44,7 @@ async function buildSnapshot(examId: string) {
       totalScore: examSubmissions.totalScore,
       startAt: examSubmissions.startAt,
       submittedAt: examSubmissions.submittedAt,
+      closeReason: examSubmissions.closeReason,
       elapsedSeconds: sql<number>`
         CASE
           WHEN ${examSubmissions.submittedAt} IS NOT NULL
@@ -170,10 +179,27 @@ async function buildSnapshot(examId: string) {
     detailsBySubmission[row.submissionId].push(row);
   }
 
-  const roster = submissions.map((s) => ({
-    ...s,
-    details: detailsBySubmission[s.id] || [],
-  }));
+  const now = new Date();
+  const examClosed = examEndTime ? now > examEndTime : false;
+
+  const roster = submissions.map((s) => {
+    // Derive status using same logic as student exam list
+    let submissionStatus: "SUBMITTED" | "IN_PROGRESS" | "PENDING" | "CANCELLED";
+    if (s.submittedAt) {
+      submissionStatus = "SUBMITTED";
+    } else if (examClosed) {
+      submissionStatus = "CANCELLED";
+    } else if (s.closeReason === "SAVE_AND_EXIT") {
+      submissionStatus = "PENDING";
+    } else {
+      submissionStatus = "IN_PROGRESS";
+    }
+    return {
+      ...s,
+      submissionStatus,
+      details: detailsBySubmission[s.id] || [],
+    };
+  });
 
   return { totalPossibleScore, totalQuestions, roster };
 }
