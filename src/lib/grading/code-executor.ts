@@ -280,6 +280,99 @@ async function executeSingleTestCase(
   };
 }
 
+/**
+ * Detects the last user-defined function name in the source code.
+ * Returns null if none found or if the code already has output statements.
+ */
+function detectFunctionName(sourceCode: string, language: string): string | null {
+  if (language === "javascript") {
+    // Skip auto-harness if the student already writes output
+    if (/console\s*\.\s*log\s*\(|process\s*\.\s*stdout\s*\.\s*write\s*\(/.test(sourceCode)) {
+      return null;
+    }
+    // Match: function name(...), const/let/var name = (...) =>, const/let/var name = function(
+    const patterns = [
+      /(?:^|\n)\s*(?:async\s+)?function\s+(\w+)\s*\(/gm,
+      /(?:^|\n)\s*(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?\([^)]*\)\s*=>/gm,
+      /(?:^|\n)\s*(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?(\w+)\s*=>/gm,
+      /(?:^|\n)\s*(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?function\s*\(/gm,
+    ];
+    let lastName: string | null = null;
+    for (const pattern of patterns) {
+      for (const m of sourceCode.matchAll(pattern)) {
+        const name = m[1];
+        if (!["require", "exports", "module", "process"].includes(name)) {
+          lastName = name;
+        }
+      }
+    }
+    return lastName;
+  }
+
+  if (language === "python") {
+    if (/\bprint\s*\(/.test(sourceCode)) return null;
+    const matches = [...sourceCode.matchAll(/(?:^|\n)def\s+(\w+)\s*\(/gm)];
+    return matches.length > 0 ? matches[matches.length - 1][1] : null;
+  }
+
+  return null;
+}
+
+/**
+ * Builds a harness that calls the detected function with stdin input and prints the result.
+ * Used when student submits function-only code with no output statements.
+ */
+function buildAutoHarness(sourceCode: string, language: string, funcName: string): string {
+  if (language === "javascript") {
+    return `${sourceCode}
+;(function(){
+  var __lines__ = require('fs').readFileSync('/dev/stdin','utf8').trim().split('\\n').filter(Boolean);
+  var __parse__ = function(l){
+    if(l.trim()==='true') return true;
+    if(l.trim()==='false') return false;
+    var n = Number(l.trim());
+    return isNaN(n) ? l.trim() : n;
+  };
+  var __args__;
+  if(__lines__.length === 1){
+    // Single line: try splitting by whitespace for multi-param functions
+    var __parts__ = __lines__[0].trim().split(/\\s+/);
+    __args__ = __parts__.length > 1 ? __parts__.map(__parse__) : [__parse__(__lines__[0])];
+  } else {
+    __args__ = __lines__.map(__parse__);
+  }
+  var __r__ = ${funcName}.apply(null, __args__);
+  if(__r__ !== undefined && __r__ !== null) console.log(__r__);
+})();`;
+  }
+
+  if (language === "python") {
+    return `${sourceCode}
+
+import sys as __sys__
+__lines__ = [l for l in __sys__.stdin.read().strip().split('\\n') if l]
+def __parse__(x):
+    x = x.strip()
+    if x == 'true': return True
+    if x == 'false': return False
+    try: return int(x)
+    except ValueError:
+        try: return float(x)
+        except ValueError: return x
+if len(__lines__) == 1:
+    __parts__ = __lines__[0].strip().split()
+    __args__ = [__parse__(p) for p in __parts__] if len(__parts__) > 1 else [__parse__(__lines__[0])]
+else:
+    __args__ = [__parse__(l) for l in __lines__]
+__r__ = ${funcName}(*__args__)
+if __r__ is not None:
+    print(__r__)
+`;
+  }
+
+  return sourceCode;
+}
+
 function normalizeNumber(token: string): string {
   const num = Number(token);
   if (!isNaN(num) && token.trim() !== "") {
@@ -360,7 +453,7 @@ export async function executeCode(
         }
       }
 
-      const execution = await executeSingleTestCase(
+      let execution = await executeSingleTestCase(
         request.sourceCode,
         request.language,
         testCase.input,
@@ -368,6 +461,33 @@ export async function executeCode(
         pistonApiUrl,
         executionMode
       );
+
+      // Auto-harness: student wrote a function but no output statements.
+      // If the code ran cleanly but produced no output, detect the function and
+      // re-run with an injected runner that reads stdin and calls it.
+      if (
+        !execution.stdout &&
+        !execution.stderr &&
+        execution.exitCode === 0 &&
+        !execution.timedOut
+      ) {
+        const funcName = detectFunctionName(request.sourceCode, request.language);
+        if (funcName) {
+          const harness = buildAutoHarness(request.sourceCode, request.language, funcName);
+          const harnessExec = await executeSingleTestCase(
+            harness,
+            request.language,
+            testCase.input,
+            request.timeLimitMs,
+            pistonApiUrl,
+            executionMode
+          );
+          // Only use harness result if it produced output without errors
+          if (harnessExec.stdout && !harnessExec.stderr) {
+            execution = harnessExec;
+          }
+        }
+      }
 
       let status: ExecutionResult["status"];
 
