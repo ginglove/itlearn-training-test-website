@@ -1,22 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { exams, examSubmissions, submissionDetails, questions } from "@/db/schema";
-import { eq, and, desc, isNotNull, sql } from "drizzle-orm";
+import { exams, examSubmissions, questions } from "@/db/schema";
+import { eq, and, asc, sql } from "drizzle-orm";
 
-export async function GET(request: NextRequest) {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ examId: string }> }
+) {
   try {
     const studentId = request.headers.get("x-user-id");
-    if (!studentId) {
-      return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
-    }
+    if (!studentId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
 
-    const completed = await db
+    const { examId } = await params;
+
+    const submissions = await db
       .select({
         id: examSubmissions.id,
-        examId: exams.id,
-        title: exams.title,
-        description: exams.description,
-        duration: exams.duration,
+        startAt: examSubmissions.startAt,
         submittedAt: examSubmissions.submittedAt,
         totalScore: examSubmissions.totalScore,
         focusLossCount: examSubmissions.focusLossCount,
@@ -60,17 +60,14 @@ export async function GET(request: NextRequest) {
       .where(
         and(
           eq(examSubmissions.studentId, studentId),
-          isNotNull(examSubmissions.submittedAt)
+          eq(examSubmissions.examId, examId)
         )
       )
-      .orderBy(desc(examSubmissions.submittedAt));
+      .orderBy(asc(examSubmissions.startAt));
 
-    return NextResponse.json({ status: "SUCCESS", completed });
+    return NextResponse.json({ status: "SUCCESS", submissions });
   } catch (error) {
-    console.error("Fetch completed exams error:", error);
-    return NextResponse.json(
-      { error: "INTERNAL_ERROR", message: "Failed to fetch completed exams" },
-      { status: 500 }
-    );
+    console.error("Exam group detail error:", error);
+    return NextResponse.json({ error: "INTERNAL_ERROR" }, { status: 500 });
   }
 }

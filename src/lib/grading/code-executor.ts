@@ -471,8 +471,15 @@ export async function executeCode(
       let expectedOutput = testCase.expectedOutput;
 
       if (request.teacherCode && request.teacherCode.trim().length > 0) {
+        // Apply auto-harness to teacher code too — teachers often write function-only
+        // reference solutions; without the harness they'd produce no output, making
+        // every student comparison fail regardless of correctness.
+        const teacherFuncName = detectFunctionName(request.teacherCode, request.language);
+        const teacherCodeToRun = teacherFuncName
+          ? buildAutoHarness(request.teacherCode, request.language, teacherFuncName)
+          : request.teacherCode;
         const teacherExec = await executeSingleTestCase(
-          request.teacherCode,
+          teacherCodeToRun,
           request.language,
           testCase.input,
           request.timeLimitMs,

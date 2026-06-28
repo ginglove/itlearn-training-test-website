@@ -30,8 +30,16 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
   const [xpathResults, setXpathResults] = useState<Record<string, any>>({});
   const [isRunningXpath, setIsRunningXpath] = useState(false);
   const [showUntestedWarning, setShowUntestedWarning] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [showResultOverlay, setShowResultOverlay] = useState(false);
+  const [submitResult, setSubmitResult] = useState<{ totalScore: string; totalPossible: number; details: any[] } | null>(null);
+  const [resultLoading, setResultLoading] = useState(false);
   const [settings, setSettings] = useState<any>(null);
-  const submissionId = typeof window !== 'undefined' ? sessionStorage.getItem(`exam_${examId}_submission_id`) : null;
+  // Store submissionId in state so it doesn't become null when we clear
+  // sessionStorage after submit (which would trigger the redirect guard).
+  const [submissionId] = useState<string | null>(() =>
+    typeof window !== 'undefined' ? sessionStorage.getItem(`exam_${examId}_submission_id`) : null
+  );
 
   // Reset active tab when question changes; keep results per-question
   useEffect(() => {
@@ -291,18 +299,12 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
   };
 
   const handleSubmitClick = () => {
-    const untestedCode = questions.filter(
-      (q) => q.type === "CODE" && !runResults[q.id]
-    );
-    if (untestedCode.length > 0) {
-      setShowUntestedWarning(true);
-    } else {
-      handleSubmit();
-    }
+    setShowConfirmModal(true);
   };
 
   const handleSubmit = async () => {
     setShowUntestedWarning(false);
+    setShowConfirmModal(false);
     setIsSubmitting(true);
     try {
       const payloads = Object.entries(answers).map(([qId, ans]) => ({
@@ -322,11 +324,37 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
       });
 
       if (res.ok) {
-        sessionStorage.removeItem(`exam_${examId}_submission_id`);
-        router.push("/student/exams");
+        const data = await res.json();
+        // Don't clear sessionStorage here — clearing it triggers a re-render
+        // where submissionId becomes null, firing the redirect guard before
+        // the results overlay can show. Clear it when the student navigates away.
+        // Fetch detailed per-question results to show in the overlay
+        setResultLoading(true);
+        setShowResultOverlay(true);
+        try {
+          const detailRes = await fetch(`/api/v1/student/completed/${submissionId}`);
+          if (detailRes.ok) {
+            const detail = await detailRes.json();
+            const maxPossible = questions.reduce((s: number, q: any) => s + (parseFloat(q.points) || 0), 0);
+            setSubmitResult({ totalScore: data.total_score, totalPossible: maxPossible, details: detail.details ?? [] });
+          } else {
+            setSubmitResult({ totalScore: data.total_score, totalPossible: questions.reduce((s: number, q: any) => s + (parseFloat(q.points) || 0), 0), details: [] });
+          }
+        } catch {
+          setSubmitResult({ totalScore: data.total_score, totalPossible: questions.reduce((s: number, q: any) => s + (parseFloat(q.points) || 0), 0), details: [] });
+        } finally {
+          setResultLoading(false);
+        }
       } else {
-        showToast("Failed to submit exam. Please try again.", "error");
-        setIsSubmitting(false);
+        const errData = await res.json().catch(() => ({}));
+        if (errData.error === "ALREADY_SUBMITTED") {
+          // Exam was already graded — go straight to results
+          sessionStorage.removeItem(`exam_${examId}_submission_id`);
+          router.push("/student/completed");
+        } else {
+          showToast("Failed to submit exam. Please try again.", "error");
+          setIsSubmitting(false);
+        }
       }
     } catch (err) {
       showToast("Network error. Drafts are saved, try again.", "error");
@@ -376,10 +404,54 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
             </svg>
           </div>
           <h2 className="text-xl font-bold text-white mb-2">Time&apos;s Up</h2>
-          <p className="text-text-secondary text-sm mb-6">
-            Your exam time has expired. Your saved answers are being submitted now.
-          </p>
-          <div className="w-6 h-6 border-2 border-rose-500/30 border-t-rose-500 rounded-full animate-spin mx-auto" />
+          {isSubmitting || resultLoading ? (
+            <>
+              <p className="text-text-secondary text-sm mb-6">
+                Your exam time has expired. Submitting and grading your answers now…
+              </p>
+              <div className="w-6 h-6 border-2 border-rose-500/30 border-t-rose-500 rounded-full animate-spin mx-auto" />
+            </>
+          ) : submitResult ? (
+            <>
+              <p className="text-text-secondary text-sm mb-4">Your exam has been submitted and graded.</p>
+              <div className={`text-3xl font-black mb-1 ${
+                (parseFloat(submitResult.totalScore) / (submitResult.totalPossible || 1)) >= 0.8 ? "text-emerald-400"
+                : (parseFloat(submitResult.totalScore) / (submitResult.totalPossible || 1)) >= 0.5 ? "text-amber-400"
+                : "text-rose-400"
+              }`}>
+                {((parseFloat(submitResult.totalScore) / (submitResult.totalPossible || 1)) * 100).toFixed(1)}%
+              </div>
+              <div className="text-text-tertiary text-sm mb-6 font-mono">
+                {parseFloat(submitResult.totalScore).toFixed(1)} / {submitResult.totalPossible.toFixed(1)} pts
+              </div>
+              <div className="flex gap-3">
+                <button onClick={() => { sessionStorage.removeItem(`exam_${examId}_submission_id`); router.push("/student/exams"); }}
+                  className="flex-1 premium-btn-secondary py-2.5 text-sm">
+                  Active Exams
+                </button>
+                <button onClick={() => { sessionStorage.removeItem(`exam_${examId}_submission_id`); router.push("/student/completed"); }}
+                  className="flex-1 premium-btn-primary py-2.5 text-sm">
+                  View Results →
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-text-secondary text-sm mb-6">
+                Your exam time has expired. Your answers have been saved.
+              </p>
+              <div className="flex gap-3">
+                <button onClick={() => { sessionStorage.removeItem(`exam_${examId}_submission_id`); router.push("/student/exams"); }}
+                  className="flex-1 premium-btn-secondary py-2.5 text-sm">
+                  Go to Exams
+                </button>
+                <button onClick={() => { sessionStorage.removeItem(`exam_${examId}_submission_id`); router.push("/student/completed"); }}
+                  className="flex-1 premium-btn-primary py-2.5 text-sm">
+                  View Results →
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     );
@@ -1067,61 +1139,209 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
         </div>
       )}
 
-      {/* Untested Code Warning Modal */}
-      {showUntestedWarning && (() => {
-        const untested = questions.map((q, idx) => ({ q, idx })).filter(({ q }) => q.type === "CODE" && !runResults[q.id]);
+      {/* ── Confirm Submit Modal ─────────────────────────────────────────── */}
+      {showConfirmModal && (() => {
+        const unanswered = questions.filter(q => {
+          if (q.type === "CODE") return !answers[q.id]?.source_code?.trim();
+          if (q.type === "XPATH") return !answers[q.id]?.student_xpath?.trim();
+          return !(answers[q.id]?.selected_options?.length > 0);
+        });
+        const untested = questions.filter(q => q.type === "CODE" && !runResults[q.id]);
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-            <div className="bg-bg-surface border border-amber-500/30 rounded-2xl shadow-2xl max-w-lg w-full mx-4 p-6">
-              {/* Header */}
+            <div className="bg-bg-surface border border-border-strong rounded-2xl shadow-2xl max-w-lg w-full mx-4 p-6">
               <div className="flex items-center gap-3 mb-5">
-                <div className="w-10 h-10 rounded-full bg-amber-500/15 flex items-center justify-center shrink-0">
-                  <svg className="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                <div className="w-10 h-10 rounded-full bg-brand-500/15 border border-brand-500/20 flex items-center justify-center shrink-0">
+                  <svg className="w-5 h-5 text-brand-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 </div>
                 <div>
-                  <h3 className="text-white font-semibold text-base">Code Not Tested</h3>
-                  <p className="text-amber-400 text-sm font-medium mt-0.5">
-                    {untested.length} question{untested.length > 1 ? "s" : ""} haven&apos;t been run yet
-                  </p>
+                  <h3 className="text-white font-semibold text-base">Submit Exam?</h3>
+                  <p className="text-text-tertiary text-sm mt-0.5">Once submitted, you cannot change your answers.</p>
                 </div>
               </div>
 
-              {/* Question list */}
-              <div className="bg-bg-base rounded-xl border border-border-strong divide-y divide-border-strong mb-5 max-h-56 overflow-y-auto">
-                {untested.map(({ q, idx }) => (
-                  <div key={q.id} className="flex items-start gap-3 px-4 py-3">
-                    <span className="w-6 h-6 rounded bg-amber-500/20 text-amber-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
-                      {idx + 1}
-                    </span>
-                    <p className="text-text-secondary text-sm leading-snug line-clamp-2">{q.content}</p>
+              {/* Summary */}
+              <div className="bg-bg-base rounded-xl border border-border-strong divide-y divide-border-strong mb-4">
+                <div className="flex items-center justify-between px-4 py-3 text-sm">
+                  <span className="text-text-secondary">Total questions</span>
+                  <span className="text-white font-semibold">{questions.length}</span>
+                </div>
+                <div className="flex items-center justify-between px-4 py-3 text-sm">
+                  <span className="text-text-secondary">Answered</span>
+                  <span className={`font-semibold ${questions.length - unanswered.length === questions.length ? "text-emerald-400" : "text-amber-400"}`}>
+                    {questions.length - unanswered.length} / {questions.length}
+                  </span>
+                </div>
+                {untested.length > 0 && (
+                  <div className="flex items-center justify-between px-4 py-3 text-sm">
+                    <span className="text-amber-400">Code not tested</span>
+                    <span className="text-amber-400 font-semibold">{untested.length} question{untested.length > 1 ? "s" : ""}</span>
                   </div>
-                ))}
+                )}
+                {unanswered.length > 0 && (
+                  <div className="px-4 py-3">
+                    <p className="text-xs text-text-tertiary mb-2">Unanswered questions:</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {unanswered.map(q => {
+                        const idx = questions.indexOf(q);
+                        return (
+                          <button key={q.id} onClick={() => { setCurrentIndex(idx); setShowConfirmModal(false); }}
+                            className="w-7 h-7 rounded text-xs font-bold bg-rose-500/15 text-rose-400 border border-rose-500/20 hover:bg-rose-500/25 transition-colors">
+                            {idx + 1}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <p className="text-text-tertiary text-xs mb-5">
-                Running your code lets you verify it works before submitting. You can still submit without testing, but untested code may not receive full marks.
-              </p>
+              {focusLosses > 0 && (
+                <div className="flex items-center gap-2 text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2 mb-4">
+                  <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                  </svg>
+                  {focusLosses} focus {focusLosses === 1 ? "loss" : "losses"} will be recorded with this submission.
+                </div>
+              )}
 
               <div className="flex gap-3">
-                <button
-                  onClick={() => setShowUntestedWarning(false)}
-                  className="flex-1 premium-btn-secondary py-2.5 text-sm"
-                >
-                  Go Back &amp; Test
+                <button onClick={() => setShowConfirmModal(false)} className="flex-1 premium-btn-secondary py-2.5 text-sm">
+                  Cancel
                 </button>
-                <button
-                  onClick={handleSubmit}
-                  className="flex-1 premium-btn-primary py-2.5 text-sm"
-                >
-                  Submit Anyway
+                <button onClick={handleSubmit} className="flex-1 premium-btn-primary py-2.5 text-sm">
+                  Yes, Submit Exam
                 </button>
               </div>
             </div>
           </div>
         );
       })()}
+
+      {/* ── Results Overlay (after submission) ──────────────────────────── */}
+      {showResultOverlay && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+          <div className="bg-bg-surface border border-border-strong rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden">
+            {/* Header */}
+            <div className="px-6 py-5 border-b border-border-strong shrink-0 text-center">
+              <div className={`w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-3 ${
+                submitResult && !resultLoading
+                  ? (parseFloat(submitResult.totalScore) / (submitResult.totalPossible || 1)) >= 0.5
+                    ? "bg-emerald-500/15 border border-emerald-500/20"
+                    : "bg-rose-500/15 border border-rose-500/20"
+                  : "bg-brand-500/15 border border-brand-500/20"
+              }`}>
+                {resultLoading ? (
+                  <div className="w-6 h-6 border-2 border-brand-500/30 border-t-brand-500 rounded-full animate-spin" />
+                ) : submitResult && (parseFloat(submitResult.totalScore) / (submitResult.totalPossible || 1)) >= 0.5 ? (
+                  <svg className="w-7 h-7 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                ) : (
+                  <svg className="w-7 h-7 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                )}
+              </div>
+              <h2 className="text-xl font-bold text-white">{examTitle}</h2>
+              <p className="text-text-tertiary text-sm mt-1">Exam submitted successfully</p>
+            </div>
+
+            {/* Score */}
+            {submitResult && !resultLoading && (
+              <div className="px-6 py-4 border-b border-border-strong shrink-0">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="block text-[10px] text-text-tertiary uppercase tracking-wider mb-1">Your Score</span>
+                    <span className="font-mono text-3xl font-black text-white">
+                      {parseFloat(submitResult.totalScore).toFixed(1)}
+                      <span className="text-text-tertiary font-normal text-lg">/{submitResult.totalPossible.toFixed(1)}</span>
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="block text-[10px] text-text-tertiary uppercase tracking-wider mb-1">Percentage</span>
+                    <span className={`font-mono text-3xl font-black ${
+                      (parseFloat(submitResult.totalScore) / (submitResult.totalPossible || 1)) >= 0.8 ? "text-emerald-400"
+                      : (parseFloat(submitResult.totalScore) / (submitResult.totalPossible || 1)) >= 0.5 ? "text-amber-400"
+                      : "text-rose-400"
+                    }`}>
+                      {((parseFloat(submitResult.totalScore) / (submitResult.totalPossible || 1)) * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                </div>
+                <div className="mt-3 h-2 rounded-full bg-white/5 overflow-hidden">
+                  <div className={`h-full rounded-full transition-all duration-700 ${
+                    (parseFloat(submitResult.totalScore) / (submitResult.totalPossible || 1)) >= 0.8 ? "bg-emerald-500"
+                    : (parseFloat(submitResult.totalScore) / (submitResult.totalPossible || 1)) >= 0.5 ? "bg-amber-500"
+                    : "bg-rose-500"
+                  }`} style={{ width: `${Math.min((parseFloat(submitResult.totalScore) / (submitResult.totalPossible || 1)) * 100, 100)}%` }} />
+                </div>
+              </div>
+            )}
+
+            {/* Per-question results */}
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-2">
+              {resultLoading ? (
+                <div className="flex justify-center py-10">
+                  <div className="text-center">
+                    <div className="w-6 h-6 border-2 border-brand-500/30 border-t-brand-500 rounded-full animate-spin mx-auto mb-2" />
+                    <p className="text-text-tertiary text-xs">Fetching results...</p>
+                  </div>
+                </div>
+              ) : submitResult?.details?.length === 0 ? (
+                <p className="text-text-tertiary text-sm text-center py-6">Results will be available in Completed Exams.</p>
+              ) : submitResult?.details?.map((d: any, i: number) => {
+                const score = parseFloat(d.score);
+                const maxPts = parseFloat(d.questionPoints);
+                const isPass = d.result === "PASS";
+                return (
+                  <div key={d.questionId} className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-sm ${
+                    isPass ? "bg-emerald-500/5 border-emerald-500/15" : "bg-rose-500/5 border-rose-500/15"
+                  }`}>
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${isPass ? "bg-emerald-500/20" : "bg-rose-500/20"}`}>
+                      {isPass
+                        ? <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+                        : <svg className="w-3.5 h-3.5 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
+                      }
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-white truncate">{d.questionTitle}</div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                          d.questionType === "CODE" ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                          : d.questionType === "XPATH" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                          : "bg-brand-500/10 text-brand-400 border-brand-500/20"
+                        }`}>{d.questionType}</span>
+                      </div>
+                    </div>
+                    <div className={`font-mono text-sm font-bold shrink-0 ${isPass ? "text-emerald-400" : "text-rose-400"}`}>
+                      {score.toFixed(1)}/{maxPts.toFixed(1)}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Actions */}
+            <div className="px-6 py-4 border-t border-border-strong shrink-0 flex gap-3">
+              <button onClick={() => {
+                sessionStorage.removeItem(`exam_${examId}_submission_id`);
+                router.push("/student/exams");
+              }} className="flex-1 premium-btn-secondary py-2.5 text-sm">
+                Active Exams
+              </button>
+              <button onClick={() => {
+                sessionStorage.removeItem(`exam_${examId}_submission_id`);
+                router.push("/student/completed");
+              }} className="flex-1 premium-btn-primary py-2.5 text-sm">
+                View My Results →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Footer Navigation */}
       <footer className="h-16 border-t border-border-strong bg-bg-surface flex items-center justify-between px-8 shrink-0">
