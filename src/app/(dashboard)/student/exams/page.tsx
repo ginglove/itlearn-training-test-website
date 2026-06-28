@@ -75,7 +75,9 @@ export default function StudentExamsPage() {
   };
 
   const getExamStatus = (exam: any) => {
-    if (exam.hasActiveAttempt) return "IN_PROGRESS";
+    if (exam.activeAttemptCancelled) return "CANCELLED";      // close date passed, unsubmitted attempt
+    if (exam.activeAttemptPaused) return "PENDING";           // saved & exited, not yet expired
+    if (exam.hasActiveAttempt) return "IN_PROGRESS";          // actively in exam
     if (exam.attemptsCount >= exam.allowedAttempts) return "COMPLETED";
     if (exam.isActive) return "ACTIVE";
     return "UPCOMING";
@@ -92,6 +94,8 @@ export default function StudentExamsPage() {
         statusFilter === "ALL" ||
         (statusFilter === "ACTIVE" && status === "ACTIVE") ||
         (statusFilter === "IN_PROGRESS" && status === "IN_PROGRESS") ||
+        (statusFilter === "PENDING" && status === "PENDING") ||
+        (statusFilter === "CANCELLED" && status === "CANCELLED") ||
         (statusFilter === "UPCOMING" && status === "UPCOMING") ||
         (statusFilter === "COMPLETED" && status === "COMPLETED");
       return matchSession && matchSearch && matchStatus;
@@ -143,8 +147,10 @@ export default function StudentExamsPage() {
               { value: "ALL", label: "All" },
               { value: "ACTIVE", label: "Active" },
               { value: "IN_PROGRESS", label: "In Progress" },
+              { value: "PENDING", label: "Pending" },
               { value: "UPCOMING", label: "Upcoming" },
               { value: "COMPLETED", label: "Completed" },
+              { value: "CANCELLED", label: "Cancelled" },
             ].map((s) => (
               <button
                 key={s.value}
@@ -196,7 +202,11 @@ export default function StudentExamsPage() {
                       <span className={`inline-flex items-center text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${badge.className}`}>
                         {badge.label}
                       </span>
-                      {status === "IN_PROGRESS" ? (
+                      {status === "CANCELLED" ? (
+                        <span className="text-xs font-bold text-red-400 bg-red-500/10 border border-red-500/20 px-2.5 py-0.5 rounded-full">Cancelled by System</span>
+                      ) : status === "PENDING" ? (
+                        <span className="text-xs font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 rounded-full">Pending</span>
+                      ) : status === "IN_PROGRESS" ? (
                         <span className="text-xs font-bold text-blue-400 bg-blue-500/10 border border-blue-500/20 px-2.5 py-0.5 rounded-full animate-pulse">In Progress</span>
                       ) : status === "COMPLETED" ? (
                         <span className="text-xs font-bold text-text-tertiary bg-bg-surface-elevated px-2.5 py-0.5 rounded-full">Completed</span>
@@ -242,9 +252,17 @@ export default function StudentExamsPage() {
                       </div>
                     </div>
 
-                    {status === "IN_PROGRESS" ? (
+                    {status === "CANCELLED" ? (
+                      <button disabled className="premium-btn-secondary w-full text-sm opacity-50 cursor-not-allowed">
+                        Closed — Not Submitted
+                      </button>
+                    ) : status === "PENDING" ? (
                       <button onClick={() => startExam(exam.id)} className="premium-btn-primary w-full text-sm">
                         Resume Exam
+                      </button>
+                    ) : status === "IN_PROGRESS" ? (
+                      <button onClick={() => startExam(exam.id)} className="premium-btn-primary w-full text-sm">
+                        Continue Exam
                       </button>
                     ) : status === "COMPLETED" ? (
                       <button disabled className="premium-btn-secondary w-full text-sm opacity-50 cursor-not-allowed">

@@ -65,24 +65,24 @@ export async function GET(
       }
     }
 
+    // Fetch the active submission to get active time already spent
+    const [activeSubmission] = await db
+      .select({ id: examSubmissions.id, questionOrder: examSubmissions.questionOrder, activeSeconds: examSubmissions.activeSeconds })
+      .from(examSubmissions)
+      .where(
+        and(
+          eq(examSubmissions.examId, examId),
+          eq(examSubmissions.studentId, studentId),
+          isNull(examSubmissions.submittedAt)
+        )
+      )
+      .limit(1);
+
     // Shuffle if configured — persist order so it stays the same on resume
     if (exam.isShuffled) {
-      // Look up the active submission for this student
-      const [submission] = await db
-        .select({ id: examSubmissions.id, questionOrder: examSubmissions.questionOrder })
-        .from(examSubmissions)
-        .where(
-          and(
-            eq(examSubmissions.examId, examId),
-            eq(examSubmissions.studentId, studentId),
-            isNull(examSubmissions.submittedAt)
-          )
-        )
-        .limit(1);
-
-      if (submission?.questionOrder && (submission.questionOrder as string[]).length === enrichedQuestions.length) {
+      if (activeSubmission?.questionOrder && (activeSubmission.questionOrder as string[]).length === enrichedQuestions.length) {
         // Resume: restore the previously saved order
-        const orderMap = new Map((submission.questionOrder as string[]).map((id, idx) => [id, idx]));
+        const orderMap = new Map((activeSubmission.questionOrder as string[]).map((id, idx) => [id, idx]));
         enrichedQuestions.sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
       } else {
         // First load: shuffle and persist the order
@@ -90,16 +90,31 @@ export async function GET(
           const j = Math.floor(Math.random() * (i + 1));
           [enrichedQuestions[i], enrichedQuestions[j]] = [enrichedQuestions[j], enrichedQuestions[i]];
         }
-        if (submission) {
+        if (activeSubmission) {
           await db
             .update(examSubmissions)
             .set({ questionOrder: enrichedQuestions.map((q) => q.id) })
-            .where(eq(examSubmissions.id, submission.id));
+            .where(eq(examSubmissions.id, activeSubmission.id));
         }
       }
     }
 
-    return NextResponse.json({ status: "SUCCESS", questions: enrichedQuestions, examTitle: exam.title, focusLossPolicy: exam.focusLossPolicy ?? "LOG_ONLY" });
+    // Clear SAVE_AND_EXIT so status shows IN_PROGRESS again while student is in the room
+    if (activeSubmission) {
+      await db
+        .update(examSubmissions)
+        .set({ closeReason: null })
+        .where(eq(examSubmissions.id, activeSubmission.id));
+    }
+
+    return NextResponse.json({
+      status: "SUCCESS",
+      questions: enrichedQuestions,
+      examTitle: exam.title,
+      focusLossPolicy: exam.focusLossPolicy ?? "LOG_ONLY",
+      activeSeconds: activeSubmission?.activeSeconds ?? 0,
+      examDurationMins: exam.duration,
+    });
   } catch (error) {
     console.error("Fetch questions error:", error);
     return NextResponse.json(

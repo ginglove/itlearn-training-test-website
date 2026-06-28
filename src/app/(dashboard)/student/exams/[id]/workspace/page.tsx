@@ -40,6 +40,9 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
   const [submissionId] = useState<string | null>(() =>
     typeof window !== 'undefined' ? sessionStorage.getItem(`exam_${examId}_submission_id`) : null
   );
+  // Tracks how many seconds were already spent on this exam in prior sessions
+  const sessionStartRef = useRef<number>(Date.now());
+  const prevActiveSecondsRef = useRef<number>(0);
 
   // Reset active tab when question changes; keep results per-question
   useEffect(() => {
@@ -97,14 +100,15 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
           setAnswers(initialAnswers);
         }
 
-        // Compute remaining time from startAt + examDuration stored by the exams list page
-        const startAt = sessionStorage.getItem(`exam_${examId}_start_at`);
-        const durationMins = parseInt(sessionStorage.getItem(`exam_${examId}_duration`) || "60", 10);
-        let remaining = durationMins * 60;
-        if (startAt) {
-          const elapsed = Math.floor((Date.now() - new Date(startAt).getTime()) / 1000);
-          remaining = durationMins * 60 - elapsed;
-        }
+        // Compute remaining time from activeSeconds (time already spent in exam)
+        // Use API-returned values; fall back to sessionStorage duration if API doesn't provide it
+        const apiDurationMins = questionsData.examDurationMins;
+        const durationMins = apiDurationMins
+          ?? parseInt(sessionStorage.getItem(`exam_${examId}_duration`) || "60", 10);
+        const alreadySpentSeconds: number = questionsData.activeSeconds ?? 0;
+        prevActiveSecondsRef.current = alreadySpentSeconds;
+        sessionStartRef.current = Date.now();
+        let remaining = durationMins * 60 - alreadySpentSeconds;
 
         if (remaining <= 0) {
           timeAlreadyExpired = true;
@@ -375,10 +379,12 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ submission_id: submissionId, unsynced_payloads: payloads }),
       });
+      const thisSessionSeconds = Math.floor((Date.now() - sessionStartRef.current) / 1000);
+      const totalActiveSeconds = prevActiveSecondsRef.current + thisSessionSeconds;
       await fetch(`/api/v1/student/exams/${examId}/exit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ submissionId }),
+        body: JSON.stringify({ submissionId, activeSeconds: totalActiveSeconds }),
       });
     } catch {
       // Even on network error we navigate away — draft is auto-saved periodically

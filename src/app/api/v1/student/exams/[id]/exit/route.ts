@@ -15,7 +15,7 @@ export async function POST(
 
     const { id: examId } = await params;
     const body = await request.json();
-    const { submissionId } = body;
+    const { submissionId, activeSeconds } = body;
     if (!submissionId) {
       return NextResponse.json(
         { error: "VALIDATION_ERROR", message: "submissionId required" },
@@ -43,8 +43,15 @@ export async function POST(
       );
     }
 
-    // Keep the draft and all saved answers intact so the student can resume later.
-    // The submission record stays with submittedAt = null until they submit or time runs out.
+    // Save active time spent and mark as paused (SAVE_AND_EXIT)
+    const savedSeconds = typeof activeSeconds === "number" && activeSeconds >= 0
+      ? activeSeconds
+      : (submission.activeSeconds ?? 0);
+
+    await db
+      .update(examSubmissions)
+      .set({ closeReason: "SAVE_AND_EXIT", activeSeconds: savedSeconds })
+      .where(eq(examSubmissions.id, submissionId));
 
     return NextResponse.json(
       { status: "SAVED", message: "Progress saved. You can resume this exam before it closes." },
