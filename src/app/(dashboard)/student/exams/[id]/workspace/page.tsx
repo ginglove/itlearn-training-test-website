@@ -404,14 +404,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
             </svg>
           </div>
           <h2 className="text-xl font-bold text-white mb-2">Time&apos;s Up</h2>
-          {isSubmitting || resultLoading ? (
-            <>
-              <p className="text-text-secondary text-sm mb-6">
-                Your exam time has expired. Submitting and grading your answers now…
-              </p>
-              <div className="w-6 h-6 border-2 border-rose-500/30 border-t-rose-500 rounded-full animate-spin mx-auto" />
-            </>
-          ) : submitResult ? (
+          {submitResult ? (
             <>
               <p className="text-text-secondary text-sm mb-4">Your exam has been submitted and graded.</p>
               <div className={`text-3xl font-black mb-1 ${
@@ -434,6 +427,13 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                   View Results →
                 </button>
               </div>
+            </>
+          ) : isSubmitting || resultLoading ? (
+            <>
+              <p className="text-text-secondary text-sm mb-6">
+                Your exam time has expired. Submitting and grading your answers now…
+              </p>
+              <div className="w-6 h-6 border-2 border-rose-500/30 border-t-rose-500 rounded-full animate-spin mx-auto" />
             </>
           ) : (
             <>
