@@ -335,9 +335,12 @@ function buildAutoHarness(sourceCode: string, language: string, funcName: string
   };
   var __args__;
   if(__lines__.length === 1){
-    // Single line: try splitting by whitespace for multi-param functions
     var __parts__ = __lines__[0].trim().split(/\\s+/);
-    __args__ = __parts__.length > 1 ? __parts__.map(__parse__) : [__parse__(__lines__[0])];
+    // Only split into multiple args when ALL parts are numeric.
+    // If any part is non-numeric, pass the whole line as one string argument
+    // so that inputs like "a b c" are not wrongly split into ["a","b","c"].
+    var __allNum__ = __parts__.length > 1 && __parts__.every(function(p){ var n=Number(p.trim()); return !isNaN(n) && p.trim()!==''; });
+    __args__ = __allNum__ ? __parts__.map(__parse__) : [__parse__(__lines__[0])];
   } else {
     __args__ = __lines__.map(__parse__);
   }
@@ -361,7 +364,15 @@ def __parse__(x):
         except ValueError: return x
 if len(__lines__) == 1:
     __parts__ = __lines__[0].strip().split()
-    __args__ = [__parse__(p) for p in __parts__] if len(__parts__) > 1 else [__parse__(__lines__[0])]
+    def __all_num__(ps):
+        for p in ps:
+            try: float(p)
+            except: return False
+        return True
+    if len(__parts__) > 1 and __all_num__(__parts__):
+        __args__ = [__parse__(p) for p in __parts__]
+    else:
+        __args__ = [__parse__(__lines__[0])]
 else:
     __args__ = [__parse__(l) for l in __lines__]
 __r__ = ${funcName}(*__args__)
