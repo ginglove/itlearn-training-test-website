@@ -35,7 +35,11 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
   const [submitResult, setSubmitResult] = useState<{ totalScore: string; totalPossible: number; details: any[] } | null>(null);
   const [resultLoading, setResultLoading] = useState(false);
   const [settings, setSettings] = useState<any>(null);
-  const submissionId = typeof window !== 'undefined' ? sessionStorage.getItem(`exam_${examId}_submission_id`) : null;
+  // Store submissionId in state so it doesn't become null when we clear
+  // sessionStorage after submit (which would trigger the redirect guard).
+  const [submissionId] = useState<string | null>(() =>
+    typeof window !== 'undefined' ? sessionStorage.getItem(`exam_${examId}_submission_id`) : null
+  );
 
   // Reset active tab when question changes; keep results per-question
   useEffect(() => {
@@ -321,7 +325,9 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
 
       if (res.ok) {
         const data = await res.json();
-        sessionStorage.removeItem(`exam_${examId}_submission_id`);
+        // Don't clear sessionStorage here — clearing it triggers a re-render
+        // where submissionId becomes null, firing the redirect guard before
+        // the results overlay can show. Clear it when the student navigates away.
         // Fetch detailed per-question results to show in the overlay
         setResultLoading(true);
         setShowResultOverlay(true);
@@ -1269,10 +1275,16 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
 
             {/* Actions */}
             <div className="px-6 py-4 border-t border-border-strong shrink-0 flex gap-3">
-              <button onClick={() => router.push("/student/exams")} className="flex-1 premium-btn-secondary py-2.5 text-sm">
+              <button onClick={() => {
+                sessionStorage.removeItem(`exam_${examId}_submission_id`);
+                router.push("/student/exams");
+              }} className="flex-1 premium-btn-secondary py-2.5 text-sm">
                 Active Exams
               </button>
-              <button onClick={() => router.push("/student/completed")} className="flex-1 premium-btn-primary py-2.5 text-sm">
+              <button onClick={() => {
+                sessionStorage.removeItem(`exam_${examId}_submission_id`);
+                router.push("/student/completed");
+              }} className="flex-1 premium-btn-primary py-2.5 text-sm">
                 View My Results →
               </button>
             </div>
