@@ -171,10 +171,13 @@ async function executeLocalSingleTestCase(
       }
     );
 
-    if (input) {
-      child.stdin?.write(input);
+    if (child.stdin) {
+      // Always write input (even empty string) so the process gets a proper stdin stream.
+      // Ensure input ends with a newline so Python's input() / readline() does not hang.
+      const payload = input.endsWith("\n") ? input : input + "\n";
+      child.stdin.write(payload);
+      child.stdin.end();
     }
-    child.stdin?.end();
   });
 }
 
@@ -277,29 +280,147 @@ async function executeSingleTestCase(
   };
 }
 
+/**
+ * Detects the last user-defined function name in the source code.
+ * Returns null if none found or if the code already has output statements.
+ */
+function detectFunctionName(sourceCode: string, language: string): string | null {
+  if (language === "javascript") {
+    // Skip auto-harness if the student already writes output
+    if (/console\s*\.\s*log\s*\(|process\s*\.\s*stdout\s*\.\s*write\s*\(/.test(sourceCode)) {
+      return null;
+    }
+    // Match: function name(...), const/let/var name = (...) =>, const/let/var name = function(
+    // Only match top-level declarations (^ with /m = start of line, no leading whitespace)
+    // so nested helpers like `const isValid = ...` inside a function body are ignored.
+    const patterns = [
+      /^(?:async\s+)?function\s+(\w+)\s*\(/gm,
+      /^(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?\([^)]*\)\s*=>/gm,
+      /^(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?(\w+)\s*=>/gm,
+      /^(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?function\s*\(/gm,
+    ];
+    let lastName: string | null = null;
+    for (const pattern of patterns) {
+      for (const m of sourceCode.matchAll(pattern)) {
+        const name = m[1];
+        if (!["require", "exports", "module", "process"].includes(name)) {
+          lastName = name;
+        }
+      }
+    }
+    return lastName;
+  }
+
+  if (language === "python") {
+    if (/\bprint\s*\(/.test(sourceCode)) return null;
+    const matches = [...sourceCode.matchAll(/^def\s+(\w+)\s*\(/gm)];
+    return matches.length > 0 ? matches[matches.length - 1][1] : null;
+  }
+
+  return null;
+}
+
+/**
+ * Builds a harness that calls the detected function with stdin input and prints the result.
+ * Used when student submits function-only code with no output statements.
+ */
+function buildAutoHarness(sourceCode: string, language: string, funcName: string): string {
+  if (language === "javascript") {
+    return `${sourceCode}
+;(function(){
+  var __lines__ = require('fs').readFileSync(0,'utf8').trim().split('\\n').filter(Boolean);
+  var __parse__ = function(l){
+    if(l.trim()==='true') return true;
+    if(l.trim()==='false') return false;
+    var n = Number(l.trim());
+    return isNaN(n) ? l.trim() : n;
+  };
+  var __args__;
+  if(__lines__.length === 1){
+    var __parts__ = __lines__[0].trim().split(/\\s+/);
+    // Only split into multiple args when ALL parts are numeric.
+    // If any part is non-numeric, pass the whole line as one string argument
+    // so that inputs like "a b c" are not wrongly split into ["a","b","c"].
+    var __allNum__ = __parts__.length > 1 && __parts__.every(function(p){ var n=Number(p.trim()); return !isNaN(n) && p.trim()!==''; });
+    __args__ = __allNum__ ? __parts__.map(__parse__) : [__parse__(__lines__[0])];
+  } else {
+    __args__ = __lines__.map(__parse__);
+  }
+  var __r__ = ${funcName}.apply(null, __args__);
+  if(__r__ !== undefined && __r__ !== null) console.log(__r__);
+})();`;
+  }
+
+  if (language === "python") {
+    return `${sourceCode}
+
+import sys as __sys__
+__lines__ = [l for l in __sys__.stdin.read().strip().split('\\n') if l]
+def __parse__(x):
+    x = x.strip()
+    if x == 'true': return True
+    if x == 'false': return False
+    try: return int(x)
+    except ValueError:
+        try: return float(x)
+        except ValueError: return x
+if len(__lines__) == 1:
+    __parts__ = __lines__[0].strip().split()
+    def __all_num__(ps):
+        for p in ps:
+            try: float(p)
+            except: return False
+        return True
+    if len(__parts__) > 1 and __all_num__(__parts__):
+        __args__ = [__parse__(p) for p in __parts__]
+    else:
+        __args__ = [__parse__(__lines__[0])]
+else:
+    __args__ = [__parse__(l) for l in __lines__]
+__r__ = ${funcName}(*__args__)
+if __r__ is not None:
+    print(__r__)
+`;
+  }
+
+  return sourceCode;
+}
+
 function normalizeNumber(token: string): string {
   const num = Number(token);
   if (!isNaN(num) && token.trim() !== "") {
-    // Round to 6 significant digits to absorb floating-point noise
-    return parseFloat(num.toPrecision(6)).toString();
+    // Round to 9 significant digits to absorb floating-point noise without
+    // mangling large integers (e.g. 12345678 must stay 12345678, not 12345700)
+    return parseFloat(num.toPrecision(9)).toString();
   }
   return token;
 }
 
 function normalizeLine(line: string): string {
-  // Split on boundaries between digits/dots and non-numeric characters,
-  // normalize each numeric token, then rejoin.
-  return line.replace(/[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?/g, (match) =>
+  // Case-fold Python/Java booleans so True/False match true/false anywhere in the line
+  const boolFolded = line.replace(/\bTrue\b/g, "true").replace(/\bFalse\b/g, "false");
+  // Normalize numeric tokens to absorb floating-point noise
+  return boolFolded.replace(/[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?/g, (match) =>
     normalizeNumber(match)
   );
 }
 
 function normalizeOutput(output: string): string {
-  return output
-    .split("\n")
-    .map((line: string) => normalizeLine(line.trimEnd()))
-    .join("\n")
-    .trim();
+  return (
+    output
+      // Normalise Windows (\r\n) and old-Mac (\r) line endings to \n
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n")
+      .split("\n")
+      .map((line: string) => {
+        // Trim BOTH leading and trailing whitespace from each line so that
+        // indented output (e.g. a console.log inside a function block) still
+        // matches the unindented expected value
+        return normalizeLine(line.trim());
+      })
+      .join("\n")
+      .trim()
+  );
 }
 
 export async function executeCode(
@@ -345,8 +466,16 @@ export async function executeCode(
         }
       }
 
+      // If student wrote function-only code (no output statements), pre-inject
+      // the harness so it runs stdin → function → console.log in one pass.
+      // This avoids relying on post-hoc exitCode checks that vary across runtimes.
+      const autoFuncName = detectFunctionName(request.sourceCode, request.language);
+      const codeToRun = autoFuncName
+        ? buildAutoHarness(request.sourceCode, request.language, autoFuncName)
+        : request.sourceCode;
+
       const execution = await executeSingleTestCase(
-        request.sourceCode,
+        codeToRun,
         request.language,
         testCase.input,
         request.timeLimitMs,
