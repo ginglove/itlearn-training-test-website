@@ -93,8 +93,8 @@ export async function POST(
       if (q.type === "QUIZ") {
         const options = quizOptionsMap.get(q.id) ?? [];
         const correctOptionIds = options.filter((opt: any) => opt.isCorrect).map((opt: any) => opt.id);
-        const result = gradeQuizQuestion({ selectedOptionIds: answer.selected_options || [], correctOptionIds, totalPoints: parseFloat(q.points as string) });
-        totalScore += result.score;
+        const result = gradeQuizQuestion({ selectedOptionIds: answer.selected_options || [], correctOptionIds, totalPoints: parseFloat(q.points as string) || 0 });
+        totalScore += result.score || 0;
         detailInserts.push({ submissionId: subId, questionId: q.id, selectedOptions: answer.selected_options || [], score: result.score.toFixed(2) });
       } else if (q.type === "CODE") {
         const config = configMap.get(q.id);
@@ -110,11 +110,11 @@ export async function POST(
             timeLimitMs: config?.timeLimit || 2000,
             teacherCode: config?.teacherCode || undefined,
           });
-          questionScore = (executionResult.scorePercentage / 100) * parseFloat(q.points as string);
+          questionScore = (executionResult.scorePercentage / 100) * (parseFloat(q.points as string) || 0);
           overallStatus = executionResult.overallStatus;
         }
 
-        totalScore += questionScore;
+        totalScore += questionScore || 0;
         detailInserts.push({ submissionId: subId, questionId: q.id, sourceCode: answer.source_code, language: answer.language, status: overallStatus, score: questionScore.toFixed(2) });
       } else if (q.type === "XPATH") {
         const xConfig = xpathConfigMap.get(q.id);
@@ -130,7 +130,7 @@ export async function POST(
             studentSelector: studentSelector.trim(),
           });
           xpathStatus = xResult.status;
-          questionScore = (xResult.scorePercentage / 100) * parseFloat(q.points as string);
+          questionScore = (xResult.scorePercentage / 100) * (parseFloat(q.points as string) || 0);
         }
 
         totalScore += questionScore;
@@ -138,7 +138,7 @@ export async function POST(
       }
     }
 
-    const maxPossible = examQuestions.reduce((sum, q) => sum + parseFloat(q.points as string), 0);
+    const maxPossible = examQuestions.reduce((sum, q) => sum + (parseFloat(q.points as string) || 0), 0);
     const safeTotalScore = Math.max(0, Math.min(totalScore, maxPossible));
 
     await db.transaction(async (tx) => {

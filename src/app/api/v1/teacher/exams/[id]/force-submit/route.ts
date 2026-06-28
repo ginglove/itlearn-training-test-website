@@ -89,7 +89,7 @@ export async function POST(
       if (q.type === "QUIZ") {
         const options = quizOptionsMap.get(q.id) ?? [];
         const correctOptionIds = options.filter((o: any) => o.isCorrect).map((o: any) => o.id);
-        const result = gradeQuizQuestion({ selectedOptionIds: draft?.selectedOptions ?? [], correctOptionIds, totalPoints: parseFloat(q.points as string) });
+        const result = gradeQuizQuestion({ selectedOptionIds: draft?.selectedOptions ?? [], correctOptionIds, totalPoints: parseFloat(q.points as string) || 0 });
         totalScore += result.score;
         detailInserts.push({ submissionId: activeSubmission.id, questionId: q.id, selectedOptions: draft?.selectedOptions ?? [], score: result.score.toFixed(2) });
       } else if (q.type === "CODE") {
@@ -99,7 +99,7 @@ export async function POST(
         let overallStatus: "AC" | "WA" | "CE" | "RE" | "TLE" | "OFE" = "WA";
         if (draft?.sourceCode && cases.length > 0) {
           const execResult = await executeCode({ sourceCode: draft.sourceCode, language: (draft.language ?? "python") as "python" | "javascript", testCases: cases.map((c: any) => ({ id: c.id, input: c.inputData, expectedOutput: c.outputData })), timeLimitMs: config?.timeLimit ?? 2000, teacherCode: config?.teacherCode ?? undefined });
-          questionScore = (execResult.scorePercentage / 100) * parseFloat(q.points as string);
+          questionScore = (execResult.scorePercentage / 100) * (parseFloat(q.points as string) || 0);
           overallStatus = execResult.overallStatus;
         }
         totalScore += questionScore;
@@ -113,14 +113,14 @@ export async function POST(
         if (studentSelector && xConfig && cases.length > 0) {
           const xResult = await gradeXPathQuestion({ selectorType: (xConfig.selectorType as "XPATH" | "CSS") ?? "XPATH", testCases: cases.map((c: any) => ({ targetType: c.targetType as "URL" | "HTML", targetPayload: c.targetPayload, referenceSelector: c.referenceSelector })), studentSelector });
           xpathStatus = xResult.status;
-          questionScore = (xResult.scorePercentage / 100) * parseFloat(q.points as string);
+          questionScore = (xResult.scorePercentage / 100) * (parseFloat(q.points as string) || 0);
         }
         totalScore += questionScore;
         detailInserts.push({ submissionId: activeSubmission.id, questionId: q.id, studentXpath: studentSelector, status: xpathStatus, score: questionScore.toFixed(2) });
       }
     }
 
-    const maxPossible = examQuestions.reduce((sum, q) => sum + parseFloat(q.points as string), 0);
+    const maxPossible = examQuestions.reduce((sum, q) => sum + (parseFloat(q.points as string) || 0), 0);
     const safeTotalScore = Math.max(0, Math.min(totalScore, maxPossible));
 
     await db.transaction(async (tx) => {
