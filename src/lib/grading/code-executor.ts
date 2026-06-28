@@ -291,11 +291,13 @@ function detectFunctionName(sourceCode: string, language: string): string | null
       return null;
     }
     // Match: function name(...), const/let/var name = (...) =>, const/let/var name = function(
+    // Only match top-level declarations (^ with /m = start of line, no leading whitespace)
+    // so nested helpers like `const isValid = ...` inside a function body are ignored.
     const patterns = [
-      /(?:^|\n)\s*(?:async\s+)?function\s+(\w+)\s*\(/gm,
-      /(?:^|\n)\s*(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?\([^)]*\)\s*=>/gm,
-      /(?:^|\n)\s*(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?(\w+)\s*=>/gm,
-      /(?:^|\n)\s*(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?function\s*\(/gm,
+      /^(?:async\s+)?function\s+(\w+)\s*\(/gm,
+      /^(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?\([^)]*\)\s*=>/gm,
+      /^(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?(\w+)\s*=>/gm,
+      /^(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?function\s*\(/gm,
     ];
     let lastName: string | null = null;
     for (const pattern of patterns) {
@@ -311,7 +313,7 @@ function detectFunctionName(sourceCode: string, language: string): string | null
 
   if (language === "python") {
     if (/\bprint\s*\(/.test(sourceCode)) return null;
-    const matches = [...sourceCode.matchAll(/(?:^|\n)def\s+(\w+)\s*\(/gm)];
+    const matches = [...sourceCode.matchAll(/^def\s+(\w+)\s*\(/gm)];
     return matches.length > 0 ? matches[matches.length - 1][1] : null;
   }
 
