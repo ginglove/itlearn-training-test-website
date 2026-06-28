@@ -13,7 +13,8 @@ interface ExamGroup {
   totalCompleted: number;
   totalPass: number;
   totalFail: number;
-  totalIncomplete: number;
+  totalPending: number;
+  totalCancelled: number;
   lastSubmittedAt: string | null;
   bestScore: string | null;
 }
@@ -151,8 +152,8 @@ function MiniTrend({ submissions }: { submissions: ExamSubmission[] }) {
   const done = submissions.filter(s => s.submittedAt).slice(0, 10);
   if (done.length < 2) return null;
 
-  const W = 560, H = 140;
-  const LEFT = 44, RIGHT = 16, TOP = 12, BOTTOM = 36;
+  const W = 560, H = 160;
+  const LEFT = 44, RIGHT = 60, TOP = 28, BOTTOM = 36;
   const chartW = W - LEFT - RIGHT;
   const chartH = H - TOP - BOTTOM;
 
@@ -163,8 +164,6 @@ function MiniTrend({ submissions }: { submissions: ExamSubmission[] }) {
       y: TOP + (1 - p / 100) * chartH,
       pct: p,
       date: new Date(s.startAt).toLocaleDateString(undefined, { month: "short", day: "numeric" }),
-      score: s.totalScore,
-      total: s.totalPossibleScore,
     };
   });
 
@@ -174,10 +173,11 @@ function MiniTrend({ submissions }: { submissions: ExamSubmission[] }) {
     + ` L ${pts[0].x.toFixed(1)} ${(TOP + chartH).toFixed(1)} Z`;
 
   const gridLines = [0, 25, 50, 75, 100];
+  const passY = TOP + (1 - 50 / 100) * chartH;
 
   return (
     <div className="w-full">
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ minHeight: 120 }}>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ minHeight: 140 }}>
         <defs>
           <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#6366f1" stopOpacity="0.25" />
@@ -193,58 +193,51 @@ function MiniTrend({ submissions }: { submissions: ExamSubmission[] }) {
             <g key={v}>
               <line
                 x1={LEFT} y1={y} x2={W - RIGHT} y2={y}
-                stroke={isPass ? "rgba(251,191,36,0.25)" : "rgba(255,255,255,0.07)"}
+                stroke={isPass ? "rgba(251,191,36,0.3)" : "rgba(255,255,255,0.07)"}
                 strokeWidth={isPass ? "1.5" : "1"}
-                strokeDasharray={isPass ? "4 3" : undefined}
+                strokeDasharray={isPass ? "5 3" : undefined}
               />
-              <text x={LEFT - 6} y={y + 4} textAnchor="end" fontSize="9" fill={isPass ? "rgba(251,191,36,0.7)" : "rgba(255,255,255,0.3)"} fontWeight={isPass ? "600" : "400"}>
+              <text x={LEFT - 6} y={y + 4} textAnchor="end" fontSize="9"
+                fill={isPass ? "rgba(251,191,36,0.8)" : "rgba(255,255,255,0.3)"}
+                fontWeight={isPass ? "700" : "400"}>
                 {v}%
               </text>
             </g>
           );
         })}
 
-        {/* Pass threshold label */}
-        <text x={W - RIGHT} y={TOP + chartH / 2 + 4} textAnchor="end" fontSize="8" fill="rgba(251,191,36,0.5)">pass line</text>
+        {/* Pass line label on the right */}
+        <text x={W - RIGHT + 4} y={passY + 4} textAnchor="start" fontSize="8.5" fill="rgba(251,191,36,0.7)" fontWeight="600">pass</text>
 
         {/* Fill area */}
         <path d={fillPath} fill="url(#trendFill)" />
 
         {/* Trend line */}
-        <path d={linePath} fill="none" stroke="#6366f1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <path d={linePath} fill="none" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
 
-        {/* Data points with score labels */}
+        {/* Data points */}
         {pts.map((p, i) => {
           const color = p.pct >= 80 ? "#34d399" : p.pct >= 50 ? "#fbbf24" : "#f87171";
-          const labelAbove = p.y > TOP + 22; // put label above dot if dot is low
+          // Score label: always above dot, but clamp so it never goes above TOP
+          const labelY = Math.max(TOP + 10, p.y - 12);
           return (
             <g key={i}>
-              {/* Dot */}
-              <circle cx={p.x} cy={p.y} r="5" fill={color} stroke="#0f0f1a" strokeWidth="2" />
-              {/* Score % label */}
-              <text
-                x={p.x} y={labelAbove ? p.y - 10 : p.y + 17}
-                textAnchor="middle" fontSize="9.5" fontWeight="700" fill={color}
-              >
+              <circle cx={p.x} cy={p.y} r="5.5" fill={color} stroke="#0f0f1a" strokeWidth="2" />
+              {/* Score % label above dot */}
+              <text x={p.x} y={labelY} textAnchor="middle" fontSize="10" fontWeight="700" fill={color}>
                 {p.pct.toFixed(0)}%
               </text>
-              {/* X-axis date label */}
-              <text
-                x={p.x} y={H - 4}
-                textAnchor="middle" fontSize="8.5" fill="rgba(255,255,255,0.35)"
-              >
+              {/* Attempt # */}
+              <text x={p.x} y={H - 18} textAnchor="middle" fontSize="8" fill="rgba(255,255,255,0.4)">
+                #{i + 1}
+              </text>
+              {/* Date */}
+              <text x={p.x} y={H - 6} textAnchor="middle" fontSize="8.5" fill="rgba(255,255,255,0.35)">
                 {p.date}
               </text>
             </g>
           );
         })}
-
-        {/* Attempt number label above x-axis */}
-        {pts.map((p, i) => (
-          <text key={i} x={p.x} y={H - 14} textAnchor="middle" fontSize="7.5" fill="rgba(255,255,255,0.2)">
-            #{i + 1}
-          </text>
-        ))}
       </svg>
     </div>
   );
@@ -376,7 +369,8 @@ export default function CompletedExamsPage() {
                     <th className="py-3.5 px-4 text-center">Completed</th>
                     <th className="py-3.5 px-4 text-center">Pass</th>
                     <th className="py-3.5 px-4 text-center">Fail</th>
-                    <th className="py-3.5 px-4 text-center">Incomplete</th>
+                    <th className="py-3.5 px-4 text-center">Pending</th>
+                    <th className="py-3.5 px-4 text-center">Cancelled</th>
                     <th className="py-3.5 px-4 text-center">Best Score</th>
                     <th className="py-3.5 px-4"></th>
                   </tr>
@@ -416,9 +410,18 @@ export default function CompletedExamsPage() {
                           </span>
                         </td>
                         <td className="py-4 px-4 text-center">
-                          {Number(g.totalIncomplete) > 0 ? (
-                            <span className="inline-flex items-center justify-center min-w-[28px] px-2 py-0.5 rounded-full text-xs font-bold bg-zinc-500/10 text-zinc-400 border border-zinc-500/20">
-                              {g.totalIncomplete}
+                          {Number(g.totalPending) > 0 ? (
+                            <span className="inline-flex items-center justify-center min-w-[28px] px-2 py-0.5 rounded-full text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                              {g.totalPending}
+                            </span>
+                          ) : (
+                            <span className="text-text-tertiary text-xs">—</span>
+                          )}
+                        </td>
+                        <td className="py-4 px-4 text-center">
+                          {Number(g.totalCancelled) > 0 ? (
+                            <span className="inline-flex items-center justify-center min-w-[28px] px-2 py-0.5 rounded-full text-xs font-bold bg-red-500/10 text-red-400 border border-red-500/20">
+                              {g.totalCancelled}
                             </span>
                           ) : (
                             <span className="text-text-tertiary text-xs">—</span>
