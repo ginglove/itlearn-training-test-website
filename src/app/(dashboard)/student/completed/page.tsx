@@ -146,21 +146,107 @@ function ExpandableCode({ code, language }: { code: string; language: string | n
   );
 }
 
-/* ── Score Trend SVG ────────────────────────────────────────────────────── */
+/* ── Score Trend chart ──────────────────────────────────────────────────── */
 function MiniTrend({ submissions }: { submissions: ExamSubmission[] }) {
   const done = submissions.filter(s => s.submittedAt).slice(0, 10);
   if (done.length < 2) return null;
-  const W = 200, H = 40, PAD = 6;
-  const pts = done.map((s, i) => ({
-    x: PAD + (i / (done.length - 1)) * (W - PAD * 2),
-    y: PAD + (1 - pct(s.totalScore, s.totalPossibleScore) / 100) * (H - PAD * 2),
-  }));
-  const d = pts.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
+
+  const W = 560, H = 140;
+  const LEFT = 44, RIGHT = 16, TOP = 12, BOTTOM = 36;
+  const chartW = W - LEFT - RIGHT;
+  const chartH = H - TOP - BOTTOM;
+
+  const pts = done.map((s, i) => {
+    const p = pct(s.totalScore, s.totalPossibleScore);
+    return {
+      x: LEFT + (done.length === 1 ? chartW / 2 : (i / (done.length - 1)) * chartW),
+      y: TOP + (1 - p / 100) * chartH,
+      pct: p,
+      date: new Date(s.startAt).toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+      score: s.totalScore,
+      total: s.totalPossibleScore,
+    };
+  });
+
+  const linePath = pts.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
+  const fillPath = linePath
+    + ` L ${pts[pts.length - 1].x.toFixed(1)} ${(TOP + chartH).toFixed(1)}`
+    + ` L ${pts[0].x.toFixed(1)} ${(TOP + chartH).toFixed(1)} Z`;
+
+  const gridLines = [0, 25, 50, 75, 100];
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-10">
-      <path d={d} fill="none" stroke="#6366f1" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      {pts.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r="2" fill="#6366f1" />)}
-    </svg>
+    <div className="w-full">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ minHeight: 120 }}>
+        <defs>
+          <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#6366f1" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="#6366f1" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+
+        {/* Grid lines + Y-axis labels */}
+        {gridLines.map(v => {
+          const y = TOP + (1 - v / 100) * chartH;
+          const isPass = v === 50;
+          return (
+            <g key={v}>
+              <line
+                x1={LEFT} y1={y} x2={W - RIGHT} y2={y}
+                stroke={isPass ? "rgba(251,191,36,0.25)" : "rgba(255,255,255,0.07)"}
+                strokeWidth={isPass ? "1.5" : "1"}
+                strokeDasharray={isPass ? "4 3" : undefined}
+              />
+              <text x={LEFT - 6} y={y + 4} textAnchor="end" fontSize="9" fill={isPass ? "rgba(251,191,36,0.7)" : "rgba(255,255,255,0.3)"} fontWeight={isPass ? "600" : "400"}>
+                {v}%
+              </text>
+            </g>
+          );
+        })}
+
+        {/* Pass threshold label */}
+        <text x={W - RIGHT} y={TOP + chartH / 2 + 4} textAnchor="end" fontSize="8" fill="rgba(251,191,36,0.5)">pass line</text>
+
+        {/* Fill area */}
+        <path d={fillPath} fill="url(#trendFill)" />
+
+        {/* Trend line */}
+        <path d={linePath} fill="none" stroke="#6366f1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+
+        {/* Data points with score labels */}
+        {pts.map((p, i) => {
+          const color = p.pct >= 80 ? "#34d399" : p.pct >= 50 ? "#fbbf24" : "#f87171";
+          const labelAbove = p.y > TOP + 22; // put label above dot if dot is low
+          return (
+            <g key={i}>
+              {/* Dot */}
+              <circle cx={p.x} cy={p.y} r="5" fill={color} stroke="#0f0f1a" strokeWidth="2" />
+              {/* Score % label */}
+              <text
+                x={p.x} y={labelAbove ? p.y - 10 : p.y + 17}
+                textAnchor="middle" fontSize="9.5" fontWeight="700" fill={color}
+              >
+                {p.pct.toFixed(0)}%
+              </text>
+              {/* X-axis date label */}
+              <text
+                x={p.x} y={H - 4}
+                textAnchor="middle" fontSize="8.5" fill="rgba(255,255,255,0.35)"
+              >
+                {p.date}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* Attempt number label above x-axis */}
+        {pts.map((p, i) => (
+          <text key={i} x={p.x} y={H - 14} textAnchor="middle" fontSize="7.5" fill="rgba(255,255,255,0.2)">
+            #{i + 1}
+          </text>
+        ))}
+      </svg>
+    </div>
   );
 }
 
