@@ -464,41 +464,22 @@ export async function executeCode(
         }
       }
 
-      let execution = await executeSingleTestCase(
-        request.sourceCode,
+      // If student wrote function-only code (no output statements), pre-inject
+      // the harness so it runs stdin → function → console.log in one pass.
+      // This avoids relying on post-hoc exitCode checks that vary across runtimes.
+      const autoFuncName = detectFunctionName(request.sourceCode, request.language);
+      const codeToRun = autoFuncName
+        ? buildAutoHarness(request.sourceCode, request.language, autoFuncName)
+        : request.sourceCode;
+
+      const execution = await executeSingleTestCase(
+        codeToRun,
         request.language,
         testCase.input,
         request.timeLimitMs,
         pistonApiUrl,
         executionMode
       );
-
-      // Auto-harness: student wrote a function but no output statements.
-      // If the code ran cleanly but produced no output, detect the function and
-      // re-run with an injected runner that reads stdin and calls it.
-      if (
-        !execution.stdout &&
-        !execution.stderr &&
-        execution.exitCode === 0 &&
-        !execution.timedOut
-      ) {
-        const funcName = detectFunctionName(request.sourceCode, request.language);
-        if (funcName) {
-          const harness = buildAutoHarness(request.sourceCode, request.language, funcName);
-          const harnessExec = await executeSingleTestCase(
-            harness,
-            request.language,
-            testCase.input,
-            request.timeLimitMs,
-            pistonApiUrl,
-            executionMode
-          );
-          // Use harness result if it produced output and exited cleanly
-          if (harnessExec.stdout && harnessExec.exitCode === 0 && !harnessExec.timedOut) {
-            execution = harnessExec;
-          }
-        }
-      }
 
       let status: ExecutionResult["status"];
 
