@@ -346,8 +346,15 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
           setResultLoading(false);
         }
       } else {
-        showToast("Failed to submit exam. Please try again.", "error");
-        setIsSubmitting(false);
+        const errData = await res.json().catch(() => ({}));
+        if (errData.error === "ALREADY_SUBMITTED") {
+          // Exam was already graded — go straight to results
+          sessionStorage.removeItem(`exam_${examId}_submission_id`);
+          router.push("/student/completed");
+        } else {
+          showToast("Failed to submit exam. Please try again.", "error");
+          setIsSubmitting(false);
+        }
       }
     } catch (err) {
       showToast("Network error. Drafts are saved, try again.", "error");
@@ -397,10 +404,54 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
             </svg>
           </div>
           <h2 className="text-xl font-bold text-white mb-2">Time&apos;s Up</h2>
-          <p className="text-text-secondary text-sm mb-6">
-            Your exam time has expired. Your saved answers are being submitted now.
-          </p>
-          <div className="w-6 h-6 border-2 border-rose-500/30 border-t-rose-500 rounded-full animate-spin mx-auto" />
+          {isSubmitting || resultLoading ? (
+            <>
+              <p className="text-text-secondary text-sm mb-6">
+                Your exam time has expired. Submitting and grading your answers now…
+              </p>
+              <div className="w-6 h-6 border-2 border-rose-500/30 border-t-rose-500 rounded-full animate-spin mx-auto" />
+            </>
+          ) : submitResult ? (
+            <>
+              <p className="text-text-secondary text-sm mb-4">Your exam has been submitted and graded.</p>
+              <div className={`text-3xl font-black mb-1 ${
+                (parseFloat(submitResult.totalScore) / (submitResult.totalPossible || 1)) >= 0.8 ? "text-emerald-400"
+                : (parseFloat(submitResult.totalScore) / (submitResult.totalPossible || 1)) >= 0.5 ? "text-amber-400"
+                : "text-rose-400"
+              }`}>
+                {((parseFloat(submitResult.totalScore) / (submitResult.totalPossible || 1)) * 100).toFixed(1)}%
+              </div>
+              <div className="text-text-tertiary text-sm mb-6 font-mono">
+                {parseFloat(submitResult.totalScore).toFixed(1)} / {submitResult.totalPossible.toFixed(1)} pts
+              </div>
+              <div className="flex gap-3">
+                <button onClick={() => { sessionStorage.removeItem(`exam_${examId}_submission_id`); router.push("/student/exams"); }}
+                  className="flex-1 premium-btn-secondary py-2.5 text-sm">
+                  Active Exams
+                </button>
+                <button onClick={() => { sessionStorage.removeItem(`exam_${examId}_submission_id`); router.push("/student/completed"); }}
+                  className="flex-1 premium-btn-primary py-2.5 text-sm">
+                  View Results →
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-text-secondary text-sm mb-6">
+                Your exam time has expired. Your answers have been saved.
+              </p>
+              <div className="flex gap-3">
+                <button onClick={() => { sessionStorage.removeItem(`exam_${examId}_submission_id`); router.push("/student/exams"); }}
+                  className="flex-1 premium-btn-secondary py-2.5 text-sm">
+                  Go to Exams
+                </button>
+                <button onClick={() => { sessionStorage.removeItem(`exam_${examId}_submission_id`); router.push("/student/completed"); }}
+                  className="flex-1 premium-btn-primary py-2.5 text-sm">
+                  View Results →
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     );
