@@ -173,7 +173,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
 
   // Auto-submit on 3rd focus loss when WARN_AND_LOCK policy is active
   useEffect(() => {
-    if (focusLosses >= 3 && focusLossPolicy === "WARN_AND_LOCK") {
+    if (focusLosses >= 3 && focusLossPolicy === "WARN_AND_LOCK" && questions.length > 0) {
       const payloads = Object.entries(answers).map(([qId, ans]) => ({ question_id: qId, ...ans }));
       fetch(`/api/v1/student/exams/${examId}/submit`, {
         method: "POST",

@@ -114,7 +114,7 @@ function ScoreBadge({ score, total }: { score: string | null; total: string }) {
   if (!score) return <span className="text-xs text-text-tertiary italic">—</span>;
   const p = pct(score, total);
   return (
-    <span className={`inline-flex items-center gap-1.5 border rounded-lg px-2.5 py-1 font-mono text-xs font-bold ${scoreBg(p)}`}>
+    <span className={`inline-flex items-center gap-1.5 border rounded-lg px-2.5 py-1 font-mono text-xs font-bold whitespace-nowrap ${scoreBg(p)}`}>
       {Number(score).toFixed(1)}/{Number(total).toFixed(1)} · {p.toFixed(1)}%
     </span>
   );
@@ -556,7 +556,7 @@ export default function CompletedExamsPage() {
                             <td className="py-3.5 px-4">
                               {submitted && (
                                 <button onClick={() => openQuestionDetail(s.id)}
-                                  className="text-xs text-brand-400 hover:text-brand-300 font-semibold opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                                  className="text-xs text-brand-400 hover:text-brand-300 font-semibold transition-colors whitespace-nowrap">
                                   Details →
                                 </button>
                               )}
@@ -579,16 +579,26 @@ export default function CompletedExamsPage() {
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setQuestionDetailOpen(false)} />
           <div className="relative w-full max-w-2xl h-full bg-bg-surface border-l border-border-strong flex flex-col shadow-2xl">
 
-            <div className="px-6 py-5 border-b border-border-strong flex items-start justify-between shrink-0">
-              <div>
-                <h2 className="text-lg font-bold text-white">{questionDetail?.submission.examTitle ?? "Attempt Details"}</h2>
+            <div className="px-4 sm:px-6 py-4 border-b border-border-strong flex items-center gap-3 shrink-0">
+              <button
+                onClick={() => setQuestionDetailOpen(false)}
+                className="flex items-center gap-1.5 text-sm font-semibold text-text-secondary hover:text-white transition-colors shrink-0"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+                Back
+              </button>
+              <div className="h-4 w-px bg-border-strong shrink-0" />
+              <div className="flex-1 min-w-0">
+                <h2 className="text-base font-bold text-white truncate">{questionDetail?.submission.examTitle ?? "Attempt Details"}</h2>
                 {questionDetail && (
-                  <p className="text-text-tertiary text-xs mt-1">
+                  <p className="text-text-tertiary text-xs mt-0.5">
                     {formatDate(questionDetail.submission.submittedAt)} · {formatElapsed(questionDetail.submission.elapsedSeconds)}
                   </p>
                 )}
               </div>
-              <button onClick={() => setQuestionDetailOpen(false)} className="text-text-tertiary hover:text-white transition-colors mt-0.5 ml-4">
+              <button onClick={() => setQuestionDetailOpen(false)} className="text-text-tertiary hover:text-white transition-colors shrink-0 ml-1">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -619,7 +629,17 @@ export default function CompletedExamsPage() {
                   <div className="w-7 h-7 border-2 border-brand-500/30 border-t-brand-500 rounded-full animate-spin" />
                 </div>
               ) : questionDetail?.details.length === 0 ? (
-                <p className="text-text-tertiary text-sm text-center py-10">No details available.</p>
+                <div className="flex flex-col items-center gap-3 py-14 px-6 text-center">
+                  <div className="w-12 h-12 rounded-full bg-bg-surface-elevated border border-border-strong flex items-center justify-center">
+                    <svg className="w-6 h-6 text-text-tertiary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  </div>
+                  <p className="text-white font-medium text-sm">No per-question details recorded</p>
+                  <p className="text-text-tertiary text-xs max-w-xs">
+                    This attempt was submitted without per-question tracking, or the answer data was not saved. The overall score is still available in the table.
+                  </p>
+                </div>
               ) : (
                 questionDetail?.details.map((d, i) => {
                   const s = Number(d.score), q = Number(d.questionPoints);
