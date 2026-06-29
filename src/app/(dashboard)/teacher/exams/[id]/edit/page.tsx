@@ -144,7 +144,7 @@ export default function EditExamPage({ params }: { params: Promise<{ id: string 
   }
 
   return (
-    <div className="min-h-screen bg-bg-base p-8">
+    <div className="min-h-screen bg-bg-base p-4 sm:p-6 md:p-8">
       <div className="max-w-4xl mx-auto">
         <div className="mb-8 flex justify-between items-center">
           <div className="flex items-center gap-4">
@@ -165,7 +165,7 @@ export default function EditExamPage({ params }: { params: Promise<{ id: string 
           </button>
         </div>
 
-        <div className="glass-card p-8">
+        <div className="glass-card p-4 sm:p-6 md:p-8">
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label className="block text-sm font-medium text-text-secondary mb-1.5">Exam Title</label>

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -14,12 +14,12 @@ export default function StudentSettingsPage() {
   const router = useRouter();
   const [user, setUser] = useState<UserInfo | null>(null);
 
-  // ── Full name form ───────────────────────────────────────────────────────
+  // â”€â”€ Full name form â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [fullName, setFullName] = useState("");
   const [isUpdatingName, setIsUpdatingName] = useState(false);
   const [nameMessage, setNameMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // ── Password form ────────────────────────────────────────────────────────
+  // â”€â”€ Password form â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -44,7 +44,7 @@ export default function StudentSettingsPage() {
       if (stored) {
         const parsed = JSON.parse(stored);
         if (parsed.role !== "STUDENT") {
-          // Stale data from a previous teacher session — clear and redirect
+          // Stale data from a previous teacher session â€” clear and redirect
           localStorage.removeItem("user");
           router.push("/login");
           return;
@@ -151,7 +151,7 @@ export default function StudentSettingsPage() {
   );
 
   return (
-    <div className="min-h-screen bg-bg-base p-8">
+    <div className="min-h-screen bg-bg-base p-4 sm:p-6 md:p-8">
       <div className="max-w-3xl mx-auto">
 
         {/* Header */}
@@ -160,7 +160,7 @@ export default function StudentSettingsPage() {
           <p className="text-text-secondary mt-1 text-sm">Manage your profile and update your credentials.</p>
         </div>
 
-        {/* ── Profile Info (read-only) ── */}
+        {/* â”€â”€ Profile Info (read-only) â”€â”€ */}
         <div className="glass-card p-6 mb-6">
           <h2 className="text-base font-bold text-white mb-5 flex items-center gap-2">
             <svg className="w-5 h-5 text-brand-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -170,8 +170,8 @@ export default function StudentSettingsPage() {
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {[
-              { label: "Full Name", value: user?.full_name || "—" },
-              { label: "Student ID (Username)", value: user?.username || "—" },
+              { label: "Full Name", value: user?.full_name || "â€”" },
+              { label: "Student ID (Username)", value: user?.username || "â€”" },
               { label: "Account Role", value: user?.role || "STUDENT" },
               { label: "Session Status", value: "Active" },
             ].map(({ label, value }) => (
@@ -190,7 +190,7 @@ export default function StudentSettingsPage() {
           </div>
         </div>
 
-        {/* ── Edit Full Name ── */}
+        {/* â”€â”€ Edit Full Name â”€â”€ */}
         <div className="glass-card p-6 mb-6">
           <h2 className="text-base font-bold text-white mb-1 flex items-center gap-2">
             <svg className="w-5 h-5 text-brand-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -217,7 +217,7 @@ export default function StudentSettingsPage() {
                 className="premium-input"
                 placeholder="Enter your full name"
               />
-              <p className="text-text-tertiary text-xs mt-1.5">Must be 2–100 characters.</p>
+              <p className="text-text-tertiary text-xs mt-1.5">Must be 2â€“100 characters.</p>
             </div>
             <div className="pt-1">
               <button
@@ -243,7 +243,7 @@ export default function StudentSettingsPage() {
           </form>
         </div>
 
-        {/* ── Change Password ── */}
+        {/* â”€â”€ Change Password â”€â”€ */}
         <div className="glass-card p-6">
           <h2 className="text-base font-bold text-white mb-1 flex items-center gap-2">
             <svg className="w-5 h-5 text-brand-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -289,7 +289,7 @@ export default function StudentSettingsPage() {
             {/* Complexity */}
             {newPassword.length > 0 && (
               <div className="bg-bg-surface border border-border-strong rounded-xl p-4 text-xs space-y-2">
-                <Req met={reqLength} label="8–128 characters" />
+                <Req met={reqLength} label="8â€“128 characters" />
                 <Req met={reqUpper} label="One uppercase letter" />
                 <Req met={reqLower} label="One lowercase letter" />
                 <Req met={reqNumber} label="One digit" />
@@ -317,3 +317,4 @@ export default function StudentSettingsPage() {
     </div>
   );
 }
+

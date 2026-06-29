@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -50,19 +50,19 @@ export default function CreateExamPage() {
   };
 
   return (
-    <div className="min-h-screen bg-bg-base p-8">
+    <div className="min-h-screen bg-bg-base p-4 sm:p-6 md:p-8">
       <div className="max-w-3xl mx-auto">
         <div className="mb-8 flex items-center gap-4">
           <button 
             onClick={() => router.back()}
             className="text-text-secondary hover:text-white transition-colors"
           >
-            ← Back
+            â† Back
           </button>
           <h1 className="text-3xl font-bold text-white">Create New Exam</h1>
         </div>
 
-        <div className="glass-card p-8">
+        <div className="glass-card p-4 sm:p-6 md:p-8">
           {error && (
             <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm px-4 py-3 rounded-lg mb-6">
               {error}
@@ -141,8 +141,8 @@ export default function CreateExamPage() {
                 onChange={(e) => setFormData({ ...formData, focusLossPolicy: e.target.value })}
                 className="premium-input bg-bg-surface-elevated text-white w-full"
               >
-                <option value="LOG_ONLY">Log Only — Track tab switches, no penalty</option>
-                <option value="WARN_AND_LOCK">Warn &amp; Lock — Warn twice, auto-submit on 3rd tab switch</option>
+                <option value="LOG_ONLY">Log Only â€” Track tab switches, no penalty</option>
+                <option value="WARN_AND_LOCK">Warn &amp; Lock â€” Warn twice, auto-submit on 3rd tab switch</option>
               </select>
             </div>
 
@@ -180,3 +180,4 @@ export default function CreateExamPage() {
     </div>
   );
 }
+

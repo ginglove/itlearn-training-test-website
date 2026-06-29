@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
@@ -95,7 +95,7 @@ export default function StudentsManagementPage() {
         setHistoryData(data.exams || []);
       }
     } catch {
-      // silently fail — panel shows empty state
+      // silently fail â€” panel shows empty state
     } finally {
       setIsLoadingHistory(false);
     }
@@ -271,7 +271,7 @@ export default function StudentsManagementPage() {
   );
 
   return (
-    <div className="min-h-screen bg-bg-base p-8">
+    <div className="min-h-screen bg-bg-base p-4 sm:p-6 md:p-8">
       <div className="max-w-6xl mx-auto">
         
         {/* Header Section */}
@@ -847,7 +847,7 @@ export default function StudentsManagementPage() {
             <div className="flex items-center justify-between px-6 py-5 border-b border-border-strong shrink-0">
               <div>
                 <h2 className="text-lg font-bold text-white">{historyStudent.fullName}</h2>
-                <p className="text-xs text-text-tertiary font-mono mt-0.5">{historyStudent.username} · {historyStudent.email}</p>
+                <p className="text-xs text-text-tertiary font-mono mt-0.5">{historyStudent.username} Â· {historyStudent.email}</p>
               </div>
               <button
                 onClick={() => setHistoryStudent(null)}
@@ -971,3 +971,4 @@ export default function StudentsManagementPage() {
     </div>
   );
 }
+

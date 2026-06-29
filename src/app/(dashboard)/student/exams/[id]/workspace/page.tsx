@@ -29,6 +29,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
   const [activeTab, setActiveTab] = useState<"cases" | "output">("cases");
   const [xpathResults, setXpathResults] = useState<Record<string, any>>({});
   const [isRunningXpath, setIsRunningXpath] = useState(false);
+  const [showQuestionsMap, setShowQuestionsMap] = useState(false);
   const [showUntestedWarning, setShowUntestedWarning] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showResultOverlay, setShowResultOverlay] = useState(false);
@@ -477,48 +478,113 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
   return (
     <div className="h-screen flex flex-col bg-bg-base overflow-hidden selection:bg-brand-500/30">
       {/* Top Navbar */}
-      <header className="h-16 border-b border-border-strong bg-bg-surface flex items-center justify-between px-6 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-bg-surface-elevated border border-border-strong rounded-lg flex items-center justify-center overflow-hidden p-1 shrink-0">
+      <header className="h-14 sm:h-16 border-b border-border-strong bg-bg-surface flex items-center justify-between px-3 sm:px-6 shrink-0 gap-2">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          {/* Mobile: questions map toggle */}
+          <button
+            onClick={() => setShowQuestionsMap(v => !v)}
+            className="md:hidden flex items-center justify-center w-8 h-8 rounded-lg bg-bg-surface-elevated border border-border-strong text-text-secondary hover:text-white shrink-0"
+            title="Questions Map"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
+            </svg>
+          </button>
+          <div className="w-7 h-7 sm:w-8 sm:h-8 bg-bg-surface-elevated border border-border-strong rounded-lg flex items-center justify-center overflow-hidden p-1 shrink-0">
             <img src="/Logo_2.png" alt="ITLearn Logo" className="w-full h-full object-contain" />
           </div>
-          <div className="flex flex-col min-w-0">
+          <div className="hidden sm:flex flex-col min-w-0">
             <span className="text-[10px] text-text-tertiary uppercase tracking-wider leading-none">Exam Session</span>
-            <span className="text-white font-semibold text-sm truncate max-w-[260px]" title={examTitle || undefined}>
+            <span className="text-white font-semibold text-sm truncate max-w-[180px] md:max-w-[260px]" title={examTitle || undefined}>
               {examTitle || "Loading…"}
             </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-6">
-          <div className={`font-mono font-medium text-lg flex items-center gap-2 ${timeLeft < 300 ? 'text-rose-400 animate-pulse' : 'text-white'}`}>
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+          <div className={`font-mono font-medium text-sm sm:text-lg flex items-center gap-1 sm:gap-2 ${timeLeft < 300 ? 'text-rose-400 animate-pulse' : 'text-white'}`}>
+            <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             {formatTime(timeLeft)}
           </div>
-          
+
           <button
             onClick={handleSaveAndExit}
             disabled={isExiting || isSubmitting}
-            className="premium-btn-secondary py-2 px-4 text-sm"
+            className="premium-btn-secondary py-1.5 px-2.5 sm:py-2 sm:px-4 text-xs sm:text-sm"
           >
-            {isExiting ? "Saving..." : "Save & Exit"}
+            {isExiting ? "Saving…" : <><span className="hidden sm:inline">Save & </span>Exit</>}
           </button>
           <button
             onClick={handleSubmitClick}
             disabled={isSubmitting || isExiting}
-            className="premium-btn-primary py-2 px-6 text-sm"
+            className="premium-btn-primary py-1.5 px-3 sm:py-2 sm:px-6 text-xs sm:text-sm"
           >
-            {isSubmitting ? "Submitting..." : "Submit Exam"}
+            {isSubmitting ? "Submitting…" : <><span className="hidden sm:inline">Submit </span>Exam</>}
           </button>
         </div>
       </header>
 
       {/* Main Content Area */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Left Sidebar: Question Nav */}
-        <aside className="w-64 border-r border-border-strong bg-bg-surface-elevated/30 flex flex-col shrink-0">
+        {/* Mobile Questions Map Overlay */}
+        {showQuestionsMap && (
+          <div
+            className="md:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowQuestionsMap(false)}
+          >
+            <div
+              className="absolute left-0 top-0 bottom-0 w-64 bg-bg-surface border-r border-border-strong flex flex-col"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="p-4 border-b border-border-strong flex items-center justify-between">
+                <h3 className="text-xs font-bold text-text-tertiary uppercase tracking-wider">Questions Map</h3>
+                <button onClick={() => setShowQuestionsMap(false)} className="text-text-secondary hover:text-white">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4">
+                <div className="grid grid-cols-5 gap-2">
+                  {questions.map((q, idx) => {
+                    const isCurrent = idx === currentIndex;
+                    const hasAnswer = q.type === "CODE"
+                      ? !!answers[q.id]?.source_code?.trim()
+                      : q.type === "XPATH"
+                      ? !!answers[q.id]?.student_xpath?.trim()
+                      : answers[q.id]?.selected_options?.length > 0;
+                    const activeColor = q.type === "CODE"
+                      ? "bg-amber-500 text-white ring-2 ring-amber-500/50 ring-offset-2 ring-offset-bg-base"
+                      : q.type === "XPATH"
+                      ? "bg-emerald-500 text-white ring-2 ring-emerald-500/50 ring-offset-2 ring-offset-bg-base"
+                      : "bg-brand-500 text-white ring-2 ring-brand-500/50 ring-offset-2 ring-offset-bg-base";
+                    const answeredColor = q.type === "CODE"
+                      ? "bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500/30"
+                      : q.type === "XPATH"
+                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30"
+                      : "bg-brand-500/20 text-brand-400 border border-brand-500/30 hover:bg-brand-500/30";
+                    return (
+                      <button
+                        key={q.id}
+                        onClick={() => { setCurrentIndex(idx); setShowQuestionsMap(false); }}
+                        className={`h-10 rounded-lg text-sm font-medium transition-all ${
+                          isCurrent ? activeColor : hasAnswer ? answeredColor : "bg-bg-surface border border-border-strong text-text-secondary hover:border-text-tertiary"
+                        }`}
+                      >
+                        {idx + 1}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Left Sidebar: Question Nav (desktop only) */}
+        <aside className="hidden md:flex w-64 border-r border-border-strong bg-bg-surface-elevated/30 flex-col shrink-0">
           <div className="p-4 border-b border-border-strong">
             <h3 className="text-xs font-bold text-text-tertiary uppercase tracking-wider">Questions Map</h3>
           </div>
@@ -634,7 +700,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                 /* ── Mode C: XPath Automation Workspace ── */
                 <div className="border border-emerald-500/20 rounded-xl overflow-hidden shadow-2xl">
                   {/* Split pane */}
-                  <div className="grid grid-cols-2 divide-x divide-emerald-500/10" style={{ minHeight: 360 }}>
+                  <div className="grid grid-cols-1 md:grid-cols-2 md:divide-x divide-emerald-500/10" style={{ minHeight: 360 }}>
                     {/* Left pane: target preview */}
                     <div className="flex flex-col bg-bg-surface-elevated/20">
                       <div className="px-4 py-2 border-b border-emerald-500/10 text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-2">
@@ -1350,7 +1416,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
       )}
 
       {/* Footer Navigation */}
-      <footer className="h-16 border-t border-border-strong bg-bg-surface flex items-center justify-between px-8 shrink-0">
+      <footer className="h-14 sm:h-16 border-t border-border-strong bg-bg-surface flex items-center justify-between px-4 sm:px-8 shrink-0">
         <button
           onClick={() => setCurrentIndex(prev => Math.max(0, prev - 1))}
           disabled={currentIndex === 0}

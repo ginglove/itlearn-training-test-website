@@ -117,7 +117,7 @@ export default function CodingConfigPage({ params }: { params: Promise<{ id: str
   };
 
   return (
-    <div className="min-h-screen bg-bg-base p-8">
+    <div className="min-h-screen bg-bg-base p-4 sm:p-6 md:p-8">
       <div className="max-w-4xl mx-auto">
         <div className="mb-8">
           <div className="flex items-center gap-2 text-text-tertiary text-sm mb-2">
@@ -144,7 +144,7 @@ export default function CodingConfigPage({ params }: { params: Promise<{ id: str
           </div>
         </div>
 
-        <div className="glass-card p-8">
+        <div className="glass-card p-4 sm:p-6 md:p-8">
           <div className="space-y-6">
             <div>
               <label className="block text-sm font-medium text-text-secondary mb-1.5">Select Coding Question</label>

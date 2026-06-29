@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect } from "react";
 import { useToast } from "@/components/toast";
@@ -73,7 +73,7 @@ export default function TeacherSettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-bg-base p-8">
+    <div className="min-h-screen bg-bg-base p-4 sm:p-6 md:p-8">
       <div className="max-w-4xl mx-auto">
         <div className="mb-8 flex justify-between items-center">
           <div>
@@ -84,7 +84,7 @@ export default function TeacherSettingsPage() {
 
         <form onSubmit={handleSave} className="grid grid-cols-1 gap-6">
           {/* Code Execution Section */}
-          <div className="glass-card p-8">
+          <div className="glass-card p-4 sm:p-6 md:p-8">
             <h2 className="text-xl font-bold text-white mb-1">Code Execution Engine</h2>
             <p className="text-text-secondary text-sm mb-6">
               The platform uses the Piston API for sandboxed code execution. Provide your custom Piston instance endpoint.
@@ -142,7 +142,7 @@ export default function TeacherSettingsPage() {
           </div>
 
           {/* Security & Authentication Section */}
-          <div className="glass-card p-8">
+          <div className="glass-card p-4 sm:p-6 md:p-8">
             <h2 className="text-xl font-bold text-white mb-1">Security & Authentication</h2>
             <p className="text-text-secondary text-sm mb-6">
               Configure session constraints, IP validation, and credentials enforcement.
@@ -193,7 +193,7 @@ export default function TeacherSettingsPage() {
           </div>
 
           {/* Anti-Cheat Section */}
-          <div className="glass-card p-8">
+          <div className="glass-card p-4 sm:p-6 md:p-8">
             <h2 className="text-xl font-bold text-white mb-1">Anti-Cheat & Workspace Controls</h2>
             <p className="text-text-secondary text-sm mb-6">
               Track student focus losses (window blur) and determine how frequently student workspaces auto-save.
@@ -263,3 +263,4 @@ export default function TeacherSettingsPage() {
     </div>
   );
 }
+

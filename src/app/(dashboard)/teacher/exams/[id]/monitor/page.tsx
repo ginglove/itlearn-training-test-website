@@ -188,7 +188,7 @@ export default function CodingMonitorPage({ params }: { params: Promise<{ id: st
   const cancelled = students.filter((s) => s.submissionStatus === "CANCELLED");
 
   return (
-    <div className="min-h-screen bg-bg-base p-8">
+    <div className="min-h-screen bg-bg-base p-4 sm:p-6 md:p-8">
       <div className="max-w-7xl mx-auto">
 
         {/* ── Header ── */}
