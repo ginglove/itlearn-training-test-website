@@ -123,6 +123,10 @@
     border-color: var(--color-brand-500);
     box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.25);
   }
+  .premium-input.border-rose-500:focus {
+    border-color: #f43f5e;
+    box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.25);
+  }
   .premium-input:-webkit-autofill,
   .premium-input:-webkit-autofill:hover,
   .premium-input:-webkit-autofill:focus {

@@ -9,13 +9,23 @@ export default function LoginPage() {
   const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<{ username?: string; password?: string }>({});
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  const validate = () => {
+    const errs: { username?: string; password?: string } = {};
+    if (!username.trim()) errs.username = "Vui lòng nhập mã số học viên / giảng viên.";
+    if (!password) errs.password = "Vui lòng nhập mật khẩu.";
+    setFieldErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    if (!validate()) return;
     setIsLoading(true);
 
     try {
@@ -28,7 +38,7 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.message || "Invalid credentials");
+        setError(data.message || "Thông tin đăng nhập không hợp lệ.");
         setIsLoading(false);
         return;
       }
@@ -37,34 +47,33 @@ export default function LoginPage() {
         localStorage.setItem("reset_token", data.reset_token);
         router.push("/reset-password");
       } else {
-        // Store token
         document.cookie = `session=${data.token}; path=/; max-age=28800; secure; samesite=strict`;
         localStorage.setItem("user", JSON.stringify(data.user));
-        
         if (data.user.role === "TEACHER") {
           router.push("/teacher");
         } else {
           router.push("/student/exams");
         }
       }
-    } catch (err) {
-      setError("Network error. Please try again.");
+    } catch {
+      setError("Lỗi kết nối. Vui lòng thử lại.");
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center relative px-4 py-8 sm:px-6">
+    <div className="min-h-screen flex items-start justify-center relative px-4 pt-8 pb-10 sm:items-center sm:px-6 sm:py-0 overflow-y-auto">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="relative w-full max-w-md z-10"
+        className="relative w-full max-w-md z-10 my-auto"
       >
         <div className="glass-card p-6 sm:p-8 md:p-10 relative overflow-hidden">
           {/* Decorative glow */}
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-1 bg-gradient-to-r from-transparent via-brand-500 to-transparent opacity-60" />
 
+          {/* Logo + heading */}
           <div className="flex flex-col items-center mb-6 sm:mb-8 select-none">
             <Link href="/" className="flex items-center gap-2.5 mb-4 sm:mb-5 group">
               <div className="w-9 h-9 sm:w-10 sm:h-10 bg-bg-surface-elevated border border-border-strong rounded-xl flex items-center justify-center overflow-hidden shadow-lg shadow-brand-500/10 group-hover:shadow-brand-500/25 transition-all p-1.5 shrink-0">
@@ -83,21 +92,26 @@ export default function LoginPage() {
               ĐĂNG NHẬP HỆ THỐNG
             </h2>
             <p className="text-text-secondary text-xs mt-1">
-              Online Quiz & Hybrid Coding Platform
+              Online Quiz &amp; Hybrid Coding Platform
             </p>
           </div>
 
+          {/* API-level error banner */}
           {error && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
-              className="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm px-4 py-3 rounded-lg mb-6"
+              className="flex items-center gap-2 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm px-4 py-3 rounded-xl mb-5"
             >
+              <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
               {error}
             </motion.div>
           )}
 
-          <form onSubmit={handleLogin} className="space-y-5">
+          <form onSubmit={handleLogin} noValidate className="space-y-4 sm:space-y-5">
+            {/* Username */}
             <div>
               <label className="block text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2" htmlFor="username">
                 Mã Số Học Viên / Giảng Viên
@@ -106,13 +120,25 @@ export default function LoginPage() {
                 id="username"
                 type="text"
                 value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="premium-input"
+                onChange={(e) => {
+                  setUsername(e.target.value);
+                  if (fieldErrors.username) setFieldErrors(p => ({ ...p, username: undefined }));
+                }}
+                className={`premium-input ${fieldErrors.username ? "border-rose-500 focus:border-rose-500" : ""}`}
                 placeholder="Ví dụ: 20261102"
-                required
+                autoComplete="username"
               />
+              {fieldErrors.username && (
+                <p className="flex items-center gap-1.5 mt-1.5 text-xs text-rose-400">
+                  <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  {fieldErrors.username}
+                </p>
+              )}
             </div>
 
+            {/* Password */}
             <div>
               <label className="block text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2" htmlFor="password">
                 Mật Khẩu
@@ -122,10 +148,13 @@ export default function LoginPage() {
                   id="password"
                   type={showPassword ? "text" : "password"}
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="premium-input pr-12"
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (fieldErrors.password) setFieldErrors(p => ({ ...p, password: undefined }));
+                  }}
+                  className={`premium-input pr-12 ${fieldErrors.password ? "border-rose-500 focus:border-rose-500" : ""}`}
                   placeholder="••••••••"
-                  required
+                  autoComplete="current-password"
                 />
                 <button
                   type="button"
@@ -144,12 +173,20 @@ export default function LoginPage() {
                   )}
                 </button>
               </div>
+              {fieldErrors.password && (
+                <p className="flex items-center gap-1.5 mt-1.5 text-xs text-rose-400">
+                  <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  {fieldErrors.password}
+                </p>
+              )}
             </div>
 
             <button
               type="submit"
               disabled={isLoading}
-              className="premium-btn-primary w-full mt-4 flex justify-center items-center py-3 text-base font-semibold shadow-lg shadow-brand-500/20 active:scale-95"
+              className="premium-btn-primary w-full mt-2 flex justify-center items-center py-3 text-base font-semibold shadow-lg shadow-brand-500/20 active:scale-95"
             >
               {isLoading ? (
                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -158,7 +195,7 @@ export default function LoginPage() {
               )}
             </button>
           </form>
-          
+
           <div className="mt-6 sm:mt-8 pt-5 sm:pt-6 border-t border-border-strong text-center">
             <p className="text-[10px] text-text-tertiary leading-relaxed">
               Bằng việc đăng nhập, địa chỉ IP của bạn sẽ được liên kết với phiên hoạt động nhằm phục vụ mục đích bảo mật và giám sát chống gian lận.
