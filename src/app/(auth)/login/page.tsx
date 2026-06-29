@@ -54,24 +54,24 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center relative">
-      <motion.div 
+    <div className="min-h-screen flex items-center justify-center relative px-4 py-8 sm:px-6">
+      <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="relative w-full max-w-md z-10 p-8 animate-fade-in"
+        className="relative w-full max-w-md z-10"
       >
-        <div className="glass-card p-8 sm:p-10 relative overflow-hidden">
+        <div className="glass-card p-6 sm:p-8 md:p-10 relative overflow-hidden">
           {/* Decorative glow */}
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-1 bg-gradient-to-r from-transparent via-brand-500 to-transparent opacity-60" />
-          
-          <div className="flex flex-col items-center mb-8 select-none">
-            <Link href="/" className="flex items-center gap-2.5 mb-5 group">
-              <div className="w-10 h-10 bg-bg-surface-elevated border border-border-strong rounded-xl flex items-center justify-center overflow-hidden shadow-lg shadow-brand-500/10 group-hover:shadow-brand-500/25 transition-all p-1.5 shrink-0">
+
+          <div className="flex flex-col items-center mb-6 sm:mb-8 select-none">
+            <Link href="/" className="flex items-center gap-2.5 mb-4 sm:mb-5 group">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 bg-bg-surface-elevated border border-border-strong rounded-xl flex items-center justify-center overflow-hidden shadow-lg shadow-brand-500/10 group-hover:shadow-brand-500/25 transition-all p-1.5 shrink-0">
                 <img src="/Logo_2.png" alt="ITLearn Logo" className="w-full h-full object-contain filter drop-shadow(0 2px 4px rgba(220,38,38,0.3))" />
               </div>
               <div className="text-left">
-                <span className="font-display font-extrabold tracking-tight text-white block text-lg leading-none">
+                <span className="font-display font-extrabold tracking-tight text-white block text-base sm:text-lg leading-none">
                   IT <span className="text-brand-500">LEARN</span>
                 </span>
                 <span className="text-[9px] text-text-tertiary font-mono uppercase tracking-widest leading-none mt-1 block">
@@ -79,7 +79,7 @@ export default function LoginPage() {
                 </span>
               </div>
             </Link>
-            <h2 className="text-lg font-bold text-white tracking-tight mt-1 font-display">
+            <h2 className="text-base sm:text-lg font-bold text-white tracking-tight mt-1 font-display">
               ĐĂNG NHẬP HỆ THỐNG
             </h2>
             <p className="text-text-secondary text-xs mt-1">
@@ -159,7 +159,7 @@ export default function LoginPage() {
             </button>
           </form>
           
-          <div className="mt-8 pt-6 border-t border-border-strong text-center">
+          <div className="mt-6 sm:mt-8 pt-5 sm:pt-6 border-t border-border-strong text-center">
             <p className="text-[10px] text-text-tertiary leading-relaxed">
               Bằng việc đăng nhập, địa chỉ IP của bạn sẽ được liên kết với phiên hoạt động nhằm phục vụ mục đích bảo mật và giám sát chống gian lận.
             </p>

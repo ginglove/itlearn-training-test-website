@@ -123,6 +123,15 @@
     border-color: var(--color-brand-500);
     box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.25);
   }
+  .premium-input:-webkit-autofill,
+  .premium-input:-webkit-autofill:hover,
+  .premium-input:-webkit-autofill:focus {
+    -webkit-text-fill-color: var(--color-text-primary);
+    -webkit-box-shadow: 0 0 0 1000px var(--color-bg-base) inset;
+    box-shadow: 0 0 0 1000px var(--color-bg-base) inset;
+    border-color: var(--color-border-strong);
+    caret-color: var(--color-text-primary);
+  }
 
   .premium-btn-primary {
     background: var(--grad);
