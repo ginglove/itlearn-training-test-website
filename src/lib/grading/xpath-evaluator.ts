@@ -222,6 +222,19 @@ export async function gradeXPathQuestion({
 
     const snippets = studentNodes.slice(0, 5).map((n) => n.outerHTML ?? String(n));
 
+    // #6: Vacuous match (both select 0 elements) is always WA
+    if (studentNodes.length === 0 && refNodes.length === 0) {
+      caseResults.push({
+        caseIndex: i,
+        status: "WA",
+        message: "Both selectors matched 0 elements — a vacuous match is not accepted.",
+        matchedCount: 0,
+        referenceCount: 0,
+        snippets: [],
+      });
+      continue;
+    }
+
     if (studentNodes.length !== refNodes.length) {
       caseResults.push({
         caseIndex: i,
@@ -234,8 +247,16 @@ export async function gradeXPathQuestion({
       continue;
     }
 
-    const refSet = new Set(refNodes);
-    const allMatch = studentNodes.every((n) => refSet.has(n));
+    // #6: XPATH uses DOM reference comparison (same jsdom instance); CSS uses outerHTML string comparison
+    let allMatch: boolean;
+    if (selectorType === "CSS") {
+      const refHtmls = refNodes.map(n => n.outerHTML);
+      const studentHtmls = studentNodes.map(n => n.outerHTML);
+      allMatch = studentHtmls.every((h, idx) => h === refHtmls[idx]);
+    } else {
+      const refSet = new Set(refNodes);
+      allMatch = studentNodes.every((n) => refSet.has(n));
+    }
 
     if (!allMatch) {
       caseResults.push({

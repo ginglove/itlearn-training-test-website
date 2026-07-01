@@ -228,16 +228,18 @@ async function executeSingleTestCase(
       executionTimeMs = Date.now() - startTime;
 
       if (!response.ok) {
-        console.warn(`Piston API returned status ${response.status}.`);
+        const reason = `HTTP ${response.status}`;
         if (executionMode === "LOCAL_FALLBACK") {
+          console.warn(`[CODE_EXEC] Piston unavailable — falling back to local executor. Reason: ${reason}`);
           useFallback = true;
         } else {
           throw new Error(`Piston API error: ${response.status}`);
         }
       }
-    } catch (err) {
-      console.warn("Piston API fetch failed:", err);
+    } catch (err: any) {
+      const reason = err?.message ?? String(err);
       if (executionMode === "LOCAL_FALLBACK") {
+        console.warn(`[CODE_EXEC] Piston unavailable — falling back to local executor. Reason: ${reason}`);
         useFallback = true;
       } else {
         throw err;
@@ -246,8 +248,12 @@ async function executeSingleTestCase(
   }
 
   if (useFallback) {
-    console.info("Using local child-process execution fallback.");
-    return executeLocalSingleTestCase(sourceCode, language, input, timeLimitMs);
+    // #9: Honour DISABLE_LOCAL_FALLBACK=true in production
+    if (process.env.DISABLE_LOCAL_FALLBACK === "true") {
+      throw new Error("PISTON_UNAVAILABLE: Piston API is down and local fallback is disabled in this environment.");
+    }
+    const result = await executeLocalSingleTestCase(sourceCode, language, input, timeLimitMs);
+    return { ...result, executionBackend: "LOCAL_FALLBACK" } as typeof result & { executionBackend: string };
   }
 
   if (!response) {

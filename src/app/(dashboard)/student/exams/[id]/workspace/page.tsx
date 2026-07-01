@@ -109,7 +109,8 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
         const alreadySpentSeconds: number = questionsData.activeSeconds ?? 0;
         prevActiveSecondsRef.current = alreadySpentSeconds;
         sessionStartRef.current = Date.now();
-        let remaining = durationMins * 60 - alreadySpentSeconds;
+        // #2: Floor at 0 — never show a negative countdown
+        let remaining = Math.max(0, durationMins * 60 - alreadySpentSeconds);
 
         if (remaining <= 0) {
           timeAlreadyExpired = true;
@@ -171,20 +172,21 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
     handleSubmit();
   }, [timeExpired]);
 
-  // Auto-submit on 3rd focus loss when WARN_AND_LOCK policy is active
+  // #4: Auto-submit on 3rd focus loss (WARN_AND_LOCK).
+  // Fires when focusLosses changes AND when questions load (to handle the deferred case
+  // where the 3rd blur arrived before the question list finished loading).
   useEffect(() => {
-    if (focusLosses >= 3 && focusLossPolicy === "WARN_AND_LOCK" && questions.length > 0) {
-      const payloads = Object.entries(answers).map(([qId, ans]) => ({ question_id: qId, ...ans }));
-      fetch(`/api/v1/student/exams/${examId}/submit`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ submission_id: submissionId, focus_loss_count: focusLosses, close_reason: "FOCUS_LOSS_THRESHOLD", answers: payloads }),
-      }).finally(() => {
-        sessionStorage.removeItem(`exam_${examId}_submission_id`);
-        router.push("/student/exams");
-      });
-    }
-  }, [focusLosses]);
+    if (focusLosses < 3 || focusLossPolicy !== "WARN_AND_LOCK" || questions.length === 0) return;
+    const payloads = Object.entries(answers).map(([qId, ans]) => ({ question_id: qId, ...ans }));
+    fetch(`/api/v1/student/exams/${examId}/submit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ submission_id: submissionId, focus_loss_count: focusLosses, close_reason: "FOCUS_LOSS_THRESHOLD", answers: payloads }),
+    }).finally(() => {
+      sessionStorage.removeItem(`exam_${examId}_submission_id`);
+      router.push("/student/exams");
+    });
+  }, [focusLosses, questions.length]);
 
   // Auto-Save Drafts
   useEffect(() => {

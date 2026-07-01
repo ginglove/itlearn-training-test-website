@@ -10,25 +10,18 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
     }
 
-    // 1. Fetch all exams
-    const allExams = await db
-      .select()
-      .from(exams)
-      .orderBy(desc(exams.startTime));
+    const allExams = await db.select().from(exams).orderBy(desc(exams.startTime));
 
-    // 2. Fetch assignments for this student
     const assignments = await db
       .select({ examId: examAssignments.examId })
       .from(examAssignments)
       .where(eq(examAssignments.studentId, studentId));
     const assignedExamIds = new Set(assignments.map(a => a.examId));
 
-    // 3. Filter exams by access permissions
     const accessibleExams = allExams.filter(
       exam => exam.accessType === "ALL" || assignedExamIds.has(exam.id)
     );
 
-    // 4. Fetch student submissions including active-time tracking fields
     const submissions = await db
       .select({
         examId: examSubmissions.examId,
@@ -39,7 +32,6 @@ export async function GET(request: NextRequest) {
       .from(examSubmissions)
       .where(eq(examSubmissions.studentId, studentId));
 
-    // Group submissions by examId
     const submissionGroups = new Map<string, typeof submissions>();
     for (const sub of submissions) {
       const list = submissionGroups.get(sub.examId) || [];
@@ -54,11 +46,8 @@ export async function GET(request: NextRequest) {
       const completedAttempts = examSubmissionsList.filter(s => s.submittedAt !== null);
       const attemptsCount = completedAttempts.length;
       const hasSubmitted = attemptsCount > 0;
-
-      // The active (not-yet-submitted) attempt, if any
       const activeAttempt = examSubmissionsList.find(s => s.submittedAt === null) ?? null;
 
-      // Find last submitted timestamp if any
       const lastSubmitted = completedAttempts.length > 0
         ? completedAttempts.reduce((latest, current) =>
             (current.submittedAt && latest.submittedAt && current.submittedAt > latest.submittedAt) ? current : latest
@@ -67,27 +56,38 @@ export async function GET(request: NextRequest) {
 
       const examClosed = now > exam.endTime;
 
+      // #7 + #1: Unified submissionStatus using priority rules (Rule 15)
+      let submissionStatus: "SUBMITTED" | "IN_PROGRESS" | "PENDING" | "CANCELLED" | null = null;
+      if (activeAttempt) {
+        if (examClosed) {
+          submissionStatus = "CANCELLED";
+        } else if (activeAttempt.closeReason === "SAVE_AND_EXIT") {
+          submissionStatus = "PENDING";
+        } else {
+          submissionStatus = "IN_PROGRESS";
+        }
+      }
+
       return {
         ...exam,
         hasSubmitted,
-        hasActiveAttempt: activeAttempt !== null,
-        // If close date passed and there's an unsubmitted attempt → system cancels it
-        activeAttemptCancelled: activeAttempt !== null && examClosed,
-        activeAttemptPaused: activeAttempt !== null && !examClosed && activeAttempt.closeReason === "SAVE_AND_EXIT",
-        activeSeconds: activeAttempt?.activeSeconds ?? 0,
         attemptsCount,
         allowedAttempts: exam.allowedAttempts,
         submittedAt: lastSubmitted?.submittedAt || null,
         isActive: now >= exam.startTime && now <= exam.endTime,
+        // Unified status field (v7.3+)
+        submissionStatus,
+        activeSeconds: activeAttempt?.activeSeconds ?? 0,
+        // Deprecated in v7.3 — kept for backwards compatibility, remove in v8.0
+        hasActiveAttempt: activeAttempt !== null,
+        activeAttemptCancelled: activeAttempt !== null && examClosed,
+        activeAttemptPaused: activeAttempt !== null && !examClosed && activeAttempt.closeReason === "SAVE_AND_EXIT",
       };
     });
 
     return NextResponse.json({ status: "SUCCESS", exams: annotatedExams });
   } catch (error) {
     console.error("Fetch student exams error:", error);
-    return NextResponse.json(
-      { error: "INTERNAL_ERROR", message: "Failed to fetch exams" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "INTERNAL_ERROR", message: "Failed to fetch exams" }, { status: 500 });
   }
 }

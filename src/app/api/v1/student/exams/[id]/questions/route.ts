@@ -17,7 +17,7 @@ export async function GET(
 
     const [exam] = await db.select().from(exams).where(eq(exams.id, examId));
     if (!exam) {
-      return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+      return NextResponse.json({ error: "EXAM_NOT_FOUND" }, { status: 404 });
     }
 
     const examQuestions = await db
@@ -31,10 +31,9 @@ export async function GET(
     for (const q of examQuestions) {
       if (q.type === "QUIZ") {
         const options = await db
-          .select({ id: quizOptions.id, optionText: quizOptions.optionText }) // EXCLUDE isCorrect!
+          .select({ id: quizOptions.id, optionText: quizOptions.optionText })
           .from(quizOptions)
           .where(eq(quizOptions.questionId, q.id));
-
         enrichedQuestions.push({ ...q, options });
       } else if (q.type === "CODE") {
         const [config] = await db
@@ -44,28 +43,17 @@ export async function GET(
           .limit(1);
 
         const publicCases = await db
-          .select({
-            id: testCases.id,
-            inputData: testCases.inputData,
-            outputData: testCases.outputData,
-          })
+          .select({ id: testCases.id, inputData: testCases.inputData, outputData: testCases.outputData })
           .from(testCases)
-          .where(
-            and(
-              eq(testCases.questionId, q.id),
-              eq(testCases.isHidden, false)
-            )
-          );
+          .where(and(eq(testCases.questionId, q.id), eq(testCases.isHidden, false)));
 
-        enrichedQuestions.push({
-          ...q,
-          publicCases,
-          starterCode: config?.starterCode || "",
-        });
+        enrichedQuestions.push({ ...q, publicCases, starterCode: config?.starterCode || "" });
+      } else {
+        enrichedQuestions.push({ ...q });
       }
     }
 
-    // Fetch the active submission to get active time already spent
+    // Fetch the active submission
     const [activeSubmission] = await db
       .select({ id: examSubmissions.id, questionOrder: examSubmissions.questionOrder, activeSeconds: examSubmissions.activeSeconds })
       .from(examSubmissions)
@@ -79,47 +67,48 @@ export async function GET(
       .limit(1);
 
     // Shuffle if configured — persist order so it stays the same on resume
+    let shuffleUpdate: string[] | null = null;
     if (exam.isShuffled) {
       if (activeSubmission?.questionOrder && (activeSubmission.questionOrder as string[]).length === enrichedQuestions.length) {
-        // Resume: restore the previously saved order
         const orderMap = new Map((activeSubmission.questionOrder as string[]).map((id, idx) => [id, idx]));
         enrichedQuestions.sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0));
       } else {
-        // First load: shuffle and persist the order
         for (let i = enrichedQuestions.length - 1; i > 0; i--) {
           const j = Math.floor(Math.random() * (i + 1));
           [enrichedQuestions[i], enrichedQuestions[j]] = [enrichedQuestions[j], enrichedQuestions[i]];
         }
-        if (activeSubmission) {
-          await db
-            .update(examSubmissions)
-            .set({ questionOrder: enrichedQuestions.map((q) => q.id) })
-            .where(eq(examSubmissions.id, activeSubmission.id));
-        }
+        if (activeSubmission) shuffleUpdate = enrichedQuestions.map((q) => q.id);
       }
     }
 
-    // Clear SAVE_AND_EXIT so status shows IN_PROGRESS again while student is in the room
+    // #3: Atomically clear closeReason (re-entry atomicity) and persist shuffle order
+    // Both writes happen in the same transaction so the monitor never sees PENDING mid-entry
     if (activeSubmission) {
-      await db
-        .update(examSubmissions)
-        .set({ closeReason: null })
-        .where(eq(examSubmissions.id, activeSubmission.id));
+      await db.transaction(async (tx) => {
+        const updatePayload: Record<string, any> = { closeReason: null };
+        if (shuffleUpdate) updatePayload.questionOrder = shuffleUpdate;
+        await tx
+          .update(examSubmissions)
+          .set(updatePayload)
+          .where(eq(examSubmissions.id, activeSubmission.id));
+      });
     }
+
+    // #2: Clamp activeSeconds to exam duration ceiling before returning
+    const durationCap = (exam.duration ?? 60) * 60;
+    const rawActiveSeconds = activeSubmission?.activeSeconds ?? 0;
+    const activeSeconds = Math.min(rawActiveSeconds, durationCap);
 
     return NextResponse.json({
       status: "SUCCESS",
       questions: enrichedQuestions,
       examTitle: exam.title,
       focusLossPolicy: exam.focusLossPolicy ?? "LOG_ONLY",
-      activeSeconds: activeSubmission?.activeSeconds ?? 0,
+      activeSeconds,
       examDurationMins: exam.duration,
     });
   } catch (error) {
     console.error("Fetch questions error:", error);
-    return NextResponse.json(
-      { error: "INTERNAL_ERROR", message: "Failed to fetch questions" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "INTERNAL_ERROR", message: "Failed to fetch questions" }, { status: 500 });
   }
 }

@@ -126,7 +126,7 @@ export async function POST(
     await db.transaction(async (tx) => {
       const updated = await tx
         .update(examSubmissions)
-        .set({ submittedAt: new Date(), totalScore: safeTotalScore.toFixed(2) })
+        .set({ submittedAt: new Date(), totalScore: safeTotalScore.toFixed(2), closeReason: "FORCE_SUBMITTED" })
         .where(and(eq(examSubmissions.id, activeSubmission.id), isNull(examSubmissions.submittedAt)))
         .returning({ id: examSubmissions.id });
       if (updated.length === 0) throw new Error("ALREADY_SUBMITTED");

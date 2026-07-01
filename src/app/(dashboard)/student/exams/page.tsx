@@ -75,9 +75,10 @@ export default function StudentExamsPage() {
   };
 
   const getExamStatus = (exam: any) => {
-    if (exam.activeAttemptCancelled) return "CANCELLED";      // close date passed, unsubmitted attempt
-    if (exam.activeAttemptPaused) return "PENDING";           // saved & exited, not yet expired
-    if (exam.hasActiveAttempt) return "IN_PROGRESS";          // actively in exam
+    // #7: Use unified submissionStatus field (Rule 15 priority)
+    if (exam.submissionStatus === "CANCELLED") return "CANCELLED";
+    if (exam.submissionStatus === "PENDING") return "PENDING";
+    if (exam.submissionStatus === "IN_PROGRESS") return "IN_PROGRESS";
     if (exam.attemptsCount >= exam.allowedAttempts) return "COMPLETED";
     if (exam.isActive) return "ACTIVE";
     return "UPCOMING";
