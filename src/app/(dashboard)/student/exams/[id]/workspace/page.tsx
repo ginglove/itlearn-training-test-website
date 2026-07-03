@@ -89,8 +89,15 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                 language: saved?.language ?? "python",
               };
             } else if (q.type === "XPATH") {
+              const rawXpath = saved?.studentXpath ?? "";
+              const hasPrefix = rawXpath.startsWith("css:") || rawXpath.startsWith("xpath:");
+              const type = rawXpath.startsWith("css:") ? "CSS" : "XPATH";
+              const cleanXpath = hasPrefix
+                ? (rawXpath.startsWith("css:") ? rawXpath.substring(4) : rawXpath.substring(6))
+                : rawXpath;
               initialAnswers[q.id] = {
-                student_xpath: saved?.studentXpath ?? "",
+                student_xpath: cleanXpath,
+                selector_type: type,
               };
             } else {
               initialAnswers[q.id] = {
@@ -172,12 +179,28 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
     handleSubmit();
   }, [timeExpired]);
 
+  const getPreparedPayloads = () => {
+    return Object.entries(answers).map(([qId, ans]) => {
+      if (ans.student_xpath !== undefined) {
+        const type = ans.selector_type ?? "XPATH";
+        return {
+          question_id: qId,
+          student_xpath: ans.student_xpath.trim() ? `${type.toLowerCase()}:${ans.student_xpath.trim()}` : "",
+        };
+      }
+      return {
+        question_id: qId,
+        ...ans,
+      };
+    });
+  };
+
   // #4: Auto-submit on 3rd focus loss (WARN_AND_LOCK).
   // Fires when focusLosses changes AND when questions load (to handle the deferred case
   // where the 3rd blur arrived before the question list finished loading).
   useEffect(() => {
     if (focusLosses < 3 || focusLossPolicy !== "WARN_AND_LOCK" || questions.length === 0) return;
-    const payloads = Object.entries(answers).map(([qId, ans]) => ({ question_id: qId, ...ans }));
+    const payloads = getPreparedPayloads();
     fetch(`/api/v1/student/exams/${examId}/submit`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -194,10 +217,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
 
     const intervalSeconds = settings?.autoSaveInterval ?? 15;
     const interval = setInterval(async () => {
-      const payloads = Object.entries(answers).map(([qId, ans]) => ({
-        question_id: qId,
-        ...ans
-      }));
+      const payloads = getPreparedPayloads();
 
       try {
         await fetch(`/api/v1/student/exams/${examId}/auto-save`, {
@@ -291,10 +311,12 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
     setIsRunningXpath(true);
     setXpathResults((prev) => ({ ...prev, [qId]: null }));
     try {
+      const type = answers[qId]?.selector_type ?? "XPATH";
+      const prefixedXpath = `${type.toLowerCase()}:${xpath}`;
       const res = await fetch(`/api/v1/student/exams/${examId}/run-xpath`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question_id: qId, student_xpath: xpath }),
+        body: JSON.stringify({ question_id: qId, student_xpath: prefixedXpath }),
       });
       const data = await res.json();
       setXpathResults((prev) => ({ ...prev, [qId]: res.ok ? data.result : { status: "CE", message: data.message ?? "Error" } }));
@@ -314,10 +336,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
     setShowConfirmModal(false);
     setIsSubmitting(true);
     try {
-      const payloads = Object.entries(answers).map(([qId, ans]) => ({
-        question_id: qId,
-        ...ans
-      }));
+      const payloads = getPreparedPayloads();
 
       const res = await fetch(`/api/v1/student/exams/${examId}/submit`, {
         method: "POST",
@@ -373,10 +392,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
     setIsExiting(true);
     // Flush current answers to the server before leaving
     try {
-      const payloads = Object.entries(answers).map(([qId, ans]) => ({
-        question_id: qId,
-        ...ans,
-      }));
+      const payloads = getPreparedPayloads();
       await fetch(`/api/v1/student/exams/${examId}/auto-save`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -743,9 +759,36 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                       </div>
 
                       <div className="flex flex-col gap-2">
-                        <label className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
-                          Your XPath Locator
-                        </label>
+                        <div className="flex justify-between items-center">
+                          <label className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
+                            Your {(answers[currentQ.id]?.selector_type ?? "XPATH") === "CSS" ? "CSS Selector" : "XPath Locator"}
+                          </label>
+                          {/* Selector Type Toggle */}
+                          <div className="flex gap-1.5 bg-bg-base p-1 rounded-lg border border-border-strong">
+                            {(["XPATH", "CSS"] as const).map((t) => (
+                              <button
+                                key={t}
+                                type="button"
+                                onClick={() =>
+                                  setAnswers((prev) => ({
+                                    ...prev,
+                                    [currentQ.id]: {
+                                      ...prev[currentQ.id],
+                                      selector_type: t,
+                                    },
+                                  }))
+                                }
+                                className={`px-2.5 py-1 rounded text-2xs font-bold transition-all ${
+                                  (answers[currentQ.id]?.selector_type ?? "XPATH") === t
+                                    ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                    : "text-text-tertiary hover:text-text-secondary"
+                                }`}
+                              >
+                                {t === "XPATH" ? "XPath" : "CSS"}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                         <input
                           type="text"
                           spellCheck={false}
@@ -753,10 +796,13 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                           onChange={(e) =>
                             setAnswers((prev) => ({
                               ...prev,
-                              [currentQ.id]: { student_xpath: e.target.value },
+                              [currentQ.id]: {
+                                ...prev[currentQ.id],
+                                student_xpath: e.target.value,
+                              },
                             }))
                           }
-                          placeholder='//div[@id="result"]'
+                          placeholder={(answers[currentQ.id]?.selector_type ?? "XPATH") === "CSS" ? 'div#result' : '//div[@id="result"]'}
                           className="w-full bg-bg-base border border-border-strong rounded-xl px-4 py-3 text-white text-sm font-mono placeholder:text-text-tertiary focus:outline-none focus:border-emerald-500/50 transition-colors"
                         />
                         <button

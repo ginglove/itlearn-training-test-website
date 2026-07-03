@@ -56,7 +56,7 @@ export async function PUT(
           .onConflictDoUpdate({ target: xpathConfigs.questionId, set: { selectorType: xpathConfig.selectorType ?? "XPATH" } });
         await tx.delete(xpathTestCases).where(eq(xpathTestCases.questionId, questionId));
         if (Array.isArray(xpathConfig.testCases) && xpathConfig.testCases.length > 0) {
-          await tx.insert(xpathTestCases).values(xpathConfig.testCases.map((tc: any) => ({ questionId, targetType: tc.targetType ?? "HTML", targetPayload: tc.targetPayload, referenceSelector: tc.referenceSelector, isHidden: !!tc.isHidden })));
+          await tx.insert(xpathTestCases).values(xpathConfig.testCases.map((tc: any) => ({ questionId, targetType: tc.targetType ?? "HTML", selectorType: tc.selectorType ?? "XPATH", targetPayload: tc.targetPayload, referenceSelector: tc.referenceSelector, isHidden: !!tc.isHidden })));
         }
       }
     });

@@ -168,6 +168,7 @@ export async function POST(
           group.testCases.map(tc => ({
             questionId: newQuestion.id,
             targetType: tc.targetType,
+            selectorType: (tc as any).selectorType ?? selectorType,
             targetPayload: tc.targetPayload,
             referenceSelector: tc.referenceSelector,
             isHidden: tc.isHidden,

@@ -1,4 +1,4 @@
-﻿import {
+import {
   pgTable,
   uuid,
   varchar,
@@ -127,6 +127,7 @@ export const xpathTestCases = pgTable(
       .notNull()
       .references(() => questions.id, { onDelete: "cascade" }),
     targetType: varchar("target_type", { length: 10 }).notNull().default("HTML"),
+    selectorType: varchar("selector_type", { length: 10 }).notNull().default("XPATH"),
     targetPayload: text("target_payload").notNull(),
     referenceSelector: text("reference_selector").notNull(),
     isHidden: boolean("is_hidden").notNull().default(false),

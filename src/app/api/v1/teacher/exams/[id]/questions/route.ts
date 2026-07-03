@@ -115,7 +115,7 @@ export async function POST(
       if (type === "XPATH" && xpathConfig) {
         await tx.insert(xpathConfigs).values({ questionId: q.id, selectorType: xpathConfig.selectorType ?? "XPATH" });
         if (Array.isArray(xpathConfig.testCases) && xpathConfig.testCases.length > 0) {
-          await tx.insert(xpathTestCases).values(xpathConfig.testCases.map((tc: any) => ({ questionId: q.id, targetType: tc.targetType ?? "HTML", targetPayload: tc.targetPayload, referenceSelector: tc.referenceSelector, isHidden: !!tc.isHidden })));
+          await tx.insert(xpathTestCases).values(xpathConfig.testCases.map((tc: any) => ({ questionId: q.id, targetType: tc.targetType ?? "HTML", selectorType: tc.selectorType ?? "XPATH", targetPayload: tc.targetPayload, referenceSelector: tc.referenceSelector, isHidden: !!tc.isHidden })));
         }
       }
 

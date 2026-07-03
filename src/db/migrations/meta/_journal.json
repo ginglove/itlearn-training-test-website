@@ -8,6 +8,13 @@
       "when": 1782227857719,
       "tag": "0000_neat_sauron",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1783087344921,
+      "tag": "0001_good_the_anarchist",
+      "breakpoints": true
     }
   ]
 }

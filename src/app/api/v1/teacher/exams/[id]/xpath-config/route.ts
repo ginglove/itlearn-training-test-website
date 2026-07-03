@@ -108,6 +108,7 @@ export async function POST(
         cases.map((tc: any) => ({
           questionId,
           targetType: tc.targetType,
+          selectorType: tc.selectorType ?? selectorType ?? "XPATH",
           targetPayload: tc.targetPayload,
           referenceSelector: tc.referenceSelector,
           isHidden: !!tc.isHidden,

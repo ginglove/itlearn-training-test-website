@@ -141,6 +141,7 @@ export async function POST(
               targetType: c.targetType as "URL" | "HTML",
               targetPayload: c.targetPayload,
               referenceSelector: c.referenceSelector,
+              selectorType: (c.selectorType as "XPATH" | "CSS") ?? undefined,
             })),
             studentSelector,
           });

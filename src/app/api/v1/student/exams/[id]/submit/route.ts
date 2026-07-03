@@ -126,7 +126,7 @@ export async function POST(
         if (studentSelector.trim() && xConfig && cases.length > 0) {
           const xResult = await gradeXPathQuestion({
             selectorType: (xConfig.selectorType as "XPATH" | "CSS") ?? "XPATH",
-            testCases: cases.map((c: any) => ({ targetType: c.targetType as "URL" | "HTML", targetPayload: c.targetPayload, referenceSelector: c.referenceSelector })),
+            testCases: cases.map((c: any) => ({ targetType: c.targetType as "URL" | "HTML", targetPayload: c.targetPayload, referenceSelector: c.referenceSelector, selectorType: (c.selectorType as "XPATH" | "CSS") ?? undefined })),
             studentSelector: studentSelector.trim(),
           });
           xpathStatus = xResult.status;

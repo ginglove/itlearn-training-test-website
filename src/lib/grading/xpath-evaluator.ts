@@ -1,4 +1,4 @@
-﻿import { JSDOM } from "jsdom";
+import { JSDOM } from "jsdom";
 
 export type SelectorType = "XPATH" | "CSS";
 
@@ -151,11 +151,12 @@ export async function gradeXPathQuestion({
   testCases,
   studentSelector,
 }: {
-  selectorType: SelectorType;
+  selectorType?: SelectorType;
   testCases: Array<{
     targetType: "URL" | "HTML";
     targetPayload: string;
     referenceSelector: string;
+    selectorType?: SelectorType;
   }>;
   studentSelector: string;
 }): Promise<XPathGradeResult> {
@@ -190,9 +191,22 @@ export async function gradeXPathQuestion({
 
     const { doc } = loaded;
 
+    const caseSelectorType: SelectorType = tc.selectorType ?? selectorType ?? "XPATH";
+
+    const studentHasPrefix = studentSelector.startsWith("css:") || studentSelector.startsWith("xpath:");
+    const studentChosenType: SelectorType = studentSelector.startsWith("css:") 
+      ? "CSS" 
+      : studentSelector.startsWith("xpath:") 
+      ? "XPATH" 
+      : caseSelectorType;
+    
+    const trimmedStudentSelector = studentHasPrefix
+      ? (studentSelector.startsWith("css:") ? studentSelector.substring(4).trim() : studentSelector.substring(6).trim())
+      : studentSelector.trim();
+
     let refNodes: Element[];
     try {
-      refNodes = evaluateSelector(doc, tc.referenceSelector.trim(), selectorType);
+      refNodes = evaluateSelector(doc, tc.referenceSelector.trim(), caseSelectorType);
     } catch {
       caseResults.push({
         caseIndex: i,
@@ -207,7 +221,7 @@ export async function gradeXPathQuestion({
 
     let studentNodes: Element[];
     try {
-      studentNodes = evaluateSelector(doc, trimmedSelector, selectorType);
+      studentNodes = evaluateSelector(doc, trimmedStudentSelector, studentChosenType);
     } catch (err: any) {
       caseResults.push({
         caseIndex: i,
@@ -249,7 +263,7 @@ export async function gradeXPathQuestion({
 
     // #6: XPATH uses DOM reference comparison (same jsdom instance); CSS uses outerHTML string comparison
     let allMatch: boolean;
-    if (selectorType === "CSS") {
+    if (caseSelectorType === "CSS") {
       const refHtmls = refNodes.map(n => n.outerHTML);
       const studentHtmls = studentNodes.map(n => n.outerHTML);
       allMatch = studentHtmls.every((h, idx) => h === refHtmls[idx]);

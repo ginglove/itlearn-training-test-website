@@ -1,5 +1,6 @@
 -- Clean up existing tables and types
 DROP TABLE IF EXISTS "xpath_configs" CASCADE;
+DROP TABLE IF EXISTS "xpath_test_cases" CASCADE;
 DROP TABLE IF EXISTS "code_configs" CASCADE;
 DROP TABLE IF EXISTS "exam_submissions" CASCADE;
 DROP TABLE IF EXISTS "exam_assignments" CASCADE;
@@ -113,10 +114,18 @@ CREATE TABLE "submission_details" (
 CREATE TABLE "xpath_configs" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"question_id" uuid NOT NULL,
-	"target_type" varchar(10) DEFAULT 'URL' NOT NULL,
-	"target_payload" text NOT NULL,
-	"reference_xpath" text NOT NULL,
+	"selector_type" varchar(10) DEFAULT 'XPATH' NOT NULL,
 	CONSTRAINT "xpath_configs_question_id_unique" UNIQUE("question_id")
+);
+
+CREATE TABLE "xpath_test_cases" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"question_id" uuid NOT NULL,
+	"target_type" varchar(10) DEFAULT 'HTML' NOT NULL,
+	"selector_type" varchar(10) DEFAULT 'XPATH' NOT NULL,
+	"target_payload" text NOT NULL,
+	"reference_selector" text NOT NULL,
+	"is_hidden" boolean DEFAULT false NOT NULL
 );
 
 CREATE TABLE "exam_assignments" (
@@ -138,6 +147,7 @@ ALTER TABLE "submission_details" ADD CONSTRAINT "submission_details_submission_i
 ALTER TABLE "submission_details" ADD CONSTRAINT "submission_details_question_id_questions_id_fk" FOREIGN KEY ("question_id") REFERENCES "public"."questions"("id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "test_cases" ADD CONSTRAINT "test_cases_question_id_questions_id_fk" FOREIGN KEY ("question_id") REFERENCES "public"."questions"("id") ON DELETE cascade ON UPDATE no action;
 ALTER TABLE "xpath_configs" ADD CONSTRAINT "xpath_configs_question_id_questions_id_fk" FOREIGN KEY ("question_id") REFERENCES "public"."questions"("id") ON DELETE cascade ON UPDATE no action;
+ALTER TABLE "xpath_test_cases" ADD CONSTRAINT "xpath_test_cases_question_id_questions_id_fk" FOREIGN KEY ("question_id") REFERENCES "public"."questions"("id") ON DELETE cascade ON UPDATE no action;
 
 -- Indexes
 CREATE UNIQUE INDEX "one_submission_per_student_exam_attempt" ON "exam_submissions" USING btree ("exam_id","student_id","attempt");
@@ -150,6 +160,7 @@ CREATE INDEX "idx_submission_details_lookup" ON "submission_details" USING btree
 CREATE INDEX "idx_test_cases_question_id" ON "test_cases" USING btree ("question_id");
 CREATE UNIQUE INDEX "unique_exam_student_assignment" ON "exam_assignments" USING btree ("exam_id","student_id");
 CREATE INDEX "idx_exam_assignments_lookup" ON "exam_assignments" USING btree ("exam_id");
+CREATE INDEX "idx_xpath_test_cases_question_id" ON "xpath_test_cases" USING btree ("question_id");
 
 CREATE TABLE "platform_settings" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,

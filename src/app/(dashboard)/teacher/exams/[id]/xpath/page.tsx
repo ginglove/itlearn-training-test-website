@@ -7,6 +7,7 @@ import { useToast } from "@/components/toast";
 type XpathTestCase = {
   id?: string;
   targetType: "URL" | "HTML";
+  selectorType?: "XPATH" | "CSS";
   targetPayload: string;
   referenceSelector: string;
   isHidden: boolean;
@@ -115,6 +116,7 @@ export default function XPathConfigPage({ params }: { params: Promise<{ id: stri
 
   const emptyCase = (): XpathTestCase => ({
     targetType: "HTML",
+    selectorType: selectorType,
     targetPayload: "",
     referenceSelector: "",
     isHidden: false,
@@ -147,7 +149,12 @@ export default function XPathConfigPage({ params }: { params: Promise<{ id: stri
       const res = await fetch(`/api/v1/teacher/exams/${examId}/xpath-verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ selectorType, targetType: tc.targetType, targetPayload: tc.targetPayload, referenceSelector: tc.referenceSelector }),
+        body: JSON.stringify({
+          selectorType: tc.selectorType ?? selectorType,
+          targetType: tc.targetType,
+          targetPayload: tc.targetPayload,
+          referenceSelector: tc.referenceSelector,
+        }),
       });
       const data = await res.json();
       const updated = [...testCases];
@@ -365,18 +372,36 @@ export default function XPathConfigPage({ params }: { params: Promise<{ id: stri
                           <button type="button" onClick={() => removeTC(i)} disabled={testCases.length <= 1} className="text-xs text-text-tertiary hover:text-rose-400 disabled:opacity-30">Remove</button>
                         </div>
 
-                        {/* Target type toggle */}
-                        <div className="flex gap-2">
-                          {(["HTML", "URL"] as const).map((t) => (
-                            <button key={t} type="button" onClick={() => updateTC(i, "targetType", t)}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                                tc.targetType === t
-                                  ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-300"
-                                  : "bg-bg-surface border-border-strong text-text-secondary hover:border-text-tertiary"
-                              }`}>
-                              {t === "HTML" ? "📄 HTML Snippet" : "🌐 URL"}
-                            </button>
-                          ))}
+                         {/* Config toggles */}
+                        <div className="flex flex-wrap gap-4 items-center">
+                          {/* Target type toggle */}
+                          <div className="flex gap-2">
+                            {(["HTML", "URL"] as const).map((t) => (
+                              <button key={t} type="button" onClick={() => updateTC(i, "targetType", t)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                                  tc.targetType === t
+                                    ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-300"
+                                    : "bg-bg-surface border-border-strong text-text-secondary hover:border-text-tertiary"
+                                }`}>
+                                {t === "HTML" ? "📄 HTML Snippet" : "🌐 URL"}
+                              </button>
+                            ))}
+                          </div>
+
+                          {/* Selector type toggle */}
+                          <div className="flex gap-2 items-center">
+                            <span className="text-xs font-medium text-text-tertiary">Engine:</span>
+                            {(["XPATH", "CSS"] as const).map((t) => (
+                              <button key={t} type="button" onClick={() => updateTC(i, "selectorType", t)}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${
+                                  (tc.selectorType ?? selectorType) === t
+                                    ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-300"
+                                    : "bg-bg-surface border-border-strong text-text-secondary hover:border-text-tertiary"
+                                }`}>
+                                {t === "XPATH" ? "XPath" : "CSS Selector"}
+                              </button>
+                            ))}
+                          </div>
                         </div>
 
                         {/* Target payload */}
@@ -401,10 +426,10 @@ export default function XPathConfigPage({ params }: { params: Promise<{ id: stri
                         {/* Reference selector */}
                         <div>
                           <label className="block text-xs font-medium text-text-tertiary mb-1">
-                            Reference {selectorType === "CSS" ? "CSS Selector" : "XPath"} (correct answer)
+                            Reference {(tc.selectorType ?? selectorType) === "CSS" ? "CSS Selector" : "XPath"} (correct answer)
                           </label>
                           <input type="text" value={tc.referenceSelector} onChange={(e) => updateTC(i, "referenceSelector", e.target.value)}
-                            placeholder={selectorType === "CSS" ? "div.course-price" : "//div[@class='course-price']"}
+                            placeholder={(tc.selectorType ?? selectorType) === "CSS" ? "div.course-price" : "//div[@class='course-price']"}
                             className="w-full bg-bg-base border border-border-strong rounded-xl px-4 py-2.5 text-white text-sm font-mono placeholder:text-text-tertiary focus:outline-none focus:border-emerald-500/50" />
                         </div>
 
