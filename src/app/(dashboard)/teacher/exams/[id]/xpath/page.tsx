@@ -23,6 +23,44 @@ type XpathQuestion = {
   isConfigured: boolean;
 };
 
+function beautifyHTML(html: string): string {
+  if (!html) return "";
+  let formatted = "";
+  let indent = "";
+  const tab = "  "; // 2 spaces
+
+  // Basic HTML formatter
+  const cleanHtml = html
+    .replace(/>\s+</g, "><") // Remove whitespace between tags
+    .replace(/(<[^>]+>)/g, "\n$1\n") // Put tags on separate lines
+    .replace(/\n\s*\n/g, "\n"); // Remove empty lines
+
+  const lines = cleanHtml.split("\n");
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+
+    // Decrease indent before printing tag if it's a closing tag
+    if (line.match(/^<\/\w/)) {
+      indent = indent.substring(tab.length);
+    }
+
+    formatted += indent + line + "\n";
+
+    // Increase indent if it's an opening tag and not self-closing or void
+    const isOpening = line.match(/^<\w/) && !line.match(/^<\/\w/) && !line.match(/\/>$/);
+    const isVoid = line.match(/^<(area|base|br|col|embed|hr|img|input|link|meta|param|source|track|wbr)\b/i);
+
+    if (isOpening && !isVoid) {
+      indent += tab;
+    }
+  }
+
+  return formatted.trim();
+}
+
+
 export default function XPathConfigPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
   const { id: examId } = use(params);
@@ -328,7 +366,7 @@ export default function XPathConfigPage({ params }: { params: Promise<{ id: stri
                               placeholder="https://example.com"
                               className="w-full bg-bg-base border border-border-strong rounded-xl px-4 py-2.5 text-white text-sm font-mono placeholder:text-text-tertiary focus:outline-none focus:border-emerald-500/50" />
                           ) : (
-                            <textarea value={tc.targetPayload} onChange={(e) => updateTC(i, "targetPayload", e.target.value)} rows={5}
+                            <textarea value={tc.targetPayload} onChange={(e) => updateTC(i, "targetPayload", e.target.value)} onBlur={(e) => updateTC(i, "targetPayload", beautifyHTML(e.target.value))} rows={5}
                               placeholder={"<html><body><div class=\"course-price\">$99</div></body></html>"}
                               className="w-full bg-bg-base border border-border-strong rounded-xl px-4 py-2.5 text-white text-sm font-mono placeholder:text-text-tertiary focus:outline-none focus:border-emerald-500/50 resize-none" />
                           )}
