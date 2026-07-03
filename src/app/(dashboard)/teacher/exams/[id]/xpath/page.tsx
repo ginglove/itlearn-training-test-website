@@ -103,7 +103,12 @@ export default function XPathConfigPage({ params }: { params: Promise<{ id: stri
     setSelectorType((q.selectorType as "XPATH" | "CSS") ?? "XPATH");
     setTestCases(
       q.testCases.length > 0
-        ? q.testCases.map((tc) => ({ ...tc, verifyResult: null, isVerifying: false }))
+        ? q.testCases.map((tc) => ({
+            ...tc,
+            targetPayload: tc.targetType === "HTML" ? beautifyHTML(tc.targetPayload) : tc.targetPayload,
+            verifyResult: null,
+            isVerifying: false,
+          }))
         : [emptyCase()]
     );
   };
@@ -157,10 +162,9 @@ export default function XPathConfigPage({ params }: { params: Promise<{ id: stri
     }
   };
 
-  const handleSave = async () => {
-    const valid = testCases.filter((tc) => tc.targetPayload.trim() && tc.referenceSelector.trim());
-    if (!selectedId || valid.length === 0) {
-      showToast("Add at least one test case with target and selector.", "error");
+  const saveConfig = async (currentId: string, currentSelectorType: "XPATH" | "CSS", casesToSave: XpathTestCase[]) => {
+    const valid = casesToSave.filter((tc) => tc.targetPayload.trim() && tc.referenceSelector.trim());
+    if (!currentId || valid.length === 0) {
       return;
     }
     setIsSaving(true);
@@ -169,16 +173,16 @@ export default function XPathConfigPage({ params }: { params: Promise<{ id: stri
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          questionId: selectedId,
-          selectorType,
+          questionId: currentId,
+          selectorType: currentSelectorType,
           testCases: valid.map(({ verifyResult: _vr, isVerifying: _iv, id: _id, ...tc }) => tc),
         }),
       });
-      const data = await res.json();
       if (res.ok) {
         showToast("XPath configuration saved.");
-        fetchQuestions(selectedId);
+        fetchQuestions(currentId);
       } else {
+        const data = await res.json();
         showToast(data.message ?? "Failed to save.", "error");
       }
     } catch {
@@ -187,6 +191,25 @@ export default function XPathConfigPage({ params }: { params: Promise<{ id: stri
       setIsSaving(false);
     }
   };
+
+  const handleSave = async () => {
+    const valid = testCases.filter((tc) => tc.targetPayload.trim() && tc.referenceSelector.trim());
+    if (!selectedId || valid.length === 0) {
+      showToast("Add at least one test case with target and selector.", "error");
+      return;
+    }
+    await saveConfig(selectedId, selectorType, testCases);
+  };
+
+  const handleHtmlBlur = (i: number, value: string) => {
+    const beautified = beautifyHTML(value);
+    const updated = [...testCases];
+    updated[i].targetPayload = beautified;
+    updated[i].verifyResult = null;
+    setTestCases(updated);
+    saveConfig(selectedId, selectorType, updated);
+  };
+
 
   const currentQ = questionsList.find((q) => q.id === selectedId);
 
@@ -366,7 +389,7 @@ export default function XPathConfigPage({ params }: { params: Promise<{ id: stri
                               placeholder="https://example.com"
                               className="w-full bg-bg-base border border-border-strong rounded-xl px-4 py-2.5 text-white text-sm font-mono placeholder:text-text-tertiary focus:outline-none focus:border-emerald-500/50" />
                           ) : (
-                            <textarea value={tc.targetPayload} onChange={(e) => updateTC(i, "targetPayload", e.target.value)} onBlur={(e) => updateTC(i, "targetPayload", beautifyHTML(e.target.value))} rows={5}
+                            <textarea value={tc.targetPayload} onChange={(e) => updateTC(i, "targetPayload", e.target.value)} onBlur={(e) => handleHtmlBlur(i, e.target.value)} rows={5}
                               placeholder={"<html><body><div class=\"course-price\">$99</div></body></html>"}
                               className="w-full bg-bg-base border border-border-strong rounded-xl px-4 py-2.5 text-white text-sm font-mono placeholder:text-text-tertiary focus:outline-none focus:border-emerald-500/50 resize-none" />
                           )}
