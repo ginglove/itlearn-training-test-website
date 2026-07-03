@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { questions, quizOptions, codeConfigs, testCases, exams, examSubmissions } from "@/db/schema";
+import { questions, quizOptions, codeConfigs, testCases, xpathConfigs, xpathTestCases, exams, examSubmissions } from "@/db/schema";
 import { eq, asc, and, isNull } from "drizzle-orm";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(
   request: NextRequest,
@@ -48,6 +50,30 @@ export async function GET(
           .where(and(eq(testCases.questionId, q.id), eq(testCases.isHidden, false)));
 
         enrichedQuestions.push({ ...q, publicCases, starterCode: config?.starterCode || "" });
+      } else if (q.type === "XPATH") {
+        // Join xpath config (selectorType) and first non-hidden test case (targetType + targetPayload)
+        const [xConfig] = await db
+          .select({ selectorType: xpathConfigs.selectorType })
+          .from(xpathConfigs)
+          .where(eq(xpathConfigs.questionId, q.id))
+          .limit(1);
+
+        // Show the first public (non-hidden) test case as the target preview for the student
+        const [xCase] = await db
+          .select({
+            targetType: xpathTestCases.targetType,
+            targetPayload: xpathTestCases.targetPayload,
+          })
+          .from(xpathTestCases)
+          .where(and(eq(xpathTestCases.questionId, q.id), eq(xpathTestCases.isHidden, false)))
+          .limit(1);
+
+        enrichedQuestions.push({
+          ...q,
+          selectorType: xConfig?.selectorType ?? "XPATH",
+          targetType: xCase?.targetType ?? null,
+          targetPayload: xCase?.targetPayload ?? null,
+        });
       } else {
         enrichedQuestions.push({ ...q });
       }

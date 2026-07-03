@@ -33,24 +33,30 @@ export default function XPathConfigPage({ params }: { params: Promise<{ id: stri
   const [selectorType, setSelectorType] = useState<"XPATH" | "CSS">("XPATH");
   const [testCases, setTestCases] = useState<XpathTestCase[]>([]);
   const [isFetching, setIsFetching] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => { fetchQuestions(); }, []);
 
-  const fetchQuestions = async () => {
+  // keepId: after save, re-select the same question instead of jumping to Q1
+  const fetchQuestions = async (keepId?: string) => {
     try {
-      setIsFetching(true);
+      if (!keepId) setIsFetching(true); else setIsSyncing(true);
       const res = await fetch(`/api/v1/teacher/exams/${examId}/xpath-config`);
       if (res.ok) {
         const data = await res.json();
         const list: XpathQuestion[] = data.questions ?? [];
         setQuestionsList(list);
-        if (list.length > 0) selectQuestion(list[0]);
+        if (list.length > 0) {
+          const toSelect = keepId ? (list.find((q) => q.id === keepId) ?? list[0]) : list[0];
+          selectQuestion(toSelect);
+        }
       }
     } catch (err) {
       console.error("Failed to fetch xpath questions:", err);
     } finally {
       setIsFetching(false);
+      setIsSyncing(false);
     }
   };
 
@@ -133,7 +139,7 @@ export default function XPathConfigPage({ params }: { params: Promise<{ id: stri
       const data = await res.json();
       if (res.ok) {
         showToast("XPath configuration saved.");
-        fetchQuestions();
+        fetchQuestions(selectedId);
       } else {
         showToast(data.message ?? "Failed to save.", "error");
       }
@@ -244,6 +250,21 @@ export default function XPathConfigPage({ params }: { params: Promise<{ id: stri
             {/* Config form */}
             {currentQ && (
               <div className="glass-card p-4 md:p-6 space-y-6">
+                {/* Question context header */}
+                <div className="flex items-center justify-between pb-4 border-b border-border-strong">
+                  <div className="min-w-0">
+                    <p className="text-[10px] text-text-tertiary uppercase tracking-wider font-bold mb-0.5">Configuring question</p>
+                    <h2 className="text-base font-bold text-white truncate">{currentQ.title}</h2>
+                  </div>
+                  <span className={`shrink-0 ml-3 text-[10px] font-semibold px-2.5 py-1 rounded-full border ${
+                    currentQ.isConfigured
+                      ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-300"
+                      : "bg-amber-500/10 border-amber-500/20 text-amber-300"
+                  }`}>
+                    {isSyncing ? "Saving…" : currentQ.isConfigured ? `${currentQ.testCases.length} case(s) saved` : "Not configured"}
+                  </span>
+                </div>
+
                 {/* Selector type */}
                 <div>
                   <label className="text-xs font-bold text-text-tertiary uppercase tracking-wider block mb-2">Selector Type</label>

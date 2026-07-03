@@ -652,7 +652,10 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                 <span className="text-xs font-bold text-brand-400 uppercase tracking-wider mb-1 block">
                   Question {currentIndex + 1} of {questions.length} • {currentQ.type}
                 </span>
-                <h2 className="text-sm text-white font-medium whitespace-pre-wrap leading-relaxed">{currentQ.content}</h2>
+                {currentQ.title && (
+                  <h1 className="text-lg font-bold text-white mb-2">{currentQ.title}</h1>
+                )}
+                <h2 className="text-sm text-text-secondary font-medium whitespace-pre-wrap leading-relaxed">{currentQ.content}</h2>
               </div>
               <div className="text-text-tertiary font-mono bg-bg-surface-elevated px-3 py-1 rounded text-sm whitespace-nowrap ml-4 shrink-0">
                 {currentQ.points} pts
