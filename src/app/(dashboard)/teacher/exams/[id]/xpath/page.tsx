@@ -178,10 +178,15 @@ export default function XPathConfigPage({ params }: { params: Promise<{ id: stri
               ← Back
             </button>
           </div>
-          {/* XPath 1.0 notice */}
-          <div className="mt-3 flex items-start gap-2 bg-amber-500/8 border border-amber-500/20 rounded-lg px-4 py-2.5 text-xs text-amber-400">
-            <svg className="w-3.5 h-3.5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-            <span><strong>XPath 1.0 only.</strong> The evaluator (jsdom) does not support XPath 2.0/3.0 functions like <code className="font-mono bg-amber-500/10 px-1 rounded">fn:matches()</code>. Use CSS selector type for flexible class/attribute matching.</span>
+          {/* XPath engine info */}
+          <div className="mt-3 flex items-start gap-2 bg-bg-surface-elevated/60 border border-border-strong rounded-lg px-4 py-2.5 text-xs text-text-secondary">
+            <svg className="w-3.5 h-3.5 shrink-0 mt-0.5 text-brand-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            <span>
+              <strong className="text-white">Selector engine info:</strong>{" "}
+              XPath expressions are evaluated with the XPath 1.0 engine built into jsdom — functions like{" "}
+              <code className="font-mono bg-bg-surface px-1 rounded text-brand-300">fn:matches()</code> (XPath 2.0+) are not available.
+              For flexible class or attribute matching, switch the selector type to <strong className="text-white">CSS</strong> and use standard CSS selectors instead.
+            </span>
           </div>
         </div>
 
