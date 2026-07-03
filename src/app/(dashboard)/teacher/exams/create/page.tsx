@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -141,8 +141,8 @@ export default function CreateExamPage() {
                 onChange={(e) => setFormData({ ...formData, focusLossPolicy: e.target.value })}
                 className="premium-input bg-bg-surface-elevated text-white w-full"
               >
-                <option value="LOG_ONLY">Log Only â€” Track tab switches, no penalty</option>
-                <option value="WARN_AND_LOCK">Warn &amp; Lock â€” Warn twice, auto-submit on 3rd tab switch</option>
+                <option value="LOG_ONLY">Log Only &mdash; Track tab switches, no penalty</option>
+                <option value="WARN_AND_LOCK">Warn &amp; Lock &mdash; Warn twice, auto-submit on 3rd tab switch</option>
               </select>
             </div>
 
