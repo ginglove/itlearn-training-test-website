@@ -7,6 +7,7 @@ import { useToast } from "@/components/toast";
 type XpathTestCase = {
   id?: string;
   targetType: "URL" | "HTML";
+  selectorType?: "XPATH" | "CSS";
   targetPayload: string;
   referenceSelector: string;
   isHidden: boolean;
@@ -23,6 +24,44 @@ type XpathQuestion = {
   isConfigured: boolean;
 };
 
+function beautifyHTML(html: string): string {
+  if (!html) return "";
+  let formatted = "";
+  let indent = "";
+  const tab = "  "; // 2 spaces
+
+  // Basic HTML formatter
+  const cleanHtml = html
+    .replace(/>\s+</g, "><") // Remove whitespace between tags
+    .replace(/(<[^>]+>)/g, "\n$1\n") // Put tags on separate lines
+    .replace(/\n\s*\n/g, "\n"); // Remove empty lines
+
+  const lines = cleanHtml.split("\n");
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+
+    // Decrease indent before printing tag if it's a closing tag
+    if (line.match(/^<\/\w/)) {
+      indent = indent.substring(tab.length);
+    }
+
+    formatted += indent + line + "\n";
+
+    // Increase indent if it's an opening tag and not self-closing or void
+    const isOpening = line.match(/^<\w/) && !line.match(/^<\/\w/) && !line.match(/\/>$/);
+    const isVoid = line.match(/^<(area|base|br|col|embed|hr|img|input|link|meta|param|source|track|wbr)\b/i);
+
+    if (isOpening && !isVoid) {
+      indent += tab;
+    }
+  }
+
+  return formatted.trim();
+}
+
+
 export default function XPathConfigPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
   const { id: examId } = use(params);
@@ -33,24 +72,30 @@ export default function XPathConfigPage({ params }: { params: Promise<{ id: stri
   const [selectorType, setSelectorType] = useState<"XPATH" | "CSS">("XPATH");
   const [testCases, setTestCases] = useState<XpathTestCase[]>([]);
   const [isFetching, setIsFetching] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => { fetchQuestions(); }, []);
 
-  const fetchQuestions = async () => {
+  // keepId: after save, re-select the same question instead of jumping to Q1
+  const fetchQuestions = async (keepId?: string) => {
     try {
-      setIsFetching(true);
+      if (!keepId) setIsFetching(true); else setIsSyncing(true);
       const res = await fetch(`/api/v1/teacher/exams/${examId}/xpath-config`);
       if (res.ok) {
         const data = await res.json();
         const list: XpathQuestion[] = data.questions ?? [];
         setQuestionsList(list);
-        if (list.length > 0) selectQuestion(list[0]);
+        if (list.length > 0) {
+          const toSelect = keepId ? (list.find((q) => q.id === keepId) ?? list[0]) : list[0];
+          selectQuestion(toSelect);
+        }
       }
     } catch (err) {
       console.error("Failed to fetch xpath questions:", err);
     } finally {
       setIsFetching(false);
+      setIsSyncing(false);
     }
   };
 
@@ -59,13 +104,19 @@ export default function XPathConfigPage({ params }: { params: Promise<{ id: stri
     setSelectorType((q.selectorType as "XPATH" | "CSS") ?? "XPATH");
     setTestCases(
       q.testCases.length > 0
-        ? q.testCases.map((tc) => ({ ...tc, verifyResult: null, isVerifying: false }))
+        ? q.testCases.map((tc) => ({
+            ...tc,
+            targetPayload: tc.targetType === "HTML" ? beautifyHTML(tc.targetPayload) : tc.targetPayload,
+            verifyResult: null,
+            isVerifying: false,
+          }))
         : [emptyCase()]
     );
   };
 
   const emptyCase = (): XpathTestCase => ({
     targetType: "HTML",
+    selectorType: selectorType,
     targetPayload: "",
     referenceSelector: "",
     isHidden: false,
@@ -98,7 +149,12 @@ export default function XPathConfigPage({ params }: { params: Promise<{ id: stri
       const res = await fetch(`/api/v1/teacher/exams/${examId}/xpath-verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ selectorType, targetType: tc.targetType, targetPayload: tc.targetPayload, referenceSelector: tc.referenceSelector }),
+        body: JSON.stringify({
+          selectorType: tc.selectorType ?? selectorType,
+          targetType: tc.targetType,
+          targetPayload: tc.targetPayload,
+          referenceSelector: tc.referenceSelector,
+        }),
       });
       const data = await res.json();
       const updated = [...testCases];
@@ -113,10 +169,9 @@ export default function XPathConfigPage({ params }: { params: Promise<{ id: stri
     }
   };
 
-  const handleSave = async () => {
-    const valid = testCases.filter((tc) => tc.targetPayload.trim() && tc.referenceSelector.trim());
-    if (!selectedId || valid.length === 0) {
-      showToast("Add at least one test case with target and selector.", "error");
+  const saveConfig = async (currentId: string, currentSelectorType: "XPATH" | "CSS", casesToSave: XpathTestCase[]) => {
+    const valid = casesToSave.filter((tc) => tc.targetPayload.trim() && tc.referenceSelector.trim());
+    if (!currentId || valid.length === 0) {
       return;
     }
     setIsSaving(true);
@@ -125,16 +180,16 @@ export default function XPathConfigPage({ params }: { params: Promise<{ id: stri
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          questionId: selectedId,
-          selectorType,
+          questionId: currentId,
+          selectorType: currentSelectorType,
           testCases: valid.map(({ verifyResult: _vr, isVerifying: _iv, id: _id, ...tc }) => tc),
         }),
       });
-      const data = await res.json();
       if (res.ok) {
         showToast("XPath configuration saved.");
-        fetchQuestions();
+        fetchQuestions(currentId);
       } else {
+        const data = await res.json();
         showToast(data.message ?? "Failed to save.", "error");
       }
     } catch {
@@ -143,6 +198,25 @@ export default function XPathConfigPage({ params }: { params: Promise<{ id: stri
       setIsSaving(false);
     }
   };
+
+  const handleSave = async () => {
+    const valid = testCases.filter((tc) => tc.targetPayload.trim() && tc.referenceSelector.trim());
+    if (!selectedId || valid.length === 0) {
+      showToast("Add at least one test case with target and selector.", "error");
+      return;
+    }
+    await saveConfig(selectedId, selectorType, testCases);
+  };
+
+  const handleHtmlBlur = (i: number, value: string) => {
+    const beautified = beautifyHTML(value);
+    const updated = [...testCases];
+    updated[i].targetPayload = beautified;
+    updated[i].verifyResult = null;
+    setTestCases(updated);
+    saveConfig(selectedId, selectorType, updated);
+  };
+
 
   const currentQ = questionsList.find((q) => q.id === selectedId);
 
@@ -178,11 +252,38 @@ export default function XPathConfigPage({ params }: { params: Promise<{ id: stri
               ← Back
             </button>
           </div>
-          {/* XPath 1.0 notice */}
-          <div className="mt-3 flex items-start gap-2 bg-amber-500/8 border border-amber-500/20 rounded-lg px-4 py-2.5 text-xs text-amber-400">
-            <svg className="w-3.5 h-3.5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-            <span><strong>XPath 1.0 only.</strong> The evaluator (jsdom) does not support XPath 2.0/3.0 functions like <code className="font-mono bg-amber-500/10 px-1 rounded">fn:matches()</code>. Use CSS selector type for flexible class/attribute matching.</span>
-          </div>
+          {/* Context-aware tip banner */}
+          {selectorType === "XPATH" ? (
+            <div className="mt-3 flex items-start gap-2 bg-amber-500/8 border border-amber-500/20 rounded-lg px-4 py-2.5 text-xs text-amber-200/80">
+              <svg className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              <span>
+                <strong className="text-amber-300">XPath mode:</strong>{" "}
+                Only <strong className="text-white">XPath 1.0</strong> expressions are supported (e.g.{" "}
+                <code className="font-mono bg-bg-surface px-1 rounded text-amber-300">//div[@class='price']</code>).{" "}
+                Advanced functions like <code className="font-mono bg-bg-surface px-1 rounded text-amber-300">fn:matches()</code> are not available.{" "}
+                If you need flexible class or attribute matching,{" "}
+                <button
+                  type="button"
+                  onClick={() => { setSelectorType("CSS"); setTestCases((prev) => prev.map((tc) => ({ ...tc, verifyResult: null }))); }}
+                  className="underline text-amber-300 hover:text-white transition-colors font-semibold"
+                >
+                  switch to CSS Selector
+                </button>{" "}
+                instead.
+              </span>
+            </div>
+          ) : (
+            <div className="mt-3 flex items-start gap-2 bg-emerald-500/8 border border-emerald-500/20 rounded-lg px-4 py-2.5 text-xs text-emerald-200/80">
+              <svg className="w-3.5 h-3.5 shrink-0 mt-0.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+              <span>
+                <strong className="text-emerald-300">CSS Selector mode:</strong>{" "}
+                Students write standard CSS selectors (e.g.{" "}
+                <code className="font-mono bg-bg-surface px-1 rounded text-emerald-300">div.price</code> or{" "}
+                <code className="font-mono bg-bg-surface px-1 rounded text-emerald-300">ul &gt; li.active</code>).{" "}
+                This is the recommended mode for matching elements by class or attribute.
+              </span>
+            </div>
+          )}
         </div>
 
         {questionsList.length === 0 ? (
@@ -217,6 +318,21 @@ export default function XPathConfigPage({ params }: { params: Promise<{ id: stri
             {/* Config form */}
             {currentQ && (
               <div className="glass-card p-4 md:p-6 space-y-6">
+                {/* Question context header */}
+                <div className="flex items-center justify-between pb-4 border-b border-border-strong">
+                  <div className="min-w-0">
+                    <p className="text-[10px] text-text-tertiary uppercase tracking-wider font-bold mb-0.5">Configuring question</p>
+                    <h2 className="text-base font-bold text-white truncate">{currentQ.title}</h2>
+                  </div>
+                  <span className={`shrink-0 ml-3 text-[10px] font-semibold px-2.5 py-1 rounded-full border ${
+                    currentQ.isConfigured
+                      ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-300"
+                      : "bg-amber-500/10 border-amber-500/20 text-amber-300"
+                  }`}>
+                    {isSyncing ? "Saving…" : currentQ.isConfigured ? `${currentQ.testCases.length} case(s) saved` : "Not configured"}
+                  </span>
+                </div>
+
                 {/* Selector type */}
                 <div>
                   <label className="text-xs font-bold text-text-tertiary uppercase tracking-wider block mb-2">Selector Type</label>
@@ -256,18 +372,36 @@ export default function XPathConfigPage({ params }: { params: Promise<{ id: stri
                           <button type="button" onClick={() => removeTC(i)} disabled={testCases.length <= 1} className="text-xs text-text-tertiary hover:text-rose-400 disabled:opacity-30">Remove</button>
                         </div>
 
-                        {/* Target type toggle */}
-                        <div className="flex gap-2">
-                          {(["HTML", "URL"] as const).map((t) => (
-                            <button key={t} type="button" onClick={() => updateTC(i, "targetType", t)}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                                tc.targetType === t
-                                  ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-300"
-                                  : "bg-bg-surface border-border-strong text-text-secondary hover:border-text-tertiary"
-                              }`}>
-                              {t === "HTML" ? "📄 HTML Snippet" : "🌐 URL"}
-                            </button>
-                          ))}
+                         {/* Config toggles */}
+                        <div className="flex flex-wrap gap-4 items-center">
+                          {/* Target type toggle */}
+                          <div className="flex gap-2">
+                            {(["HTML", "URL"] as const).map((t) => (
+                              <button key={t} type="button" onClick={() => updateTC(i, "targetType", t)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                                  tc.targetType === t
+                                    ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-300"
+                                    : "bg-bg-surface border-border-strong text-text-secondary hover:border-text-tertiary"
+                                }`}>
+                                {t === "HTML" ? "📄 HTML Snippet" : "🌐 URL"}
+                              </button>
+                            ))}
+                          </div>
+
+                          {/* Selector type toggle */}
+                          <div className="flex gap-2 items-center">
+                            <span className="text-xs font-medium text-text-tertiary">Engine:</span>
+                            {(["XPATH", "CSS"] as const).map((t) => (
+                              <button key={t} type="button" onClick={() => updateTC(i, "selectorType", t)}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${
+                                  (tc.selectorType ?? selectorType) === t
+                                    ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-300"
+                                    : "bg-bg-surface border-border-strong text-text-secondary hover:border-text-tertiary"
+                                }`}>
+                                {t === "XPATH" ? "XPath" : "CSS Selector"}
+                              </button>
+                            ))}
+                          </div>
                         </div>
 
                         {/* Target payload */}
@@ -280,7 +414,7 @@ export default function XPathConfigPage({ params }: { params: Promise<{ id: stri
                               placeholder="https://example.com"
                               className="w-full bg-bg-base border border-border-strong rounded-xl px-4 py-2.5 text-white text-sm font-mono placeholder:text-text-tertiary focus:outline-none focus:border-emerald-500/50" />
                           ) : (
-                            <textarea value={tc.targetPayload} onChange={(e) => updateTC(i, "targetPayload", e.target.value)} rows={5}
+                            <textarea value={tc.targetPayload} onChange={(e) => updateTC(i, "targetPayload", e.target.value)} onBlur={(e) => handleHtmlBlur(i, e.target.value)} rows={5}
                               placeholder={"<html><body><div class=\"course-price\">$99</div></body></html>"}
                               className="w-full bg-bg-base border border-border-strong rounded-xl px-4 py-2.5 text-white text-sm font-mono placeholder:text-text-tertiary focus:outline-none focus:border-emerald-500/50 resize-none" />
                           )}
@@ -292,10 +426,10 @@ export default function XPathConfigPage({ params }: { params: Promise<{ id: stri
                         {/* Reference selector */}
                         <div>
                           <label className="block text-xs font-medium text-text-tertiary mb-1">
-                            Reference {selectorType === "CSS" ? "CSS Selector" : "XPath"} (correct answer)
+                            Reference {(tc.selectorType ?? selectorType) === "CSS" ? "CSS Selector" : "XPath"} (correct answer)
                           </label>
                           <input type="text" value={tc.referenceSelector} onChange={(e) => updateTC(i, "referenceSelector", e.target.value)}
-                            placeholder={selectorType === "CSS" ? "div.course-price" : "//div[@class='course-price']"}
+                            placeholder={(tc.selectorType ?? selectorType) === "CSS" ? "div.course-price" : "//div[@class='course-price']"}
                             className="w-full bg-bg-base border border-border-strong rounded-xl px-4 py-2.5 text-white text-sm font-mono placeholder:text-text-tertiary focus:outline-none focus:border-emerald-500/50" />
                         </div>
 

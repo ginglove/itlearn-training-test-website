@@ -76,16 +76,16 @@ export default function ResetPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-bg-base">
+    <div className="min-h-screen flex items-center justify-center bg-bg-base px-4 py-8 sm:px-6">
       <div className="absolute inset-0 bg-gradient-to-br from-brand-900/20 to-transparent pointer-events-none" />
-      
-      <motion.div 
+
+      <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.4 }}
-        className="relative w-full max-w-md z-10 p-8"
+        className="relative w-full max-w-md z-10"
       >
-        <div className="glass-card p-8 sm:p-10 relative overflow-hidden">
+        <div className="glass-card p-6 sm:p-8 md:p-10 relative overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-1 bg-amber-500" />
           
           <div className="text-center mb-6">

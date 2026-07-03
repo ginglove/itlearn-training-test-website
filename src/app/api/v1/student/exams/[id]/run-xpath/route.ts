@@ -15,7 +15,8 @@ export async function POST(
 
     const { id: examId } = await params;
     const body = await request.json();
-    const { question_id, student_selector } = body;
+    const { question_id } = body;
+    const student_selector = body.student_selector ?? body.student_xpath;
 
     if (!question_id || typeof student_selector !== "string" || !student_selector.trim()) {
       return NextResponse.json(
@@ -52,6 +53,7 @@ export async function POST(
         targetType: c.targetType as "URL" | "HTML",
         targetPayload: c.targetPayload,
         referenceSelector: c.referenceSelector,
+        selectorType: (c.selectorType as "XPATH" | "CSS") ?? undefined,
       })),
       studentSelector: student_selector.trim(),
     });

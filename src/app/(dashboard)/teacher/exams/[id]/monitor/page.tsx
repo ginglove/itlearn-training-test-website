@@ -182,11 +182,13 @@ export default function CodingMonitorPage({ params }: { params: Promise<{ id: st
     }
   };
 
-  const completed = students.filter((s) => s.submittedAt);
-  const inProgress = students.filter((s) => !s.submittedAt);
+  const completed = students.filter((s) => s.submissionStatus === "SUBMITTED");
+  const inProgress = students.filter((s) => s.submissionStatus === "IN_PROGRESS");
+  const pending = students.filter((s) => s.submissionStatus === "PENDING");
+  const cancelled = students.filter((s) => s.submissionStatus === "CANCELLED");
 
   return (
-    <div className="min-h-screen bg-bg-base p-8">
+    <div className="min-h-screen bg-bg-base p-4 sm:p-6 md:p-8">
       <div className="max-w-7xl mx-auto">
 
         {/* ── Header ── */}
@@ -227,7 +229,15 @@ export default function CodingMonitorPage({ params }: { params: Promise<{ id: st
             </div>
             <div>
               <div className="text-2xl font-mono text-emerald-400">{completed.length}</div>
-              <div className="text-xs text-text-tertiary uppercase tracking-wider">Completed</div>
+              <div className="text-xs text-text-tertiary uppercase tracking-wider">Submitted</div>
+            </div>
+            <div>
+              <div className="text-2xl font-mono text-amber-400">{pending.length}</div>
+              <div className="text-xs text-text-tertiary uppercase tracking-wider">Pending</div>
+            </div>
+            <div>
+              <div className="text-2xl font-mono text-red-400">{cancelled.length}</div>
+              <div className="text-xs text-text-tertiary uppercase tracking-wider">Cancelled</div>
             </div>
           </div>
         </div>
@@ -311,7 +321,7 @@ export default function CodingMonitorPage({ params }: { params: Promise<{ id: st
                         </td>
 
                         <td className="p-4">
-                          {student.submittedAt ? (
+                          {student.submissionStatus === "SUBMITTED" ? (
                             <div className="flex flex-col gap-1.5">
                               <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-2.5 py-1 rounded-lg">
                                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -325,6 +335,27 @@ export default function CodingMonitorPage({ params }: { params: Promise<{ id: st
                                 className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-400 border border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10 px-2 py-0.5 rounded-md transition-colors disabled:opacity-50"
                               >
                                 {regrading === student.id ? "Re-grading..." : "⟳ Re-grade"}
+                              </button>
+                            </div>
+                          ) : student.submissionStatus === "CANCELLED" ? (
+                            <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-red-500/10 border border-red-500/20 text-red-400 px-2.5 py-1 rounded-lg">
+                              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                              Cancelled by System
+                            </span>
+                          ) : student.submissionStatus === "PENDING" ? (
+                            <div className="flex flex-col gap-1.5">
+                              <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-amber-500/10 border border-amber-500/20 text-amber-400 px-2.5 py-1 rounded-lg">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                                Pending
+                              </span>
+                              <button
+                                onClick={() => handleForceSubmit(student.studentId)}
+                                disabled={forceSubmitting === student.studentId}
+                                className="inline-flex items-center gap-1 text-[10px] font-semibold text-rose-400 border border-rose-500/20 bg-rose-500/5 hover:bg-rose-500/10 px-2 py-0.5 rounded-md transition-colors disabled:opacity-50"
+                              >
+                                {forceSubmitting === student.studentId ? "Submitting..." : "Force Submit"}
                               </button>
                             </div>
                           ) : (

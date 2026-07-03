@@ -15,6 +15,8 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
   const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -213,6 +215,7 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
 
       if (res.ok) {
         showToast("Question removed successfully.");
+        setSelectedIds((prev) => { const next = new Set(prev); next.delete(qId); return next; });
         fetchQuestions();
       } else {
         const data = await res.json();
@@ -220,6 +223,45 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
       }
     } catch (err) {
       showToast("Network error.", "error");
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    try {
+      const res = await fetch(`/api/v1/teacher/exams/${examId}/questions`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ questionIds: ids }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        showToast(`${data.deletedCount} question(s) removed.`);
+        setSelectedIds(new Set());
+        fetchQuestions();
+      } else {
+        const data = await res.json();
+        showToast(data.message || "Failed to delete questions.", "error");
+      }
+    } catch {
+      showToast("Network error.", "error");
+    }
+  };
+
+  const toggleSelect = (qId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(qId)) next.delete(qId); else next.add(qId);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === questions.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(questions.map((q) => q.id)));
     }
   };
 
@@ -693,7 +735,33 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
 
             {/* List of Questions */}
             <div className="glass-card p-4 md:p-8">
-              <h3 className="text-xl font-bold text-white mb-6">Exam Question List</h3>
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
+                <h3 className="text-xl font-bold text-white">Exam Question List</h3>
+                {questions.length > 0 && (
+                  <div className="flex items-center gap-3">
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={questions.length > 0 && selectedIds.size === questions.length}
+                        onChange={toggleSelectAll}
+                        className="w-4 h-4 rounded border-border-strong bg-bg-base text-brand-500 accent-brand-500"
+                      />
+                      <span className="text-xs text-text-secondary font-medium">Select All</span>
+                    </label>
+                    {selectedIds.size > 0 && (
+                      <button
+                        onClick={() => setShowBulkDeleteConfirm(true)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-lg text-xs font-semibold hover:bg-rose-500/20 transition-all"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        Remove {selectedIds.size} selected
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
               
               {isFetching ? (
                 <div className="text-center py-10">
@@ -706,7 +774,16 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
               ) : (
                 <div className="space-y-4">
                   {questions.map((q, idx) => (
-                    <div key={q.id} className="flex flex-col sm:flex-row gap-3 sm:gap-4 p-4 sm:p-5 rounded-xl bg-bg-surface hover:bg-bg-surface-elevated border border-border-strong relative group transition-all">
+                    <div key={q.id} className={`flex flex-col sm:flex-row gap-3 sm:gap-4 p-4 sm:p-5 rounded-xl bg-bg-surface hover:bg-bg-surface-elevated border relative group transition-all ${selectedIds.has(q.id) ? 'border-brand-500/40 bg-brand-500/5' : 'border-border-strong'}`}>
+                      {/* Selection checkbox */}
+                      <div className="flex items-start pt-0.5 shrink-0">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(q.id)}
+                          onChange={() => toggleSelect(q.id)}
+                          className="w-4 h-4 rounded border-border-strong bg-bg-base text-brand-500 accent-brand-500 cursor-pointer"
+                        />
+                      </div>
                       <div className="flex-grow">
                         <div className="flex items-center gap-3 mb-2">
                           <span className="text-xs font-bold text-text-tertiary font-mono">#{idx + 1}</span>
@@ -788,6 +865,17 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
         cancelLabel="Keep Question"
         onCancel={() => setDeleteTarget(null)}
         onConfirm={() => { const id = deleteTarget!; setDeleteTarget(null); handleDeleteQuestion(id); }}
+      />
+
+      <ConfirmModal
+        open={showBulkDeleteConfirm}
+        variant="danger"
+        title={`Remove ${selectedIds.size} Question${selectedIds.size === 1 ? '' : 's'}`}
+        description={`Are you sure you want to remove ${selectedIds.size} selected question${selectedIds.size === 1 ? '' : 's'}? All associated options, test cases, and XPath configurations will be permanently deleted.`}
+        confirmLabel={`Remove ${selectedIds.size} Question${selectedIds.size === 1 ? '' : 's'}`}
+        cancelLabel="Cancel"
+        onCancel={() => setShowBulkDeleteConfirm(false)}
+        onConfirm={() => { setShowBulkDeleteConfirm(false); handleBulkDelete(); }}
       />
     </div>
   );

@@ -115,7 +115,7 @@ export async function POST(
       if (type === "XPATH" && xpathConfig) {
         await tx.insert(xpathConfigs).values({ questionId: q.id, selectorType: xpathConfig.selectorType ?? "XPATH" });
         if (Array.isArray(xpathConfig.testCases) && xpathConfig.testCases.length > 0) {
-          await tx.insert(xpathTestCases).values(xpathConfig.testCases.map((tc: any) => ({ questionId: q.id, targetType: tc.targetType ?? "HTML", targetPayload: tc.targetPayload, referenceSelector: tc.referenceSelector, isHidden: !!tc.isHidden })));
+          await tx.insert(xpathTestCases).values(xpathConfig.testCases.map((tc: any) => ({ questionId: q.id, targetType: tc.targetType ?? "HTML", selectorType: tc.selectorType ?? "XPATH", targetPayload: tc.targetPayload, referenceSelector: tc.referenceSelector, isHidden: !!tc.isHidden })));
         }
       }
 
@@ -126,5 +126,48 @@ export async function POST(
   } catch (error) {
     console.error("Create question error:", error);
     return NextResponse.json({ error: "INTERNAL_ERROR", message: "Failed to create question" }, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const teacherId = request.headers.get("x-user-id");
+    if (!teacherId) {
+      return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+    }
+
+    const { id: examId } = await params;
+    const body = await request.json();
+    const { questionIds } = body;
+
+    if (!Array.isArray(questionIds) || questionIds.length === 0) {
+      return NextResponse.json({ error: "VALIDATION_ERROR", message: "questionIds array is required" }, { status: 400 });
+    }
+
+    const [exam] = await db.select().from(exams).where(and(eq(exams.id, examId), eq(exams.createdBy, teacherId))).limit(1);
+    if (!exam) {
+      return NextResponse.json({ error: "NOT_FOUND", message: "Exam not found" }, { status: 404 });
+    }
+
+    // Verify all IDs belong to this exam, then delete in a transaction
+    const matching = await db
+      .select({ id: questions.id })
+      .from(questions)
+      .where(and(eq(questions.examId, examId), inArray(questions.id, questionIds)));
+
+    const matchedIds = matching.map((q) => q.id);
+    if (matchedIds.length === 0) {
+      return NextResponse.json({ error: "NOT_FOUND", message: "No matching questions found" }, { status: 404 });
+    }
+
+    await db.delete(questions).where(inArray(questions.id, matchedIds));
+
+    return NextResponse.json({ status: "SUCCESS", deletedCount: matchedIds.length });
+  } catch (error) {
+    console.error("Bulk delete questions error:", error);
+    return NextResponse.json({ error: "INTERNAL_ERROR", message: "Failed to delete questions" }, { status: 500 });
   }
 }

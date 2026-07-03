@@ -1,4 +1,4 @@
-﻿import { JSDOM } from "jsdom";
+import { JSDOM } from "jsdom";
 
 export type SelectorType = "XPATH" | "CSS";
 
@@ -151,11 +151,12 @@ export async function gradeXPathQuestion({
   testCases,
   studentSelector,
 }: {
-  selectorType: SelectorType;
+  selectorType?: SelectorType;
   testCases: Array<{
     targetType: "URL" | "HTML";
     targetPayload: string;
     referenceSelector: string;
+    selectorType?: SelectorType;
   }>;
   studentSelector: string;
 }): Promise<XPathGradeResult> {
@@ -190,9 +191,22 @@ export async function gradeXPathQuestion({
 
     const { doc } = loaded;
 
+    const caseSelectorType: SelectorType = tc.selectorType ?? selectorType ?? "XPATH";
+
+    const studentHasPrefix = studentSelector.startsWith("css:") || studentSelector.startsWith("xpath:");
+    const studentChosenType: SelectorType = studentSelector.startsWith("css:") 
+      ? "CSS" 
+      : studentSelector.startsWith("xpath:") 
+      ? "XPATH" 
+      : caseSelectorType;
+    
+    const trimmedStudentSelector = studentHasPrefix
+      ? (studentSelector.startsWith("css:") ? studentSelector.substring(4).trim() : studentSelector.substring(6).trim())
+      : studentSelector.trim();
+
     let refNodes: Element[];
     try {
-      refNodes = evaluateSelector(doc, tc.referenceSelector.trim(), selectorType);
+      refNodes = evaluateSelector(doc, tc.referenceSelector.trim(), caseSelectorType);
     } catch {
       caseResults.push({
         caseIndex: i,
@@ -207,7 +221,7 @@ export async function gradeXPathQuestion({
 
     let studentNodes: Element[];
     try {
-      studentNodes = evaluateSelector(doc, trimmedSelector, selectorType);
+      studentNodes = evaluateSelector(doc, trimmedStudentSelector, studentChosenType);
     } catch (err: any) {
       caseResults.push({
         caseIndex: i,
@@ -222,6 +236,19 @@ export async function gradeXPathQuestion({
 
     const snippets = studentNodes.slice(0, 5).map((n) => n.outerHTML ?? String(n));
 
+    // #6: Vacuous match (both select 0 elements) is always WA
+    if (studentNodes.length === 0 && refNodes.length === 0) {
+      caseResults.push({
+        caseIndex: i,
+        status: "WA",
+        message: "Both selectors matched 0 elements — a vacuous match is not accepted.",
+        matchedCount: 0,
+        referenceCount: 0,
+        snippets: [],
+      });
+      continue;
+    }
+
     if (studentNodes.length !== refNodes.length) {
       caseResults.push({
         caseIndex: i,
@@ -234,8 +261,16 @@ export async function gradeXPathQuestion({
       continue;
     }
 
-    const refSet = new Set(refNodes);
-    const allMatch = studentNodes.every((n) => refSet.has(n));
+    // #6: XPATH uses DOM reference comparison (same jsdom instance); CSS uses outerHTML string comparison
+    let allMatch: boolean;
+    if (caseSelectorType === "CSS") {
+      const refHtmls = refNodes.map(n => n.outerHTML);
+      const studentHtmls = studentNodes.map(n => n.outerHTML);
+      allMatch = studentHtmls.every((h, idx) => h === refHtmls[idx]);
+    } else {
+      const refSet = new Set(refNodes);
+      allMatch = studentNodes.every((n) => refSet.has(n));
+    }
 
     if (!allMatch) {
       caseResults.push({

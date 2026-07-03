@@ -1,4 +1,4 @@
-﻿import {
+import {
   pgTable,
   uuid,
   varchar,
@@ -127,6 +127,7 @@ export const xpathTestCases = pgTable(
       .notNull()
       .references(() => questions.id, { onDelete: "cascade" }),
     targetType: varchar("target_type", { length: 10 }).notNull().default("HTML"),
+    selectorType: varchar("selector_type", { length: 10 }).notNull().default("XPATH"),
     targetPayload: text("target_payload").notNull(),
     referenceSelector: text("reference_selector").notNull(),
     isHidden: boolean("is_hidden").notNull().default(false),
@@ -171,6 +172,7 @@ export const examSubmissions = pgTable(
     clientIp: varchar("client_ip", { length: 45 }).notNull(),
     focusLossCount: integer("focus_loss_count").notNull().default(0),
     closeReason: varchar("close_reason", { length: 50 }),
+    activeSeconds: integer("active_seconds").notNull().default(0),
     attempt: integer("attempt").default(1).notNull(),
   },
   (table) => [

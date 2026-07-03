@@ -111,7 +111,7 @@ export async function POST(
         let xpathStatus: "AC" | "WA" | "CE" = "WA";
         const studentSelector = draft?.studentXpath ?? "";
         if (studentSelector && xConfig && cases.length > 0) {
-          const xResult = await gradeXPathQuestion({ selectorType: (xConfig.selectorType as "XPATH" | "CSS") ?? "XPATH", testCases: cases.map((c: any) => ({ targetType: c.targetType as "URL" | "HTML", targetPayload: c.targetPayload, referenceSelector: c.referenceSelector })), studentSelector });
+          const xResult = await gradeXPathQuestion({ selectorType: (xConfig.selectorType as "XPATH" | "CSS") ?? "XPATH", testCases: cases.map((c: any) => ({ targetType: c.targetType as "URL" | "HTML", targetPayload: c.targetPayload, referenceSelector: c.referenceSelector, selectorType: (c.selectorType as "XPATH" | "CSS") ?? undefined })), studentSelector });
           xpathStatus = xResult.status;
           questionScore = (xResult.scorePercentage / 100) * (parseFloat(q.points as string) || 0);
         }
@@ -126,7 +126,7 @@ export async function POST(
     await db.transaction(async (tx) => {
       const updated = await tx
         .update(examSubmissions)
-        .set({ submittedAt: new Date(), totalScore: safeTotalScore.toFixed(2) })
+        .set({ submittedAt: new Date(), totalScore: safeTotalScore.toFixed(2), closeReason: "FORCE_SUBMITTED" })
         .where(and(eq(examSubmissions.id, activeSubmission.id), isNull(examSubmissions.submittedAt)))
         .returning({ id: examSubmissions.id });
       if (updated.length === 0) throw new Error("ALREADY_SUBMITTED");

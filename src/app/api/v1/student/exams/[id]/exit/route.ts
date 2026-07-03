@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { examSubmissions } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { examSubmissions, exams } from "@/db/schema";
+import { eq, and } from "drizzle-orm";
 
 export async function POST(
   request: NextRequest,
@@ -15,12 +15,15 @@ export async function POST(
 
     const { id: examId } = await params;
     const body = await request.json();
-    const { submissionId } = body;
+    const { submissionId, activeSeconds } = body;
+
     if (!submissionId) {
-      return NextResponse.json(
-        { error: "VALIDATION_ERROR", message: "submissionId required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "VALIDATION_ERROR", message: "submissionId required" }, { status: 400 });
+    }
+
+    // #5: activeSeconds is required, must be integer ≥ 0
+    if (typeof activeSeconds !== "number" || !Number.isInteger(activeSeconds) || activeSeconds < 0) {
+      return NextResponse.json({ error: "INVALID_ACTIVE_SECONDS", message: "activeSeconds must be a non-negative integer" }, { status: 400 });
     }
 
     const [submission] = await db
@@ -30,31 +33,41 @@ export async function POST(
       .limit(1);
 
     if (!submission || submission.studentId !== studentId || submission.examId !== examId) {
-      return NextResponse.json(
-        { error: "NOT_FOUND", message: "Draft not found or unauthorized" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "SUBMISSION_NOT_FOUND", message: "No active submission found" }, { status: 404 });
     }
 
+    // #5: ALREADY_SUBMITTED → 409
     if (submission.submittedAt) {
-      return NextResponse.json(
-        { error: "ALREADY_SUBMITTED", message: "Cannot exit a submitted exam" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "ALREADY_SUBMITTED", message: "Submission already finalized" }, { status: 409 });
     }
 
-    // Keep the draft and all saved answers intact so the student can resume later.
-    // The submission record stays with submittedAt = null until they submit or time runs out.
+    // #5: Reject if exam window has closed
+    const [exam] = await db.select({ endTime: exams.endTime, duration: exams.duration })
+      .from(exams).where(eq(exams.id, examId)).limit(1);
+    if (!exam) {
+      return NextResponse.json({ error: "EXAM_NOT_FOUND" }, { status: 404 });
+    }
+    if (new Date() > exam.endTime) {
+      return NextResponse.json({ error: "EXAM_WINDOW_CLOSED", message: "The exam window has closed and no further actions are permitted." }, { status: 403 });
+    }
 
-    return NextResponse.json(
-      { status: "SAVED", message: "Progress saved. You can resume this exam before it closes." },
-      { status: 200 }
-    );
+    // #2: Clamp activeSeconds to exam duration ceiling
+    const durationCap = (exam.duration ?? 60) * 60;
+    const clampedSeconds = Math.min(activeSeconds, durationCap);
+
+    // #5: All side-effects atomically
+    await db
+      .update(examSubmissions)
+      .set({ closeReason: "SAVE_AND_EXIT", activeSeconds: clampedSeconds })
+      .where(eq(examSubmissions.id, submissionId));
+
+    return NextResponse.json({
+      message: "Draft saved. Exam session paused.",
+      closeReason: "SAVE_AND_EXIT",
+      activeSeconds: clampedSeconds,
+    });
   } catch (error) {
     console.error("Exit exam error:", error);
-    return NextResponse.json(
-      { error: "INTERNAL_ERROR", message: "Failed to exit exam" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "INTERNAL_ERROR", message: "Failed to exit exam" }, { status: 500 });
   }
 }

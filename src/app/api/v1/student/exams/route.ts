@@ -10,34 +10,28 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
     }
 
-    // 1. Fetch all exams
-    const allExams = await db
-      .select()
-      .from(exams)
-      .orderBy(desc(exams.startTime));
+    const allExams = await db.select().from(exams).orderBy(desc(exams.startTime));
 
-    // 2. Fetch assignments for this student
     const assignments = await db
       .select({ examId: examAssignments.examId })
       .from(examAssignments)
       .where(eq(examAssignments.studentId, studentId));
     const assignedExamIds = new Set(assignments.map(a => a.examId));
 
-    // 3. Filter exams by access permissions (either public ALL or student is assigned)
     const accessibleExams = allExams.filter(
       exam => exam.accessType === "ALL" || assignedExamIds.has(exam.id)
     );
 
-    // 4. Fetch student submissions
     const submissions = await db
-      .select({ 
-        examId: examSubmissions.examId, 
-        submittedAt: examSubmissions.submittedAt 
+      .select({
+        examId: examSubmissions.examId,
+        submittedAt: examSubmissions.submittedAt,
+        closeReason: examSubmissions.closeReason,
+        activeSeconds: examSubmissions.activeSeconds,
       })
       .from(examSubmissions)
       .where(eq(examSubmissions.studentId, studentId));
 
-    // Group submissions by examId
     const submissionGroups = new Map<string, typeof submissions>();
     for (const sub of submissions) {
       const list = submissionGroups.get(sub.examId) || [];
@@ -45,37 +39,55 @@ export async function GET(request: NextRequest) {
       submissionGroups.set(sub.examId, list);
     }
 
+    const now = new Date();
+
     const annotatedExams = accessibleExams.map(exam => {
       const examSubmissionsList = submissionGroups.get(exam.id) || [];
       const completedAttempts = examSubmissionsList.filter(s => s.submittedAt !== null);
       const attemptsCount = completedAttempts.length;
       const hasSubmitted = attemptsCount > 0;
-      const hasActiveAttempt = examSubmissionsList.some(s => s.submittedAt === null);
+      const activeAttempt = examSubmissionsList.find(s => s.submittedAt === null) ?? null;
 
-      // Find last submitted timestamp if any
-      const lastSubmitted = completedAttempts.length > 0 
-        ? completedAttempts.reduce((latest, current) => 
+      const lastSubmitted = completedAttempts.length > 0
+        ? completedAttempts.reduce((latest, current) =>
             (current.submittedAt && latest.submittedAt && current.submittedAt > latest.submittedAt) ? current : latest
           )
         : null;
 
+      const examClosed = now > exam.endTime;
+
+      // #7 + #1: Unified submissionStatus using priority rules (Rule 15)
+      let submissionStatus: "SUBMITTED" | "IN_PROGRESS" | "PENDING" | "CANCELLED" | null = null;
+      if (activeAttempt) {
+        if (examClosed) {
+          submissionStatus = "CANCELLED";
+        } else if (activeAttempt.closeReason === "SAVE_AND_EXIT") {
+          submissionStatus = "PENDING";
+        } else {
+          submissionStatus = "IN_PROGRESS";
+        }
+      }
+
       return {
         ...exam,
         hasSubmitted,
-        hasActiveAttempt,
         attemptsCount,
         allowedAttempts: exam.allowedAttempts,
         submittedAt: lastSubmitted?.submittedAt || null,
-        isActive: new Date() >= exam.startTime && new Date() <= exam.endTime,
+        isActive: now >= exam.startTime && now <= exam.endTime,
+        // Unified status field (v7.3+)
+        submissionStatus,
+        activeSeconds: activeAttempt?.activeSeconds ?? 0,
+        // Deprecated in v7.3 — kept for backwards compatibility, remove in v8.0
+        hasActiveAttempt: activeAttempt !== null,
+        activeAttemptCancelled: activeAttempt !== null && examClosed,
+        activeAttemptPaused: activeAttempt !== null && !examClosed && activeAttempt.closeReason === "SAVE_AND_EXIT",
       };
     });
 
     return NextResponse.json({ status: "SUCCESS", exams: annotatedExams });
   } catch (error) {
     console.error("Fetch student exams error:", error);
-    return NextResponse.json(
-      { error: "INTERNAL_ERROR", message: "Failed to fetch exams" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "INTERNAL_ERROR", message: "Failed to fetch exams" }, { status: 500 });
   }
 }

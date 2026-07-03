@@ -1,12 +1,46 @@
 # Requirements Specification Document (RSD)
 ## Enterprise Online Quiz, Hybrid Coding & Automation Testing Platform
-**Document Version:** 7.2 (Security hardening, XPath test cases, CSS selector support, focus-loss enforcement)  
+**Document Version:** 7.3 (Active-time timer, Pending/Cancelled submission statuses, responsive workspace)  
 **Target Environments:** Python 3.10+, Node.js 18+ LTS  
 **Core Framework Integration:** itlearn.edu.vn Core Platform Standard  
 
 ---
 
 ## Revision History
+
+### Version 7.3 — 2026-07-01
+
+#### 🆕 New
+| Area | Detail |
+| :--- | :--- |
+| **`active_seconds` on submissions** | New `integer NOT NULL DEFAULT 0` column on `exam_submissions`. Accumulates only the seconds the student had the workspace open — excludes time between Save & Exit and re-entry. Migration: `0006_active_seconds.sql`. |
+| **`SAVE_AND_EXIT` close reason** | When a student exits via **Save & Exit** the submission's `close_reason` is set to `"SAVE_AND_EXIT"`. On re-entry (`GET /api/v1/student/exams/:id/questions`) it is cleared back to `null` so the student appears **IN_PROGRESS** while in the workspace. |
+| **4-state Submission Status** | All monitors, session lists, and student completed views now derive a `submissionStatus` field: `SUBMITTED` (graded), `IN_PROGRESS` (active workspace), `PENDING` (Save & Exit, exam still open), or `CANCELLED` (exam window closed, never submitted). |
+| **Active-time-based countdown timer** | The student workspace timer no longer counts down from `startAt` wall-clock time. It counts down from `duration − activeSeconds` (time actually spent in the workspace). This means pausing via Save & Exit preserves the remaining time correctly across re-entries. |
+| **Mobile questions-map toggle** | A hamburger button in the workspace header (visible only on mobile / `< md`) toggles the questions-map sidebar overlay on small screens. |
+
+#### 🔄 Changed
+| Area | Detail |
+| :--- | :--- |
+| **`GET /api/v1/student/exams/:id/questions`** | Now additionally returns `activeSeconds` (seconds already spent in prior sessions) and `examDurationMins` (exam duration in minutes), so the workspace can compute remaining time without relying on `sessionStorage`. Also clears `closeReason` on re-entry. |
+| **`POST /api/v1/student/exams/:id/exit`** | Now accepts `activeSeconds` in the request body and persists it to `exam_submissions.active_seconds` alongside setting `close_reason: "SAVE_AND_EXIT"`. |
+| **Monitor Dashboard** (`/teacher/exams/:id/monitor`) | Now shows **Pending** (amber) and **Cancelled** (red) summary counters in addition to In-Progress and Submitted. Student rows display `Pending` badge (with Force Submit button) and `Cancelled by System` badge based on `submissionStatus`. Previously only checked `submittedAt`. |
+| **Teacher Sessions page** | `ResultBadge` now renders **PENDING** (amber) and **CANCELLED** (red) states. Session header shows `Pending` and `Cancelled` stat pills. In-Progress pill changed to blue. |
+| **Student Completed Exams table** | `Incomplete` column split into two: **Pending** (amber badge) and **Cancelled** (red badge). API field `totalIncomplete` replaced by `totalPending` + `totalCancelled`. |
+| **`GET /api/v1/student/exam-groups`** | Replaced `totalIncomplete` aggregate with separate `totalPending` and `totalCancelled` counts using the same status logic (compares `closeReason` and `exams.endTime`). |
+| **`GET /api/v1/teacher/exams/:id/monitor`** | Fetches `exams.endTime` and derives `submissionStatus` per student; includes `closeReason` in the submission query. |
+| **`GET /api/v1/teacher/sessions`** | Per-student records include `submissionStatus`. Session aggregates include `totalPending` and `totalCancelled`. |
+| **Time's Up overlay** | Prioritizes showing the graded result first if available; spinner only shown if still submitting. Eliminates the previous race condition where the overlay could show an infinite spinner after grading completed. |
+| **Trend chart (Completed Exams)** | Wider viewBox (`H=160`, `RIGHT=60`), pass-line label moved to right side, score % labels clamped above dots, attempt number row added below data points. |
+| **Focus-loss auto-submit guard** | Auto-submit on 3rd focus-loss in `WARN_AND_LOCK` mode is now gated on `questions.length > 0` to prevent a spurious submit before questions have loaded. |
+
+#### 🗑️ Removed / Superseded
+| Area | Detail |
+| :--- | :--- |
+| **Wall-clock timer** | Timer no longer derives remaining time from `startAt + duration`. Replaced by `activeSeconds`-based countdown. `sessionStorage` duration key is still read as a fallback if the API does not return `examDurationMins`. |
+| **`totalIncomplete` field** | Removed from `exam-groups` API and student Completed Exams table. Replaced by `totalPending` + `totalCancelled`. |
+
+---
 
 ### Version 7.2 — 2026-06-26
 
@@ -286,6 +320,7 @@ Each test case has:
    +------------------+         |    focus_loss_policy        |         |    submitted_at             |
                                 |    access_type (ALL/REST.)  |         |    focus_loss_count         |
                                 +-----------------------------+         |    close_reason (nullable)  |
+                                                                        |    active_seconds           |
                                             |                           +-----------------------------+
                                             v
                                 +------------------+
@@ -334,7 +369,8 @@ Each test case has:
 | Table | Column | Note |
 | :--- | :--- | :--- |
 | `exams` | `focus_loss_policy` | `LOG_ONLY` (default) or `WARN_AND_LOCK`. |
-| `exam_submissions` | `close_reason` | `NULL` on normal submission; `"FOCUS_LOSS_THRESHOLD"` on auto-submit from focus-lock enforcement. |
+| `exam_submissions` | `close_reason` | `NULL` while in workspace; `"SAVE_AND_EXIT"` when student exits without submitting (cleared on re-entry); `"FOCUS_LOSS_THRESHOLD"` on auto-submit from focus-lock enforcement. |
+| `exam_submissions` | `active_seconds` | Cumulative seconds the student had the workspace open. Updated on each Save & Exit. Used to compute the countdown timer on resume. |
 | `code_configs` | `memory_limit` | DB column retained (default 65536) but **not enforced**. Ignored at runtime. A global 256 MB cap is applied instead (see §7.2). |
 | `xpath_configs` | `selector_type` | `XPATH` or `CSS`. Determines which evaluator (`document.evaluate` vs `querySelectorAll`) is used. |
 
@@ -391,15 +427,15 @@ XPath and CSS grading does not require an isolated container. It uses a **Shared
 ### 8.2. Student Endpoints
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
-| GET | `/api/v1/student/exams` | List available / assigned exams |
+| GET | `/api/v1/student/exams` | List available / assigned exams; each entry includes `activeAttemptCancelled`, `activeAttemptPaused`, and `activeSeconds` so the UI can show PENDING/CANCELLED states without an extra round-trip |
 | POST | `/api/v1/student/exams/:id/start` | Create or resume an exam submission session |
-| GET | `/api/v1/student/exams/:id/questions` | Fetch questions + `focusLossPolicy` (with shuffle persistence) |
+| GET | `/api/v1/student/exams/:id/questions` | Fetch questions + `focusLossPolicy`, `activeSeconds`, `examDurationMins` (with shuffle persistence); clears `SAVE_AND_EXIT` close reason |
 | GET | `/api/v1/student/exams/:id/draft` | Restore saved draft answers |
 | POST | `/api/v1/student/exams/:id/auto-save` | Persist draft answers |
 | POST | `/api/v1/student/exams/:id/run-code` | Execute code against public test cases |
 | POST | `/api/v1/student/exams/:id/run-xpath` | Evaluate XPath/CSS selector against visible test cases |
 | POST | `/api/v1/student/exams/:id/submit` | Finalize and grade exam; accepts optional `close_reason` |
-| POST | `/api/v1/student/exams/:id/exit` | Save draft and exit without submitting |
+| POST | `/api/v1/student/exams/:id/exit` | Save draft and exit; sets `close_reason: "SAVE_AND_EXIT"` and persists `activeSeconds` |
 | GET | `/api/v1/student/completed` | List completed/submitted exams |
 | GET | `/api/v1/student/completed/:id` | Get detailed result for a completed exam |
 | PUT | `/api/v1/student/update-profile` | Update student's own profile |
@@ -444,16 +480,23 @@ XPath and CSS grading does not require an isolated container. It uses a **Shared
 11. **XPath/CSS Hidden Test Cases:** Hidden test cases are withheld from "Run XPath" responses but evaluated at final submission, identical to hidden CODE test cases.
 12. **XPath Verification is Advisory:** The per-test-case Verify button reports match count and HTML snippets but never blocks saving. A 0-match result shows a warning explaining the JS-rendering limitation.
 13. **XPATH Completed Exam Display:** The completed exam detail view renders XPATH question results with the student's submitted selector in an emerald code block alongside AC/WA status and matched element count.
+14. **Active-Time Timer:** The exam countdown is based on `activeSeconds` (time actually in the workspace), not wall-clock elapsed time from `startAt`. A student who saves and exits retains their remaining time on re-entry.
+15. **Submission Status Derivation:** Every submission has a derived `submissionStatus`:  `SUBMITTED` if `submittedAt IS NOT NULL`; `CANCELLED` if `endTime` has passed and not submitted; `PENDING` if `closeReason = "SAVE_AND_EXIT"` and the exam window is still open; otherwise `IN_PROGRESS`.
+16. **Save & Exit Lifecycle:** On exit, `closeReason` is set to `"SAVE_AND_EXIT"` and `activeSeconds` is saved. On re-entry via the questions endpoint, `closeReason` is cleared to `null` so monitors show the student as `IN_PROGRESS` again.
+17. **Pending Students (Monitor):** A student with `PENDING` status in the monitor can be Force Submitted by the teacher, identical to an `IN_PROGRESS` student.
+18. **Cancelled Submissions:** If a student never submitted and the exam window has closed, the submission shows `CANCELLED by System` in monitors and session views. No score is recorded.
+19. **Student Exam List Status:** The exam selection page derives display status from the `GET /api/v1/student/exams` response: `CANCELLED` (exam closed, unsubmitted attempt) shows a disabled "Closed — Not Submitted" button; `PENDING` (Save & Exit, exam still open) shows "Resume Exam"; `IN_PROGRESS` shows "Continue Exam". Filter tabs include Pending and Cancelled options.
+20. **Login Client-Side Validation:** The login form validates that username and password fields are non-empty before calling the API. Inline per-field error messages are shown in Vietnamese; the API call is skipped if validation fails.
 
 ---
 
 ## 10. Deployment & Infrastructure
 - **Frontend + API:** Next.js 14+ (App Router), Node.js 18+ runtime
 - **Database:** Neon PostgreSQL (serverless) accessed via Drizzle ORM
-- **Migrations:** Apply incremental SQL files from `src/db/migrations/` in Neon SQL Editor, or run `init.sql` for a fresh environment
+- **Migrations:** Apply incremental SQL files from `src/db/migrations/` in Neon SQL Editor, or run `init.sql` for a fresh environment. v7.3 adds `0006_active_seconds.sql` (`active_seconds` column on `exam_submissions`).
 - **Code Sandbox:** External Piston API (`https://emkc.org/api/v2/piston`) or local child-process fallback (not sandboxed — production should use Piston or a Docker-isolated local runner)
 - **XPath Evaluator:** Server-side `jsdom` — no container required; runs inline in the Next.js API route process
 
 ---
 
-*END OF RSD.md — Version 7.2*
+*END OF RSD.md — Version 7.3*

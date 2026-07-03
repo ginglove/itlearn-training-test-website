@@ -89,15 +89,15 @@ export default function TeacherDashboard() {
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
-    <div className="min-h-screen bg-bg-base p-8">
+    <div className="min-h-screen bg-bg-base p-4 sm:p-6 md:p-8">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
-        <div className="flex justify-between items-center mb-8">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6 sm:mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-white mb-2">Manage Exams</h1>
-            <p className="text-text-secondary">Manage exams, questions, and monitor students.</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-white mb-1 sm:mb-2">Manage Exams</h1>
+            <p className="text-text-secondary text-sm sm:text-base">Manage exams, questions, and monitor students.</p>
           </div>
-          <button onClick={() => router.push("/teacher/exams/create")} className="premium-btn-primary">
+          <button onClick={() => router.push("/teacher/exams/create")} className="premium-btn-primary shrink-0 text-sm sm:text-base">
             + Create New Exam
           </button>
         </div>

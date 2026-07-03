@@ -29,6 +29,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
   const [activeTab, setActiveTab] = useState<"cases" | "output">("cases");
   const [xpathResults, setXpathResults] = useState<Record<string, any>>({});
   const [isRunningXpath, setIsRunningXpath] = useState(false);
+  const [showQuestionsMap, setShowQuestionsMap] = useState(false);
   const [showUntestedWarning, setShowUntestedWarning] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showResultOverlay, setShowResultOverlay] = useState(false);
@@ -40,6 +41,9 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
   const [submissionId] = useState<string | null>(() =>
     typeof window !== 'undefined' ? sessionStorage.getItem(`exam_${examId}_submission_id`) : null
   );
+  // Tracks how many seconds were already spent on this exam in prior sessions
+  const sessionStartRef = useRef<number>(Date.now());
+  const prevActiveSecondsRef = useRef<number>(0);
 
   // Reset active tab when question changes; keep results per-question
   useEffect(() => {
@@ -85,8 +89,15 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                 language: saved?.language ?? "python",
               };
             } else if (q.type === "XPATH") {
+              const rawXpath = saved?.studentXpath ?? "";
+              const hasPrefix = rawXpath.startsWith("css:") || rawXpath.startsWith("xpath:");
+              const type = rawXpath.startsWith("css:") ? "CSS" : "XPATH";
+              const cleanXpath = hasPrefix
+                ? (rawXpath.startsWith("css:") ? rawXpath.substring(4) : rawXpath.substring(6))
+                : rawXpath;
               initialAnswers[q.id] = {
-                student_xpath: saved?.studentXpath ?? "",
+                student_xpath: cleanXpath,
+                selector_type: type,
               };
             } else {
               initialAnswers[q.id] = {
@@ -97,14 +108,16 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
           setAnswers(initialAnswers);
         }
 
-        // Compute remaining time from startAt + examDuration stored by the exams list page
-        const startAt = sessionStorage.getItem(`exam_${examId}_start_at`);
-        const durationMins = parseInt(sessionStorage.getItem(`exam_${examId}_duration`) || "60", 10);
-        let remaining = durationMins * 60;
-        if (startAt) {
-          const elapsed = Math.floor((Date.now() - new Date(startAt).getTime()) / 1000);
-          remaining = durationMins * 60 - elapsed;
-        }
+        // Compute remaining time from activeSeconds (time already spent in exam)
+        // Use API-returned values; fall back to sessionStorage duration if API doesn't provide it
+        const apiDurationMins = questionsData.examDurationMins;
+        const durationMins = apiDurationMins
+          ?? parseInt(sessionStorage.getItem(`exam_${examId}_duration`) || "60", 10);
+        const alreadySpentSeconds: number = questionsData.activeSeconds ?? 0;
+        prevActiveSecondsRef.current = alreadySpentSeconds;
+        sessionStartRef.current = Date.now();
+        // #2: Floor at 0 — never show a negative countdown
+        let remaining = Math.max(0, durationMins * 60 - alreadySpentSeconds);
 
         if (remaining <= 0) {
           timeAlreadyExpired = true;
@@ -166,20 +179,37 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
     handleSubmit();
   }, [timeExpired]);
 
-  // Auto-submit on 3rd focus loss when WARN_AND_LOCK policy is active
+  const getPreparedPayloads = () => {
+    return Object.entries(answers).map(([qId, ans]) => {
+      if (ans.student_xpath !== undefined) {
+        const type = ans.selector_type ?? "XPATH";
+        return {
+          question_id: qId,
+          student_xpath: ans.student_xpath.trim() ? `${type.toLowerCase()}:${ans.student_xpath.trim()}` : "",
+        };
+      }
+      return {
+        question_id: qId,
+        ...ans,
+      };
+    });
+  };
+
+  // #4: Auto-submit on 3rd focus loss (WARN_AND_LOCK).
+  // Fires when focusLosses changes AND when questions load (to handle the deferred case
+  // where the 3rd blur arrived before the question list finished loading).
   useEffect(() => {
-    if (focusLosses >= 3 && focusLossPolicy === "WARN_AND_LOCK") {
-      const payloads = Object.entries(answers).map(([qId, ans]) => ({ question_id: qId, ...ans }));
-      fetch(`/api/v1/student/exams/${examId}/submit`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ submission_id: submissionId, focus_loss_count: focusLosses, close_reason: "FOCUS_LOSS_THRESHOLD", answers: payloads }),
-      }).finally(() => {
-        sessionStorage.removeItem(`exam_${examId}_submission_id`);
-        router.push("/student/exams");
-      });
-    }
-  }, [focusLosses]);
+    if (focusLosses < 3 || focusLossPolicy !== "WARN_AND_LOCK" || questions.length === 0) return;
+    const payloads = getPreparedPayloads();
+    fetch(`/api/v1/student/exams/${examId}/submit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ submission_id: submissionId, focus_loss_count: focusLosses, close_reason: "FOCUS_LOSS_THRESHOLD", answers: payloads }),
+    }).finally(() => {
+      sessionStorage.removeItem(`exam_${examId}_submission_id`);
+      router.push("/student/exams");
+    });
+  }, [focusLosses, questions.length]);
 
   // Auto-Save Drafts
   useEffect(() => {
@@ -187,10 +217,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
 
     const intervalSeconds = settings?.autoSaveInterval ?? 15;
     const interval = setInterval(async () => {
-      const payloads = Object.entries(answers).map(([qId, ans]) => ({
-        question_id: qId,
-        ...ans
-      }));
+      const payloads = getPreparedPayloads();
 
       try {
         await fetch(`/api/v1/student/exams/${examId}/auto-save`, {
@@ -284,10 +311,12 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
     setIsRunningXpath(true);
     setXpathResults((prev) => ({ ...prev, [qId]: null }));
     try {
+      const type = answers[qId]?.selector_type ?? "XPATH";
+      const prefixedXpath = `${type.toLowerCase()}:${xpath}`;
       const res = await fetch(`/api/v1/student/exams/${examId}/run-xpath`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question_id: qId, student_xpath: xpath }),
+        body: JSON.stringify({ question_id: qId, student_xpath: prefixedXpath }),
       });
       const data = await res.json();
       setXpathResults((prev) => ({ ...prev, [qId]: res.ok ? data.result : { status: "CE", message: data.message ?? "Error" } }));
@@ -307,10 +336,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
     setShowConfirmModal(false);
     setIsSubmitting(true);
     try {
-      const payloads = Object.entries(answers).map(([qId, ans]) => ({
-        question_id: qId,
-        ...ans
-      }));
+      const payloads = getPreparedPayloads();
 
       const res = await fetch(`/api/v1/student/exams/${examId}/submit`, {
         method: "POST",
@@ -366,19 +392,18 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
     setIsExiting(true);
     // Flush current answers to the server before leaving
     try {
-      const payloads = Object.entries(answers).map(([qId, ans]) => ({
-        question_id: qId,
-        ...ans,
-      }));
+      const payloads = getPreparedPayloads();
       await fetch(`/api/v1/student/exams/${examId}/auto-save`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ submission_id: submissionId, unsynced_payloads: payloads }),
       });
+      const thisSessionSeconds = Math.floor((Date.now() - sessionStartRef.current) / 1000);
+      const totalActiveSeconds = prevActiveSecondsRef.current + thisSessionSeconds;
       await fetch(`/api/v1/student/exams/${examId}/exit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ submissionId }),
+        body: JSON.stringify({ submissionId, activeSeconds: totalActiveSeconds }),
       });
     } catch {
       // Even on network error we navigate away — draft is auto-saved periodically
@@ -404,14 +429,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
             </svg>
           </div>
           <h2 className="text-xl font-bold text-white mb-2">Time&apos;s Up</h2>
-          {isSubmitting || resultLoading ? (
-            <>
-              <p className="text-text-secondary text-sm mb-6">
-                Your exam time has expired. Submitting and grading your answers now…
-              </p>
-              <div className="w-6 h-6 border-2 border-rose-500/30 border-t-rose-500 rounded-full animate-spin mx-auto" />
-            </>
-          ) : submitResult ? (
+          {submitResult ? (
             <>
               <p className="text-text-secondary text-sm mb-4">Your exam has been submitted and graded.</p>
               <div className={`text-3xl font-black mb-1 ${
@@ -434,6 +452,13 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                   View Results →
                 </button>
               </div>
+            </>
+          ) : isSubmitting || resultLoading ? (
+            <>
+              <p className="text-text-secondary text-sm mb-6">
+                Your exam time has expired. Submitting and grading your answers now…
+              </p>
+              <div className="w-6 h-6 border-2 border-rose-500/30 border-t-rose-500 rounded-full animate-spin mx-auto" />
             </>
           ) : (
             <>
@@ -471,48 +496,113 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
   return (
     <div className="h-screen flex flex-col bg-bg-base overflow-hidden selection:bg-brand-500/30">
       {/* Top Navbar */}
-      <header className="h-16 border-b border-border-strong bg-bg-surface flex items-center justify-between px-6 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-bg-surface-elevated border border-border-strong rounded-lg flex items-center justify-center overflow-hidden p-1 shrink-0">
+      <header className="h-14 sm:h-16 border-b border-border-strong bg-bg-surface flex items-center justify-between px-3 sm:px-6 shrink-0 gap-2">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          {/* Mobile: questions map toggle */}
+          <button
+            onClick={() => setShowQuestionsMap(v => !v)}
+            className="md:hidden flex items-center justify-center w-8 h-8 rounded-lg bg-bg-surface-elevated border border-border-strong text-text-secondary hover:text-white shrink-0"
+            title="Questions Map"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
+            </svg>
+          </button>
+          <div className="w-7 h-7 sm:w-8 sm:h-8 bg-bg-surface-elevated border border-border-strong rounded-lg flex items-center justify-center overflow-hidden p-1 shrink-0">
             <img src="/Logo_2.png" alt="ITLearn Logo" className="w-full h-full object-contain" />
           </div>
-          <div className="flex flex-col min-w-0">
+          <div className="hidden sm:flex flex-col min-w-0">
             <span className="text-[10px] text-text-tertiary uppercase tracking-wider leading-none">Exam Session</span>
-            <span className="text-white font-semibold text-sm truncate max-w-[260px]" title={examTitle || undefined}>
+            <span className="text-white font-semibold text-sm truncate max-w-[180px] md:max-w-[260px]" title={examTitle || undefined}>
               {examTitle || "Loading…"}
             </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-6">
-          <div className={`font-mono font-medium text-lg flex items-center gap-2 ${timeLeft < 300 ? 'text-rose-400 animate-pulse' : 'text-white'}`}>
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+          <div className={`font-mono font-medium text-sm sm:text-lg flex items-center gap-1 sm:gap-2 ${timeLeft < 300 ? 'text-rose-400 animate-pulse' : 'text-white'}`}>
+            <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             {formatTime(timeLeft)}
           </div>
-          
+
           <button
             onClick={handleSaveAndExit}
             disabled={isExiting || isSubmitting}
-            className="premium-btn-secondary py-2 px-4 text-sm"
+            className="premium-btn-secondary py-1.5 px-2.5 sm:py-2 sm:px-4 text-xs sm:text-sm"
           >
-            {isExiting ? "Saving..." : "Save & Exit"}
+            {isExiting ? "Saving…" : <><span className="hidden sm:inline">Save & </span>Exit</>}
           </button>
           <button
             onClick={handleSubmitClick}
             disabled={isSubmitting || isExiting}
-            className="premium-btn-primary py-2 px-6 text-sm"
+            className="premium-btn-primary py-1.5 px-3 sm:py-2 sm:px-6 text-xs sm:text-sm"
           >
-            {isSubmitting ? "Submitting..." : "Submit Exam"}
+            {isSubmitting ? "Submitting…" : <><span className="hidden sm:inline">Submit </span>Exam</>}
           </button>
         </div>
       </header>
 
       {/* Main Content Area */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Left Sidebar: Question Nav */}
-        <aside className="w-64 border-r border-border-strong bg-bg-surface-elevated/30 flex flex-col shrink-0">
+        {/* Mobile Questions Map Overlay */}
+        {showQuestionsMap && (
+          <div
+            className="md:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowQuestionsMap(false)}
+          >
+            <div
+              className="absolute left-0 top-0 bottom-0 w-64 bg-bg-surface border-r border-border-strong flex flex-col"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="p-4 border-b border-border-strong flex items-center justify-between">
+                <h3 className="text-xs font-bold text-text-tertiary uppercase tracking-wider">Questions Map</h3>
+                <button onClick={() => setShowQuestionsMap(false)} className="text-text-secondary hover:text-white">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4">
+                <div className="grid grid-cols-5 gap-2">
+                  {questions.map((q, idx) => {
+                    const isCurrent = idx === currentIndex;
+                    const hasAnswer = q.type === "CODE"
+                      ? !!answers[q.id]?.source_code?.trim()
+                      : q.type === "XPATH"
+                      ? !!answers[q.id]?.student_xpath?.trim()
+                      : answers[q.id]?.selected_options?.length > 0;
+                    const activeColor = q.type === "CODE"
+                      ? "bg-amber-500 text-white ring-2 ring-amber-500/50 ring-offset-2 ring-offset-bg-base"
+                      : q.type === "XPATH"
+                      ? "bg-emerald-500 text-white ring-2 ring-emerald-500/50 ring-offset-2 ring-offset-bg-base"
+                      : "bg-brand-500 text-white ring-2 ring-brand-500/50 ring-offset-2 ring-offset-bg-base";
+                    const answeredColor = q.type === "CODE"
+                      ? "bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500/30"
+                      : q.type === "XPATH"
+                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30"
+                      : "bg-brand-500/20 text-brand-400 border border-brand-500/30 hover:bg-brand-500/30";
+                    return (
+                      <button
+                        key={q.id}
+                        onClick={() => { setCurrentIndex(idx); setShowQuestionsMap(false); }}
+                        className={`h-10 rounded-lg text-sm font-medium transition-all ${
+                          isCurrent ? activeColor : hasAnswer ? answeredColor : "bg-bg-surface border border-border-strong text-text-secondary hover:border-text-tertiary"
+                        }`}
+                      >
+                        {idx + 1}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Left Sidebar: Question Nav (desktop only) */}
+        <aside className="hidden md:flex w-64 border-r border-border-strong bg-bg-surface-elevated/30 flex-col shrink-0">
           <div className="p-4 border-b border-border-strong">
             <h3 className="text-xs font-bold text-text-tertiary uppercase tracking-wider">Questions Map</h3>
           </div>
@@ -578,7 +668,10 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                 <span className="text-xs font-bold text-brand-400 uppercase tracking-wider mb-1 block">
                   Question {currentIndex + 1} of {questions.length} • {currentQ.type}
                 </span>
-                <h2 className="text-sm text-white font-medium whitespace-pre-wrap leading-relaxed">{currentQ.content}</h2>
+                {currentQ.title && (
+                  <h1 className="text-lg font-bold text-white mb-2">{currentQ.title}</h1>
+                )}
+                <h2 className="text-sm text-text-secondary font-medium whitespace-pre-wrap leading-relaxed">{currentQ.content}</h2>
               </div>
               <div className="text-text-tertiary font-mono bg-bg-surface-elevated px-3 py-1 rounded text-sm whitespace-nowrap ml-4 shrink-0">
                 {currentQ.points} pts
@@ -628,7 +721,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                 /* ── Mode C: XPath Automation Workspace ── */
                 <div className="border border-emerald-500/20 rounded-xl overflow-hidden shadow-2xl">
                   {/* Split pane */}
-                  <div className="grid grid-cols-2 divide-x divide-emerald-500/10" style={{ minHeight: 360 }}>
+                  <div className="grid grid-cols-1 md:grid-cols-2 md:divide-x divide-emerald-500/10" style={{ minHeight: 360 }}>
                     {/* Left pane: target preview */}
                     <div className="flex flex-col bg-bg-surface-elevated/20">
                       <div className="px-4 py-2 border-b border-emerald-500/10 text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-2">
@@ -666,9 +759,36 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                       </div>
 
                       <div className="flex flex-col gap-2">
-                        <label className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
-                          Your XPath Locator
-                        </label>
+                        <div className="flex justify-between items-center">
+                          <label className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
+                            Your {(answers[currentQ.id]?.selector_type ?? "XPATH") === "CSS" ? "CSS Selector" : "XPath Locator"}
+                          </label>
+                          {/* Selector Type Toggle */}
+                          <div className="flex gap-1.5 bg-bg-base p-1 rounded-lg border border-border-strong">
+                            {(["XPATH", "CSS"] as const).map((t) => (
+                              <button
+                                key={t}
+                                type="button"
+                                onClick={() =>
+                                  setAnswers((prev) => ({
+                                    ...prev,
+                                    [currentQ.id]: {
+                                      ...prev[currentQ.id],
+                                      selector_type: t,
+                                    },
+                                  }))
+                                }
+                                className={`px-2.5 py-1 rounded text-2xs font-bold transition-all ${
+                                  (answers[currentQ.id]?.selector_type ?? "XPATH") === t
+                                    ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                    : "text-text-tertiary hover:text-text-secondary"
+                                }`}
+                              >
+                                {t === "XPATH" ? "XPath" : "CSS"}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                         <input
                           type="text"
                           spellCheck={false}
@@ -676,10 +796,13 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                           onChange={(e) =>
                             setAnswers((prev) => ({
                               ...prev,
-                              [currentQ.id]: { student_xpath: e.target.value },
+                              [currentQ.id]: {
+                                ...prev[currentQ.id],
+                                student_xpath: e.target.value,
+                              },
                             }))
                           }
-                          placeholder='//div[@id="result"]'
+                          placeholder={(answers[currentQ.id]?.selector_type ?? "XPATH") === "CSS" ? 'div#result' : '//div[@id="result"]'}
                           className="w-full bg-bg-base border border-border-strong rounded-xl px-4 py-3 text-white text-sm font-mono placeholder:text-text-tertiary focus:outline-none focus:border-emerald-500/50 transition-colors"
                         />
                         <button
@@ -1344,7 +1467,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
       )}
 
       {/* Footer Navigation */}
-      <footer className="h-16 border-t border-border-strong bg-bg-surface flex items-center justify-between px-8 shrink-0">
+      <footer className="h-14 sm:h-16 border-t border-border-strong bg-bg-surface flex items-center justify-between px-4 sm:px-8 shrink-0">
         <button
           onClick={() => setCurrentIndex(prev => Math.max(0, prev - 1))}
           disabled={currentIndex === 0}

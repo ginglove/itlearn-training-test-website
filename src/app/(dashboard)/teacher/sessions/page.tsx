@@ -42,7 +42,7 @@ function elapsed(start: string | Date, end: string | Date | null): string {
 }
 
 /* ─────────────────────────── badges ──────────────────────────────────────── */
-function ResultBadge({ result }: { result: string }) {
+function ResultBadge({ result, submissionStatus }: { result: string; submissionStatus?: string }) {
   if (result === "PASS")
     return (
       <span className="inline-flex items-center gap-1 text-[11px] font-black px-2.5 py-0.5 rounded-full border bg-emerald-500/10 text-emerald-400 border-emerald-500/25">
@@ -61,11 +61,25 @@ function ResultBadge({ result }: { result: string }) {
         FAIL
       </span>
     );
+  if (submissionStatus === "CANCELLED")
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] font-black px-2.5 py-0.5 rounded-full border bg-red-500/10 text-red-400 border-red-500/25">
+        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+        </svg>
+        CANCELLED
+      </span>
+    );
+  if (submissionStatus === "PENDING")
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] font-black px-2.5 py-0.5 rounded-full border bg-amber-500/10 text-amber-400 border-amber-500/25">
+        <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+        PENDING
+      </span>
+    );
   return (
-    <span className="inline-flex items-center gap-1 text-[11px] font-black px-2.5 py-0.5 rounded-full border bg-zinc-500/10 text-zinc-400 border-zinc-500/25">
-      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01" />
-      </svg>
+    <span className="inline-flex items-center gap-1 text-[11px] font-black px-2.5 py-0.5 rounded-full border bg-blue-500/10 text-blue-400 border-blue-500/25">
+      <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
       IN PROGRESS
     </span>
   );
@@ -274,7 +288,9 @@ export default function SessionsPage() {
             const isOpen = expanded.has(session.examId);
             const passCount = session.students.filter((s: any) => s.result === "PASS").length;
             const failCount = session.students.filter((s: any) => s.result === "FAIL").length;
-            const inProgressCount = session.students.filter((s: any) => s.result === "NOT_COMPLETED").length;
+            const inProgressCount = session.students.filter((s: any) => s.submissionStatus === "IN_PROGRESS").length;
+            const pendingCount = session.totalPending ?? 0;
+            const cancelledCount = session.totalCancelled ?? 0;
 
             return (
               <div key={session.examId} className="glass-card overflow-hidden">
@@ -318,7 +334,13 @@ export default function SessionsPage() {
                     <StatPill label="Pass" value={passCount} color="bg-emerald-500/8 border-emerald-500/20 text-emerald-400" />
                     <StatPill label="Fail" value={failCount} color="bg-rose-500/8 border-rose-500/20 text-rose-400" />
                     {inProgressCount > 0 && (
-                      <StatPill label="Active" value={inProgressCount} color="bg-amber-500/8 border-amber-500/20 text-amber-400" />
+                      <StatPill label="Active" value={inProgressCount} color="bg-blue-500/8 border-blue-500/20 text-blue-400" />
+                    )}
+                    {pendingCount > 0 && (
+                      <StatPill label="Pending" value={pendingCount} color="bg-amber-500/8 border-amber-500/20 text-amber-400" />
+                    )}
+                    {cancelledCount > 0 && (
+                      <StatPill label="Cancelled" value={cancelledCount} color="bg-red-500/8 border-red-500/20 text-red-400" />
                     )}
                   </div>
 
@@ -399,7 +421,7 @@ export default function SessionsPage() {
                                 : <span className="text-text-tertiary text-xs">—</span>
                               }
                             </td>
-                            <td className="px-4 py-3"><ResultBadge result={stu.result} /></td>
+                            <td className="px-4 py-3"><ResultBadge result={stu.result} submissionStatus={stu.submissionStatus} /></td>
                             <td className="px-4 py-3 text-xs">
                               <span className={`font-mono font-bold ${stu.focusLossCount > 0 ? "text-amber-400" : "text-text-tertiary"}`}>
                                 {stu.focusLossCount}
