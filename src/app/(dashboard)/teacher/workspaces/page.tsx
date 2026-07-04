@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import DateTimePicker from "@/app/components/DateTimePicker";
 
 interface Workspace {
   id: string;
@@ -177,35 +178,29 @@ export default function WorkspacesPage() {
                   className="w-full bg-bg-base border border-border-strong rounded-xl px-4 py-2.5 text-sm text-white focus:border-brand-500 focus:outline-none"
                 />
               </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs text-text-secondary mb-1.5">Total Days</label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={form.totalDays}
-                    onChange={(e) => setForm({ ...form, totalDays: e.target.value })}
-                    className="w-full bg-bg-base border border-border-strong rounded-xl px-3 py-2.5 text-sm text-white focus:border-brand-500 focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-text-secondary mb-1.5">Start Date</label>
-                  <input
-                    type="date"
-                    value={form.startDate}
-                    onChange={(e) => setForm({ ...form, startDate: e.target.value })}
-                    className="w-full bg-bg-base border border-border-strong rounded-xl px-3 py-2.5 text-sm text-white focus:border-brand-500 focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-text-secondary mb-1.5">End Date</label>
-                  <input
-                    type="date"
-                    value={form.endDate}
-                    onChange={(e) => setForm({ ...form, endDate: e.target.value })}
-                    className="w-full bg-bg-base border border-border-strong rounded-xl px-3 py-2.5 text-sm text-white focus:border-brand-500 focus:outline-none"
-                  />
-                </div>
+              <div>
+                <label className="block text-xs text-text-secondary mb-1.5">Total Days</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={form.totalDays}
+                  onChange={(e) => setForm({ ...form, totalDays: e.target.value })}
+                  className="w-full bg-bg-base border border-border-strong rounded-xl px-3 py-2.5 text-sm text-white focus:border-brand-500 focus:outline-none"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <DateTimePicker
+                  mode="date"
+                  label="Start Date"
+                  value={form.startDate}
+                  onChange={(val) => setForm({ ...form, startDate: val })}
+                />
+                <DateTimePicker
+                  mode="date"
+                  label="End Date"
+                  value={form.endDate}
+                  onChange={(val) => setForm({ ...form, endDate: val })}
+                />
               </div>
             </div>
             <div className="flex justify-end gap-3 mt-6">

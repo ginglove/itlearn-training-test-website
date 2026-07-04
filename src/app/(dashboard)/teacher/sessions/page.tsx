@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import DateTimePicker from "@/app/components/DateTimePicker";
 
 /* ─────────────────────────── helpers ─────────────────────────────────────── */
 function todayISO() {
@@ -211,13 +212,15 @@ export default function SessionsPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
             </button>
-            <input
-              type="date"
-              value={date}
-              max={todayISO()}
-              onChange={e => e.target.value && setDate(e.target.value)}
-              className="bg-bg-surface border border-border-strong text-white text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:border-brand-500 cursor-pointer"
-            />
+            <div className="w-48">
+              <DateTimePicker
+                mode="date"
+                compact
+                value={date}
+                maxDate={todayISO()}
+                onChange={(val) => val && setDate(val)}
+              />
+            </div>
             <button
               onClick={() => {
                 if (date >= todayISO()) return;

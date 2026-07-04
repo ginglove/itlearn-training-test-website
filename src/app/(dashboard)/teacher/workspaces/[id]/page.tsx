@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
+import DateTimePicker from "@/app/components/DateTimePicker";
 
 interface Workspace {
   id: string;
@@ -505,12 +506,13 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
           <h2 className="font-semibold text-white mb-4">Teaching Days</h2>
           {!archived && (
             <div className="flex flex-col md:flex-row gap-3 mb-5">
-              <input
-                type="date"
-                value={dayForm.scheduledDate}
-                onChange={(e) => setDayForm({ ...dayForm, scheduledDate: e.target.value })}
-                className="bg-bg-base border border-border-strong rounded-xl px-4 py-2.5 text-sm text-white focus:border-brand-500 focus:outline-none"
-              />
+              <div className="md:w-56">
+                <DateTimePicker
+                  mode="date"
+                  value={dayForm.scheduledDate}
+                  onChange={(val) => setDayForm({ ...dayForm, scheduledDate: val })}
+                />
+              </div>
               <input
                 placeholder="Topic (optional)"
                 value={dayForm.topic}
@@ -881,15 +883,13 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
               </p>
             )}
             <div className="space-y-4">
-              <div>
-                <label className="block text-xs text-text-secondary mb-1.5">Date *</label>
-                <input
-                  type="date"
-                  value={editDayForm.scheduledDate}
-                  onChange={(e) => setEditDayForm({ ...editDayForm, scheduledDate: e.target.value })}
-                  className="w-full bg-bg-base border border-border-strong rounded-xl px-4 py-2.5 text-sm text-white focus:border-brand-500 focus:outline-none"
-                />
-              </div>
+              <DateTimePicker
+                mode="date"
+                label="Date"
+                required
+                value={editDayForm.scheduledDate}
+                onChange={(val) => setEditDayForm({ ...editDayForm, scheduledDate: val })}
+              />
               <div>
                 <label className="block text-xs text-text-secondary mb-1.5">Topic</label>
                 <input
@@ -999,15 +999,11 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
                     ))}
                   </select>
                 </div>
-                <div>
-                  <label className="block text-xs text-text-secondary mb-1.5">Due Date</label>
-                  <input
-                    type="datetime-local"
-                    value={activityForm.dueDate}
-                    onChange={(e) => setActivityForm({ ...activityForm, dueDate: e.target.value })}
-                    className="w-full bg-bg-base border border-border-strong rounded-xl px-3 py-2.5 text-sm text-white focus:border-brand-500 focus:outline-none"
-                  />
-                </div>
+                <DateTimePicker
+                  label="Due Date"
+                  value={activityForm.dueDate}
+                  onChange={(val) => setActivityForm({ ...activityForm, dueDate: val })}
+                />
               </div>
             </div>
             <div className="flex justify-end gap-3 mt-6">

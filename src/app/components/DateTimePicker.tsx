@@ -4,21 +4,41 @@ import { useState, useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
 interface DateTimePickerProps {
-  value: string; // YYYY-MM-DDTHH:MM
+  value: string; // YYYY-MM-DDTHH:MM (datetime mode) or YYYY-MM-DD (date mode)
   onChange: (value: string) => void;
   label?: string;
   required?: boolean;
+  mode?: "datetime" | "date";
+  maxDate?: string; // YYYY-MM-DD; days after this are disabled (date mode)
+  compact?: boolean; // smaller trigger for toolbar usage
 }
 
-export default function DateTimePicker({ value, onChange, label, required = false }: DateTimePickerProps) {
+// Parse YYYY-MM-DD as a local date (new Date("YYYY-MM-DD") would be UTC)
+const parseValue = (value: string) => {
+  const m = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  const d = new Date(value);
+  return isNaN(d.getTime()) ? null : d;
+};
+
+export default function DateTimePicker({
+  value,
+  onChange,
+  label,
+  required = false,
+  mode = "datetime",
+  maxDate,
+  compact = false,
+}: DateTimePickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const dateOnly = mode === "date";
 
   // Parse initial value or default to current time
   const getInitialDate = () => {
     if (value) {
-      const d = new Date(value);
-      if (!isNaN(d.getTime())) return d;
+      const d = parseValue(value);
+      if (d) return d;
     }
     return new Date();
   };
@@ -29,8 +49,8 @@ export default function DateTimePicker({ value, onChange, label, required = fals
   // Keep local states synced if value changes from outside
   useEffect(() => {
     if (value) {
-      const d = new Date(value);
-      if (!isNaN(d.getTime())) {
+      const d = parseValue(value);
+      if (d) {
         setSelectedDate(d);
         setCurrentDate(d);
       }
@@ -60,6 +80,12 @@ export default function DateTimePicker({ value, onChange, label, required = fals
     return `${y}-${m}-${d}T${hh}:${mm}`;
   };
 
+  // Format local Date object to YYYY-MM-DD
+  const formatLocalDate = (date: Date) =>
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+
+  const emit = (date: Date) => onChange(dateOnly ? formatLocalDate(date) : formatLocalDateTime(date));
+
   // Human readable format for the trigger button
   const formatHumanReadable = (date: Date) => {
     const options: Intl.DateTimeFormatOptions = {
@@ -67,11 +93,15 @@ export default function DateTimePicker({ value, onChange, label, required = fals
       year: "numeric",
       month: "short",
       day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
+      ...(dateOnly ? {} : { hour: "2-digit" as const, minute: "2-digit" as const, hour12: true }),
     };
     return date.toLocaleString("en-US", options);
+  };
+
+  const maxDateObj = maxDate ? parseValue(maxDate) : null;
+  const isDayDisabled = (dayNum: number) => {
+    if (!maxDateObj) return false;
+    return new Date(year, month, dayNum).getTime() > maxDateObj.getTime();
   };
 
   // Calendar calculations
@@ -100,7 +130,8 @@ export default function DateTimePicker({ value, onChange, label, required = fals
     updated.setMonth(month);
     updated.setDate(dayNum);
     setSelectedDate(updated);
-    onChange(formatLocalDateTime(updated));
+    emit(updated);
+    if (dateOnly) setIsOpen(false);
   };
 
   const handleTimeChange = (type: "hour" | "minute" | "ampm", val: string) => {
@@ -133,7 +164,7 @@ export default function DateTimePicker({ value, onChange, label, required = fals
     }
 
     setSelectedDate(updated);
-    onChange(formatLocalDateTime(updated));
+    emit(updated);
   };
 
   // Convert 24h to 12h for inputs
@@ -158,13 +189,18 @@ export default function DateTimePicker({ value, onChange, label, required = fals
       new Date().getMonth() === month &&
       new Date().getFullYear() === year;
 
+    const disabled = isDayDisabled(dayNum);
+
     cells.push(
       <button
         key={`day-${dayNum}`}
         type="button"
+        disabled={disabled}
         onClick={() => handleDaySelect(dayNum)}
         className={`w-9 h-9 flex items-center justify-center rounded-xl text-sm transition-all relative ${
-          isSelected
+          disabled
+            ? "text-text-tertiary/40 cursor-not-allowed"
+            : isSelected
             ? "bg-brand-500 text-white font-semibold shadow-lg shadow-brand-500/20"
             : isToday
             ? "border border-brand-500 text-brand-400 font-medium"
@@ -186,10 +222,18 @@ export default function DateTimePicker({ value, onChange, label, required = fals
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="premium-input flex items-center justify-between text-left cursor-pointer hover:border-brand-500/50"
+        className={
+          compact
+            ? "bg-bg-surface border border-border-strong text-sm rounded-lg px-3 py-1.5 flex items-center justify-between gap-2 text-left cursor-pointer hover:border-brand-500/50 transition-all w-full"
+            : "premium-input flex items-center justify-between text-left cursor-pointer hover:border-brand-500/50"
+        }
       >
         <span className={value ? "text-white" : "text-text-tertiary"}>
-          {value ? formatHumanReadable(selectedDate) : "Select date and time..."}
+          {value
+            ? formatHumanReadable(selectedDate)
+            : dateOnly
+            ? "Select date..."
+            : "Select date and time..."}
         </span>
         <svg
           className="w-5 h-5 text-text-tertiary"
@@ -255,6 +299,7 @@ export default function DateTimePicker({ value, onChange, label, required = fals
             </div>
 
             {/* Time Picker Section */}
+            {!dateOnly && (
             <div className="border-t border-border-strong pt-4 mt-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-text-tertiary uppercase">Time</span>
@@ -298,6 +343,7 @@ export default function DateTimePicker({ value, onChange, label, required = fals
                 </div>
               </div>
             </div>
+            )}
 
             {/* Action Row */}
             <div className="border-t border-border-strong pt-4 mt-4 flex justify-between gap-2">
@@ -305,12 +351,15 @@ export default function DateTimePicker({ value, onChange, label, required = fals
                 type="button"
                 onClick={() => {
                   const now = new Date();
+                  if (maxDateObj && formatLocalDate(now) > formatLocalDate(maxDateObj)) return;
                   setSelectedDate(now);
-                  onChange(formatLocalDateTime(now));
+                  setCurrentDate(now);
+                  emit(now);
+                  if (dateOnly) setIsOpen(false);
                 }}
                 className="text-xs text-text-secondary hover:text-white font-medium"
               >
-                Set Current Time
+                {dateOnly ? "Today" : "Set Current Time"}
               </button>
               <button
                 type="button"
