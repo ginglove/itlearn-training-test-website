@@ -11,11 +11,26 @@ import {
   pgEnum,
   uniqueIndex,
   index,
+  date,
 } from "drizzle-orm/pg-core";
 
 // ── Enums ──────────────────────────────────────────────────────────────────────
 export const userRoleEnum = pgEnum("user_role", ["TEACHER", "STUDENT"]);
 export const questionTypeEnum = pgEnum("question_type", ["QUIZ", "CODE", "XPATH"]);
+export const workspaceStatusEnum = pgEnum("workspace_status", ["ACTIVE", "ARCHIVED"]);
+export const membershipStatusEnum = pgEnum("membership_status", ["ACTIVE", "REMOVED"]);
+export const attendanceStatusEnum = pgEnum("attendance_status", [
+  "PRESENT",
+  "ABSENT",
+  "LATE",
+  "EXCUSED",
+]);
+export const activityTypeEnum = pgEnum("activity_type", [
+  "EXERCISE",
+  "HOMEWORK",
+  "ASSESSMENT",
+  "QUIZ",
+]);
 export const executionStatusEnum = pgEnum("execution_status", [
   "AC",
   "WA",
@@ -231,6 +246,138 @@ export const examAssignments = pgTable(
     ),
     index("idx_exam_assignments_lookup").on(table.examId),
   ]
+);
+
+// ── Workspaces ─────────────────────────────────────────────────────────────────
+export const workspaces = pgTable(
+  "workspaces",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: varchar("name", { length: 150 }).notNull(),
+    description: text("description"),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    status: workspaceStatusEnum("status").notNull().default("ACTIVE"),
+    totalDays: integer("total_days").notNull().default(0),
+    startDate: date("start_date"),
+    endDate: date("end_date"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index("idx_workspaces_created_by").on(table.createdBy)]
+);
+
+// ── Workspace Memberships ──────────────────────────────────────────────────────
+export const workspaceMemberships = pgTable(
+  "workspace_memberships",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    status: membershipStatusEnum("status").notNull().default("ACTIVE"),
+    joinedAt: timestamp("joined_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("unique_workspace_student").on(table.workspaceId, table.studentId),
+    index("idx_memberships_workspace").on(table.workspaceId),
+  ]
+);
+
+// ── Teaching Days ──────────────────────────────────────────────────────────────
+export const teachingDays = pgTable(
+  "teaching_days",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    dayNumber: integer("day_number").notNull(),
+    scheduledDate: date("scheduled_date").notNull(),
+    topic: varchar("topic", { length: 200 }),
+    notes: text("notes"),
+  },
+  (table) => [
+    uniqueIndex("unique_workspace_day_number").on(table.workspaceId, table.dayNumber),
+    uniqueIndex("unique_workspace_day_date").on(table.workspaceId, table.scheduledDate),
+  ]
+);
+
+// ── Attendance Records ─────────────────────────────────────────────────────────
+export const attendanceRecords = pgTable(
+  "attendance_records",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    teachingDayId: uuid("teaching_day_id")
+      .notNull()
+      .references(() => teachingDays.id, { onDelete: "cascade" }),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    status: attendanceStatusEnum("status").notNull(),
+    note: text("note"),
+    recordedAt: timestamp("recorded_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("unique_day_student_attendance").on(table.teachingDayId, table.studentId),
+    index("idx_attendance_student").on(table.studentId),
+  ]
+);
+
+// ── Workspace Activities ───────────────────────────────────────────────────────
+export const workspaceActivities = pgTable(
+  "workspace_activities",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    examId: uuid("exam_id").references(() => exams.id, { onDelete: "cascade" }),
+    teachingDayId: uuid("teaching_day_id").references(() => teachingDays.id, {
+      onDelete: "set null",
+    }),
+    activityType: activityTypeEnum("activity_type").notNull(),
+    title: varchar("title", { length: 150 }).notNull(),
+    description: text("description"),
+    dueDate: timestamp("due_date", { withTimezone: true }),
+    assignedAt: timestamp("assigned_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("unique_workspace_exam").on(table.workspaceId, table.examId),
+    index("idx_activities_workspace").on(table.workspaceId),
+  ]
+);
+
+// ── Workspace Class Reports ────────────────────────────────────────────────────
+export const workspaceClassReports = pgTable(
+  "workspace_class_reports",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    generatedBy: uuid("generated_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    generatedAt: timestamp("generated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    totalScheduledDays: integer("total_scheduled_days").notNull().default(0),
+    totalConductedDays: integer("total_conducted_days").notNull().default(0),
+    reportData: json("report_data"),
+  },
+  (table) => [index("idx_reports_workspace").on(table.workspaceId)]
 );
 
 // ── Platform Settings ──────────────────────────────────────────────────────────
