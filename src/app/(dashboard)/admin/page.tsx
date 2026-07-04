@@ -20,7 +20,16 @@ interface TeacherOption {
   username: string;
 }
 
+interface DashboardStats {
+  totalActiveStudents: number;
+  totalActiveTeachers: number;
+  totalActiveWorkspaces: number;
+  totalExams: number;
+  totalQuestions: number;
+}
+
 export default function AdminWorkspacesPage() {
+  const [stats, setStats] = useState<DashboardStats | null>(null);
   const [workspaces, setWorkspaces] = useState<AdminWorkspace[]>([]);
   const [teachers, setTeachers] = useState<TeacherOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -40,12 +49,14 @@ export default function AdminWorkspacesPage() {
   const fetchAll = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [wsRes, tRes] = await Promise.all([
+      const [wsRes, tRes, statsRes] = await Promise.all([
         fetch("/api/v1/admin/workspaces"),
         fetch("/api/v1/admin/users/teachers"),
+        fetch("/api/v1/admin/dashboard/stats"),
       ]);
       if (wsRes.ok) setWorkspaces((await wsRes.json()).workspaces || []);
       if (tRes.ok) setTeachers((await tRes.json()).teachers || []);
+      if (statsRes.ok) setStats((await statsRes.json()).stats || null);
     } finally {
       setIsLoading(false);
     }
@@ -156,6 +167,27 @@ export default function AdminWorkspacesPage() {
           }`}
         >
           {message.text}
+        </div>
+      )}
+
+      {/* Global dashboard metrics (RSD v9.1 §4.1) */}
+      {stats && (
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-8">
+          {[
+            { label: "Active Students", value: stats.totalActiveStudents },
+            { label: "Active Teachers", value: stats.totalActiveTeachers },
+            { label: "Active Workspaces", value: stats.totalActiveWorkspaces },
+            { label: "Total Exams", value: stats.totalExams },
+            { label: "Total Questions", value: stats.totalQuestions },
+          ].map((c) => (
+            <div
+              key={c.label}
+              className="bg-bg-surface border border-border-strong rounded-2xl p-4 text-center"
+            >
+              <p className="text-2xl font-bold text-white font-mono">{c.value}</p>
+              <p className="text-text-tertiary text-xs mt-1 uppercase tracking-wider">{c.label}</p>
+            </div>
+          ))}
         </div>
       )}
 

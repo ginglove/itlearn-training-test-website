@@ -1,6 +1,7 @@
+```markdown
 # Requirements Specification Document (RSD)
 ## Enterprise Online Quiz, Hybrid Coding & Class Workspace Governance Platform
-**Document Version:** 9.0 (Unified Core Engine, Multi-Tier Admin Governance & Workspace Management Module)  
+**Document Version:** 9.1 (Unified Core Engine, Multi-Tier Admin Governance & Workspace Management Module)  
 **Target Environments:** Python 3.10+, Node.js 18+ LTS  
 **Core Framework Integration:** itlearn.edu.vn Core Platform Standard  
 
@@ -8,7 +9,8 @@
 
 ## Revision History
 
-### Version 9.0 — 2026-07-01
+### Version 9.1 — 2026-07-02
+*   **Admin Dashboard Metrics Integration:** Introduces a formal admin overview subsystem mapping global counters for active students, active teachers, active workspaces, total exams, and total questions.
 *   **Unified Merger:** Fully integrates core exam system specifications (v7.3), updated telemetry/timer adjustments, workspace module requirements, multi-tier administrator governance, and planned architectural optimizations into a single cohesive specifications blueprint.
 *   **Incorporation of Updated Core Requirements:** Integrates the 10 priority corrections from the v7.3 review, including the strict 4-state `submissionStatus` priority algorithm, re-entry transactional atomicity, timer floors, focus-loss load guards, custom exit endpoint contracts, CSS vs. XPath matching distinctions, force-submit lifecycle rules, local fallback overrides, and a standardized API error envelope.
 *   **Enterprise Administration:** Formally defines the three-tier access matrix (Admin, Teacher, Student) and isolates classroom workspaces, class reports, and teacher workloads to their respective assignments.
@@ -48,7 +50,7 @@ The platform is a unified online assessment and learning environment. It integra
 ## 2. User Roles, Multi-Tier Governance & Access Matrix
 
 ### 2.1. Role Definitions
-*   **Admin (Super-User):** Full platform access. Responsible for the system-wide lifecycle of workspaces, user registrations, assigning teachers to classrooms, restoring archived data, and monitoring global analytical metrics.
+*   **Admin (Super-User):** Full platform access. Responsible for the system-wide lifecycle of workspaces, user registrations, assigning teachers to classrooms, restoring archived data, and monitoring global analytical metrics via the Admin Dashboard.
 *   **Teacher (Evaluator):** Manages specific student cohorts. Can configure timetables, take attendance, assign quizzes/exams, view real-time workspace monitors, and generate end-of-class class reports *only* within the workspaces assigned to them by an Admin.
 *   **Student (Candidate):** Participates in classes and attempts activities (homework, exams, quizzes) assigned within their active workspaces. Authenticates via provisioned credentials.
 
@@ -163,34 +165,64 @@ Self-registration is disabled. Account provisioning is restricted to admin uploa
 *   `workspace_status`: `ACTIVE`, `ARCHIVED`
 *   `membership_status`: `ACTIVE`, `REMOVED`
 *   `attendance_status`: `PRESENT`, `ABSENT`, `LATE`, `EXCUSED`
-*   `activity_type`: `EXERCISE`, `HOMEWORK`, `ASSESSMENT`, `QUIZ`
+*   `activity_type`: `EXERCISE`, `HOMEWORK`, `ABSENT`, `QUIZ`, `ASSESSMENT`
 *   `execution_status`: `AC`, `WA`, `CE`, `RE`, `TLE`, `OFE`
 
 ---
 
-## 4. Anti-Cheat, Security & Session Telemetry
+## 4. Administrative Management, Metrics & Admin Dashboard
 
-### 4.1. Client-Side Focus Loss Enforcement
+The system requires structured administrative interfaces and consolidated telemetry to manage course offerings, monitor instructors, and analyze global utilization.
+
+### 4.1. Global Admin Dashboard Overview
+When an Admin accesses the primary platform dashboard, the system must render real-time, aggregated data cards containing five primary metrics to indicate active operational volume:
+
+1.  **Total Active Student (`totalActiveStudents`):** Evaluated as the count of records in the `users` table where `role = 'STUDENT'` and accounts are active (not deactivated).
+2.  **Total Active Teacher (`totalActiveTeachers`):** Evaluated as the count of records in the `users` table where `role = 'TEACHER'` and accounts are active (not deactivated).
+3.  **Total Active Workspace (`totalActiveWorkspaces`):** Evaluated as the count of rows in the `workspaces` table where `status = 'ACTIVE'`.
+4.  **Total Exams (`totalExams`):** Evaluated as the cumulative count of records in the `exams` table.
+5.  **Total Questions (`totalQuestions`):** Evaluated as the cumulative count of records in the `questions` table.
+
+These counters are fetched atomically via `GET /api/v1/admin/dashboard/stats`.
+
+### 4.2. Teacher Management & Metrics
+When an Admin accesses the Teacher Management panel, the system displays real-time workload metrics:
+*   **Total Workspaces Taught:** Count of distinct `workspace_ids` in `workspace_teachers` linked to the teacher.
+*   **Total Days Conducted:** Sum of `total_conducted_days` across all workspaces assigned to the teacher where roll call has been submitted.
+
+### 4.3. Student Management & Metrics
+When an Admin views the Student Management panel, the system displays:
+*   **Active Workspaces:** The count of active workspaces the student is currently enrolled in (`membership_status = ACTIVE` AND `workspace.status = ACTIVE`).
+
+### 4.4. Workspace Assignment & Execution
+*   Workspaces are not isolated to a single creator. Admins create workspaces and explicitly map one or more teachers via the `workspace_teachers` junction table.
+*   A Teacher cannot view or modify a Workspace unless their `user_id` is present in the `workspace_teachers` table for that specific workspace.
+
+---
+
+## 5. Anti-Cheat, Security & Session Telemetry
+
+### 5.1. Client-Side Focus Loss Enforcement
 The workspace coordinates tab/window status using the `focus_loss_policy` property returned in the active exam config:
 
 *   **`LOG_ONLY` Configuration:** Focus losses are captured and incremented on the database session object, but no warning indicators block the candidate workspace.
 *   **`WARN_AND_LOCK` Configuration:**
     *   **Offenses 1 and 2:** Detects window `blur` events (tab switches, alt-tabs) and renders a persistent modal warning that blocks the workspace until manual dismissal.
-    *   **Offense 3:** Triggers an immediate, client-side auto-submit routine with `close_reason: "FOCUS_LOSS_THRESHOLD"`.
+    *   **Offense 3:** Triggers an immediate, un-bypassable auto-submit routine with `close_reason: "FOCUS_LOSS_THRESHOLD"`.
 
 #### Focus Loss Guard Rule
 Auto-submission on the 3rd infraction is permitted *only* if `questions.length > 0` at the moment the window blur triggers. If a tab change is logged before the query for questions completes (such as during network initialization delay), the penalty is incremented in system state but auto-submission is **deferred**. Once questions load and `questions.length > 0` resolves, if the counter is already $\ge 3$, auto-submission fires.
 
 `focusLossCount` is held in frontend memory space and resets to `0` on page reload. The cumulative history is tracked on the `exam_submissions` database record.
 
-### 4.2. Active-Time Timer, Floor, & Re-entry Logic
+### 5.2. Active-Time Timer, Floor, & Re-entry Logic
 1.  **Countdown Calculation:** The countdown timer calculates the candidate's remaining duration using the workspace active-time metric instead of the local system clock:
     $$\text{remainingSeconds} = (\text{examDurationMins} \times 60) - \text{activeSeconds}$$
 2.  **Timer Floor and Overflow Protection:** If $\text{remainingSeconds} \le 0$ (indicating total elapsed session activity meets or exceeds the designated duration limit), the system sets remaining time to $0$ and displays the Time's Up modal. The interface is blocked from rendering negative counts. If the value returned from the backend exceeds the allocated limit, the system clamps the runtime limit to $(\text{examDurationMins} \times 60)$ prior to evaluating remaining time.
 3.  **Exit Serialization:** Exiting via **Save & Exit** makes a POST request to `/exit`, which saves the candidate's draft answers and writes `close_reason: "SAVE_AND_EXIT"` along with the updated `activeSeconds` value.
-4.  **Re-entry Database Transaction:** When a student re-enters the exam via `GET /api/v1/student/exams/:id/questions`, the server clears `close_reason` back to `NULL` within the **same database transaction** that returns the question schema. This prevents the monitor dashboard from showing a transient `PENDING` state while the student is in the workspace.
+4.  **Re-entry Database Transaction:** When a student re-enters the exam via `GET /api/v1/student/exams/:id/questions`, the server clears `close_reason` back to `NULL` within the **same database transaction** that returns the question schema. This ensures the monitor dashboard cannot observe a submission in a transient `PENDING` state while the student is actively in the workspace.
 
-### 4.3. Submission Status Priority Algorithm
+### 5.3. Submission Status Priority Algorithm
 The system evaluates and displays candidate session status across teacher monitoring dashboards, session archives, and student portal views using a strict, single-pass priority algorithm:
 
 ```text
@@ -210,9 +242,9 @@ No subsequent rule can override a non-null `submittedAt` timestamp. If an exam i
 
 ---
 
-## 5. Workspace Class & Timetable Governance
+## 6. Workspace Class & Timetable Governance
 
-### 5.1. Workspace Lifecycle
+### 6.1. Workspace Lifecycle
 Workspaces begin in the `ACTIVE` state. Teachers configure the timetable, manage student rosters, record attendance, and assign homework or assessments.
 
 ```text
@@ -229,19 +261,19 @@ Workspaces begin in the `ACTIVE` state. Teachers configure the timetable, manage
     *   All teaching days with a `scheduled_date` $\le$ the current date have at least one recorded attendance entry.
     If either condition fails, the system blocks archiving and returns `WORKSPACE_ARCHIVE_BLOCKED`.
 
-### 5.2. Timetable & Sequential Integrity
+### 6.2. Timetable & Sequential Integrity
 *   **Gapless Re-sequencing:** If a scheduled class day is removed from the timetable, the system automatically reorders all remaining days to maintain a continuous, sequential index (e.g., Days 1, 2, 4 are updated to Days 1, 2, 3). This update runs as an atomic database transaction.
 *   **Deletion Protection:** Deleting a class day is blocked if any attendance records are associated with it. The instructor must delete those attendance records before the day can be removed.
 
-### 5.3. Attendance (Roll Call) Rules
+### 6.3. Attendance (Roll Call) Rules
 *   **Transactional Accuracy:** Saving attendance is an atomic transaction. Partial saves are blocked. If any single validation check fails, the transaction is rolled back and the API returns a `500` error with `ROLLCALL_SAVE_FAILED`.
 *   **Quick Roll Call Logic:** Quick Roll Call initializes the interface by marking all students with `membership_status = ACTIVE` as `PRESENT`. The instructor can then adjust exceptions (e.g., marking specific students `ABSENT` or `LATE`) before submitting the batch update.
 
 ---
 
-## 6. Workspace Activities & Exam Scoping
+## 7. Workspace Activities & Exam Scoping
 
-### 6.1. Activity Matrix
+### 7.1. Activity Matrix
 Assigned activities use the following configurations:
 
 | Type | Backend Engine Required | Grading Mode | Visibility Constraints |
@@ -251,21 +283,21 @@ Assigned activities use the following configurations:
 | `HOMEWORK` | Optional | Sandbox tests / Text answers | Flexible due date. |
 | `EXERCISE` | Optional | Practice code executions | Hidden test cases revealed on run. |
 
-### 6.2. Activity Assignment and Workspace Isolation
+### 7.2. Activity Assignment and Workspace Isolation
 1.  **Access Isolation:** Activities assigned to a workspace are accessible *only* to enrolled student members of that workspace, regardless of the exam's global `access_type` setting. Students not on the workspace roster cannot access the exam or submit answers.
 2.  **Assignment Limits:** An `exam_id` can be reused across different class workspaces, but cannot be assigned more than once to the same workspace. If a duplicate assignment is attempted, the system rejects it with a `409 Conflict` error (`DUPLICATE_EXAM_IN_WORKSPACE`).
 3.  **Active Assignment Protection:** Deleting or unassigning an activity from a workspace is blocked if any student has already submitted an attempt for that activity within that workspace.
 
 ---
 
-## 7. Automated Grading Engine Architecture
+## 8. Automated Grading Engine Architecture
 
-### 7.1. Quiz Evaluation
+### 8.1. Quiz Evaluation
 Quizzes utilize a proportional partial-credit grading model:
 $$\text{Score} = \left( \frac{\text{Correct Selections}}{\text{Total Correct Options}} \times \text{Question Points} \right)$$
 If a student selects any incorrect options, the score for that question is automatically set to $0$.
 
-### 7.2. Compiler Sandbox Pipeline (Code Questions)
+### 8.2. Compiler Sandbox Pipeline (Code Questions)
 Code tasks are routed to the execution pipeline using the Piston API as the primary executor:
 
 1.  **Compilation & Sandbox Execution:** Code runs inside isolated sandbox containers. Every request includes a `run_memory_limit` of `262144` (256 MB) to prevent server out-of-memory errors.
@@ -320,12 +352,12 @@ If both selectors return zero elements, the evaluation fails and is marked as an
 
 ---
 
-## 8. End-of-Class Reports
+## 9. End-of-Class Reports
 
-### 8.1. Summary Report Generation
+### 9.1. Summary Report Generation
 Instructors can generate reports for archived workspaces. Each generation creates a new point-in-time record in `workspace_class_reports`. The most recent record is used as the canonical class report. The report is exportable as a `.xlsx` spreadsheet, with each student mapped to an individual row.
 
-### 8.2. Report Calculation Metrics
+### 9.2. Report Calculation Metrics
 *   **Alphabetical Sort Order:** Student datasets are sorted alphabetically by `fullName` in the output file.
 *   **Average Score Formula:** The system calculates `averageScore` using only activities with a status of `SUBMITTED`:
     $$\text{averageScore} = \frac{\sum \text{Score Percentage (Submitted Activities)}}{\text{Total Submitted Activities Count}}$$
@@ -334,19 +366,20 @@ Instructors can generate reports for archived workspaces. Each generation create
 
 ---
 
-## 9. API Endpoint Catalog
+## 10. API Endpoint Catalog
 
 All routes are prefixed with `/api/v1`.
 
-### 9.1. Authentication Routes
+### 10.1. Authentication Routes
 | Method | Route | Description |
 | :--- | :--- | :--- |
 | `POST` | `/auth/login` | Authenticate user credentials. Returns a payload containing account permissions, active tokens, and profile states. Client-side login validates username/password fields are non-empty before calling the API, returning inline errors in Vietnamese. |
 | `POST` | `/auth/password-reset` | Process password reset validation workflows. |
 
-### 9.2. Admin Management Routes
+### 10.2. Admin Management Routes
 | Method | Route | Description |
 | :--- | :--- | :--- |
+| `GET` | `/admin/dashboard/stats` | Retrieve global aggregated stats for the admin dashboard (Active Students, Active Teachers, Active Workspaces, Total Exams, Total Questions). |
 | `GET` | `/admin/users/teachers` | Retrieve global list of teacher profiles, active workspace assignments, and teaching duration logs. |
 | `POST` | `/admin/users/teachers` | Create a new Teacher account profile. |
 | `GET` | `/admin/users/students` | Retrieve student profiles with associated active workspace metrics. |
@@ -355,7 +388,7 @@ All routes are prefixed with `/api/v1`.
 | `DELETE` | `/admin/workspaces/:id/teachers/:teacherId` | Remove a teacher's workspace access. |
 | `POST` | `/admin/workspaces/:id/unarchive` | Admin override to restore an `ARCHIVED` workspace to `ACTIVE`. |
 
-### 9.3. Teacher Workspace & Class Scheduling Routes
+### 10.3. Teacher Workspace & Class Scheduling Routes
 | Method | Route | Description |
 | :--- | :--- | :--- |
 | `GET` | `/teacher/workspaces` | List active workspaces assigned to the authenticated teacher. |
@@ -367,7 +400,7 @@ All routes are prefixed with `/api/v1`.
 | `POST` | `/teacher/workspaces/:id/members` | Enroll students into the workspace. |
 | `DELETE` | `/teacher/workspaces/:id/members/:studentId` | Unenroll a student. Blocked if the student has submission records. |
 
-### 9.4. Timetable & Daily Attendance Routes
+### 10.4. Timetable & Daily Attendance Routes
 | Method | Route | Description |
 | :--- | :--- | :--- |
 | `GET` | `/teacher/workspaces/:id/timetable` | Get the timetable days for a workspace, ordered sequentially by `day_number`. |
@@ -378,7 +411,7 @@ All routes are prefixed with `/api/v1`.
 | `POST` | `/teacher/workspaces/:id/timetable/:dayId/rollcall` | Save or overwrite attendance data for a teaching day. Updates run atomically. |
 | `GET` | `/teacher/workspaces/:id/attendance` | Retrieve the global attendance matrix for the workspace (all enrolled students $\times$ all scheduled days). |
 
-### 9.5. Exam Creation & Question Config Routes
+### 10.5. Exam Creation & Question Config Routes
 | Method | Route | Description |
 | :--- | :--- | :--- |
 | `GET` | `/teacher/exams` | Get the exams list managed by the authenticated teacher. |
@@ -389,13 +422,13 @@ All routes are prefixed with `/api/v1`.
 | `POST` | `/teacher/exams/:id/xpath-verify` | Verify a test case selector against HTML snippets or URLs. Returns matched markup. |
 | `POST` | `/teacher/exams/:id/import-questions` | Bulk import questions from a CSV/Excel file. |
 
-### 9.6. Workspace Live Monitoring & Control Routes
+### 10.6. Workspace Live Monitoring & Control Routes
 | Method | Route | Description |
 | :--- | :--- | :--- |
 | `GET` | `/teacher/exams/:id/monitor` | Real-time SSE exam monitoring dashboard tracking status, score, focus-loss count, and close reason. |
 | `POST` | `/teacher/exams/:id/force-submit` | Force-submit an active student's exam attempt. |
 
-### 9.7. Final Submission & Exit Endpoint Contracts
+### 10.7. Final Submission & Exit Endpoint Contracts
 
 #### Student Save & Pause Activity
 *   **Route:** `POST /student/exams/:id/exit`
@@ -433,14 +466,14 @@ All routes are prefixed with `/api/v1`.
 ```
 Force-submitting locks the student out of the exam session and saves their final calculated score.
 
-### 9.8. Class Performance Report Routes
+### 10.8. Class Performance Report Routes
 | Method | Route | Description |
 | :--- | :--- | :--- |
 | `POST` | `/teacher/workspaces/:id/report` | Generate or regenerate the point-in-time report snapshot. |
 | `GET` | `/teacher/workspaces/:id/report` | Retrieve the latest generated report payload. |
 | `GET` | `/teacher/workspaces/:id/report/export` | Export the latest class report as a `.xlsx` spreadsheet. |
 
-### 9.9. Student Workspaces & Activities Portal Routes
+### 10.9. Student Workspaces & Activities Portal Routes
 | Method | Route | Description |
 | :--- | :--- | :--- |
 | `GET` | `/student/workspaces` | Get the workspaces the student is enrolled in, returning `submissionStatus` per activity. Deprecated fields `activeAttemptCancelled` and `activeAttemptPaused` must not be used. |
@@ -452,9 +485,9 @@ Force-submitting locks the student out of the exam session and saves their final
 
 ---
 
-## 10. Standardized Error Handling & Code Reference
+## 11. Standardized Error Handling & Code Reference
 
-### 10.1. Standard Error Response Format
+### 11.1. Standard Error Response Format
 All API error responses use a consistent JSON envelope to simplify client-side validation handling:
 
 ```json
@@ -467,7 +500,7 @@ All API error responses use a consistent JSON envelope to simplify client-side v
 }
 ```
 
-### 10.2. Consolidated Error Code Catalog
+### 11.2. Consolidated Error Code Catalog
 
 | Error Code | HTTP Status | Trigger Condition |
 | :--- | :---: | :--- |
@@ -496,11 +529,11 @@ All API error responses use a consistent JSON envelope to simplify client-side v
 
 ---
 
-## 11. Proposed Architectural Enhancements & Improvement Vectors
+## 12. Proposed Architectural Enhancements & Improvement Vectors
 
 To improve stability, flexibility, and overall operations of the workspace module, the following incremental enhancement vectors are proposed.
 
-### 11.1. Workspace Grade Policies & Score Weighting
+### 12.1. Workspace Grade Policies & Score Weighting
 The basic version computes an unweighted arithmetic average of all submitted exams/quizzes.
 *   **Proposed Enhancement:** Introduce custom grade weights per workspace.
 *   **Schema Extension:**
@@ -516,7 +549,7 @@ The basic version computes an unweighted arithmetic average of all submitted exa
 ```
 *   **Behavioral Change:** When generating reports, `averageScore` will evaluate according to defined weights (e.g., Assessments = 50%, Quizzes = 30%, Homework = 20%). If no policy exists, the calculation falls back to an unweighted average.
 
-### 11.2. Batch Timetable Generation Utility
+### 12.2. Batch Timetable Generation Utility
 Creating sequential teaching days manually presents data entry overhead for multi-week cohorts.
 *   **Proposed Enhancement:** Introduce an endpoint to generate a series of `teaching_days` using recurrence parameters.
 *   **New API Endpoint:**
@@ -528,7 +561,7 @@ Creating sequential teaching days manually presents data entry overhead for mult
     *   `excludeHolidays` (Boolean)
 *   **Validation Rule:** The system checks for database collisions on dates before applying the batch transaction.
 
-### 11.3. Score Override & Audit Tracking
+### 12.3. Score Override & Audit Tracking
 Standard operational grading often requires manual grade adjustment (e.g., for attendance participation or late penalties).
 *   **Proposed Enhancement:** Permit score overrides within `workspace_class_reports` with structured logging.
 *   **Schema Extension:**
@@ -548,7 +581,7 @@ Standard operational grading often requires manual grade adjustment (e.g., for a
 +---------------------------------+
 ```
 
-### 11.4. Webhooks & Messaging for Auto-Submission Events
+### 12.4. Webhooks & Messaging for Auto-Submission Events
 When active exams are force-submitted or timers expire, instant status changes need to propagate down to classroom interfaces.
 *   **Proposed Enhancement:** Integrate an event-driven hook framework inside the transaction service.
 *   **Scope:** Trigger lightweight JSON payloads to external webhooks on events such as:
@@ -559,4 +592,5 @@ When active exams are force-submitted or timers expire, instant status changes n
 
 ---
 
-*END OF REQUIREMENTS SPECIFICATION DOCUMENT (RSD) — v9.0*
+*END OF REQUIREMENTS SPECIFICATION DOCUMENT (RSD) — v9.1*
+```
