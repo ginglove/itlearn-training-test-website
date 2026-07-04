@@ -9,8 +9,8 @@ export async function GET(request: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
     }
-    if (role !== "TEACHER") {
-      return NextResponse.json({ error: "FORBIDDEN", message: "Only teachers can view settings." }, { status: 403 });
+    if (role !== "TEACHER" && role !== "ADMIN") {
+      return NextResponse.json({ error: "FORBIDDEN", message: "Only teachers or admins can view settings." }, { status: 403 });
     }
 
     let [settings] = await db.select().from(platformSettings).limit(1);
@@ -52,9 +52,9 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
     }
 
-    if (role !== "TEACHER") {
+    if (role !== "TEACHER" && role !== "ADMIN") {
       return NextResponse.json(
-        { error: "FORBIDDEN", message: "Only teachers can modify settings" },
+        { error: "FORBIDDEN", message: "Only teachers or admins can modify settings" },
         { status: 403 }
       );
     }
