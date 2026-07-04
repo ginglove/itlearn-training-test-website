@@ -95,7 +95,7 @@ export default function StudentsManagementPage() {
         setHistoryData(data.exams || []);
       }
     } catch {
-      // silently fail â€” panel shows empty state
+      // silently fail — panel shows empty state
     } finally {
       setIsLoadingHistory(false);
     }

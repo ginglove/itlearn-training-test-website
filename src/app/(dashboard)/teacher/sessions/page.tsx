@@ -297,7 +297,7 @@ export default function SessionsPage() {
                 {/* Exam header row */}
                 <button
                   onClick={() => toggle(session.examId)}
-                  className="w-full text-left px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-4 hover:bg-bg-surface-elevated/30 transition-colors"
+                  className="w-full text-left px-4 sm:px-5 py-4 flex flex-col lg:flex-row lg:items-center gap-4 hover:bg-bg-surface-elevated/30 transition-colors"
                 >
                   {/* Left: exam info */}
                   <div className="flex-1 min-w-0">
@@ -328,7 +328,7 @@ export default function SessionsPage() {
                   </div>
 
                   {/* Stats pills */}
-                  <div className="flex items-center gap-2 flex-wrap shrink-0">
+                  <div className="flex items-center gap-2 flex-wrap lg:shrink-0">
                     <StatPill label="Started" value={session.totalStarted} color="bg-bg-surface border-border-strong text-text-secondary" />
                     <StatPill label="Done" value={session.totalCompleted} color="bg-brand-500/8 border-brand-500/20 text-brand-400" />
                     <StatPill label="Pass" value={passCount} color="bg-emerald-500/8 border-emerald-500/20 text-emerald-400" />
@@ -345,7 +345,7 @@ export default function SessionsPage() {
                   </div>
 
                   {/* Chevron + Live monitor link */}
-                  <div className="flex items-center gap-3 shrink-0">
+                  <div className="flex items-center justify-between lg:justify-start gap-3 lg:shrink-0">
                     <button
                       onClick={e => { e.stopPropagation(); router.push(`/teacher/exams/${session.examId}/monitor`); }}
                       className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-brand-500/30 text-brand-400 hover:bg-brand-500/10 transition-colors whitespace-nowrap"
