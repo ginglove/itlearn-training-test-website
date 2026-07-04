@@ -1,15 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { users } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
+import { getTeacherScopedStudentIds } from "@/lib/workspace";
 import { generateTemporaryPassword, hashPassword } from "@/lib/auth";
 
-// GET /api/v1/teacher/students - List all students
+// GET /api/v1/teacher/students - List students scoped to the teacher's assigned
+// workspaces (RSD v9 §2.3). ?scope=all returns a minimal global directory used
+// only by the workspace enrollment picker.
 export async function GET(request: NextRequest) {
   try {
     const teacherId = request.headers.get("x-user-id");
     if (!teacherId) {
       return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    if (searchParams.get("scope") === "all") {
+      // Minimal directory for enrolling students into an assigned workspace
+      const directory = await db
+        .select({ id: users.id, username: users.username, fullName: users.fullName })
+        .from(users)
+        .where(eq(users.role, "STUDENT"))
+        .orderBy(users.fullName);
+      return NextResponse.json({ status: "SUCCESS", students: directory });
+    }
+
+    const scopedIds = await getTeacherScopedStudentIds(teacherId);
+    if (scopedIds.length === 0) {
+      return NextResponse.json({ status: "SUCCESS", students: [] });
     }
 
     const students = await db
@@ -22,7 +41,7 @@ export async function GET(request: NextRequest) {
         createdAt: users.createdAt,
       })
       .from(users)
-      .where(eq(users.role, "STUDENT"))
+      .where(and(eq(users.role, "STUDENT"), inArray(users.id, scopedIds)))
       .orderBy(users.createdAt);
 
     return NextResponse.json({ status: "SUCCESS", students });

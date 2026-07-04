@@ -167,7 +167,7 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
 
   // ── Members ──
   const openAddMember = async () => {
-    const res = await fetch("/api/v1/teacher/students");
+    const res = await fetch("/api/v1/teacher/students?scope=all");
     if (res.ok) {
       const data = await res.json();
       const memberIds = new Set(members.filter((m) => m.status === "ACTIVE").map((m) => m.studentId));

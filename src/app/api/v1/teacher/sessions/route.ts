@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { exams, examSubmissions, users, questions } from "@/db/schema";
 import { eq, and, gte, lt, inArray, sum } from "drizzle-orm";
+import { getTeacherScopedStudentIds } from "@/lib/workspace";
 
 export async function GET(request: NextRequest) {
   try {
@@ -24,6 +25,12 @@ export async function GET(request: NextRequest) {
     // day start in UTC = midnight local time shifted back by tz offset
     const dayStart = new Date(localMidnight.getTime() - offsetMs);
     const dayEnd   = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000); // exactly +24h
+
+    // Teachers only see sessions of students enrolled in their assigned workspaces
+    const scopedStudentIds = await getTeacherScopedStudentIds(teacherId);
+    if (scopedStudentIds.length === 0) {
+      return NextResponse.json({ status: "SUCCESS", date: resolvedDate, sessions: [] });
+    }
 
     // All exams owned by this teacher with submissions starting on the selected date
     const rows = await db
@@ -51,6 +58,7 @@ export async function GET(request: NextRequest) {
       .where(
         and(
           eq(exams.createdBy, teacherId),
+          inArray(examSubmissions.studentId, scopedStudentIds),
           gte(examSubmissions.startAt, dayStart),
           lt(examSubmissions.startAt, dayEnd)
         )

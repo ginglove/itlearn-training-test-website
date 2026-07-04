@@ -22,6 +22,10 @@ export default function AdminTeachersPage() {
   const [form, setForm] = useState({ username: "", fullName: "", email: "" });
   const [created, setCreated] = useState<{ fullName: string; temporaryPassword: string } | null>(null);
 
+  const [editTeacher, setEditTeacher] = useState<Teacher | null>(null);
+  const [editForm, setEditForm] = useState({ fullName: "", email: "" });
+  const [resetResult, setResetResult] = useState<{ fullName: string; temporaryPassword: string } | null>(null);
+
   const fetchTeachers = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -50,6 +54,42 @@ export default function AdminTeachersPage() {
     } else {
       setMessage({ type: "error", text: data.message || "Failed to create teacher." });
     }
+  };
+
+  const saveEdit = async () => {
+    if (!editTeacher) return;
+    const res = await fetch(`/api/v1/admin/users/teachers/${editTeacher.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(editForm),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setEditTeacher(null);
+      fetchTeachers();
+    } else {
+      setMessage({ type: "error", text: data.message || "Failed to update teacher." });
+    }
+  };
+
+  const resetPassword = async (t: Teacher) => {
+    if (!confirm(`Issue a new temporary password for ${t.fullName}? Their current password stops working.`)) return;
+    const res = await fetch(`/api/v1/admin/users/teachers/${t.id}/reset-password`, { method: "POST" });
+    const data = await res.json();
+    if (res.ok) {
+      setResetResult({ fullName: t.fullName, temporaryPassword: data.temporaryPassword });
+      fetchTeachers();
+    } else {
+      setMessage({ type: "error", text: data.message || "Failed to reset password." });
+    }
+  };
+
+  const deleteTeacher = async (t: Teacher) => {
+    if (!confirm(`Delete teacher account "${t.fullName}"? Only possible when they own no exams or workspace assignments.`)) return;
+    const res = await fetch(`/api/v1/admin/users/teachers/${t.id}`, { method: "DELETE" });
+    const data = await res.json();
+    if (res.ok) fetchTeachers();
+    else setMessage({ type: "error", text: data.message || "Failed to delete teacher." });
   };
 
   return (
@@ -89,6 +129,7 @@ export default function AdminTeachersPage() {
                 <th className="py-2 px-2">Workspaces</th>
                 <th className="py-2 px-2">Conducted Days</th>
                 <th className="py-2 px-2">Assignments</th>
+                <th className="py-2 px-2"></th>
               </tr>
             </thead>
             <tbody>
@@ -121,17 +162,112 @@ export default function AdminTeachersPage() {
                       )}
                     </div>
                   </td>
+                  <td className="py-3 px-2">
+                    <div className="flex gap-3 justify-end whitespace-nowrap">
+                      <button
+                        onClick={() => {
+                          setEditTeacher(t);
+                          setEditForm({ fullName: t.fullName, email: t.email });
+                        }}
+                        className="text-text-secondary hover:text-white text-xs transition-colors"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => resetPassword(t)}
+                        className="text-amber-400 hover:text-amber-300 text-xs transition-colors"
+                      >
+                        Reset Password
+                      </button>
+                      <button
+                        onClick={() => deleteTeacher(t)}
+                        className="text-rose-400 hover:text-rose-300 text-xs transition-colors"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
               {teachers.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="py-10 text-center text-text-secondary">
+                  <td colSpan={5} className="py-10 text-center text-text-secondary">
                     No teachers yet.
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Edit teacher modal */}
+      {editTeacher && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-bg-surface border border-border-strong rounded-2xl p-6 w-full max-w-md">
+            <h2 className="text-lg font-semibold text-white mb-4">
+              Edit Teacher — {editTeacher.username}
+            </h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs text-text-secondary mb-1.5">Full Name *</label>
+                <input
+                  value={editForm.fullName}
+                  onChange={(e) => setEditForm({ ...editForm, fullName: e.target.value })}
+                  className="w-full bg-bg-base border border-border-strong rounded-xl px-4 py-2.5 text-sm text-white focus:border-brand-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-text-secondary mb-1.5">Email *</label>
+                <input
+                  type="email"
+                  value={editForm.email}
+                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                  className="w-full bg-bg-base border border-border-strong rounded-xl px-4 py-2.5 text-sm text-white focus:border-brand-500 focus:outline-none"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => setEditTeacher(null)}
+                className="px-4 py-2 text-sm text-text-secondary hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveEdit}
+                disabled={!editForm.fullName.trim() || !editForm.email.trim()}
+                className="px-5 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white rounded-xl font-semibold text-sm transition-all"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reset password result modal */}
+      {resetResult && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-bg-surface border border-border-strong rounded-2xl p-6 w-full max-w-md">
+            <h2 className="text-lg font-semibold text-white mb-3">Password Reset</h2>
+            <p className="text-text-secondary text-sm mb-4">
+              Share this temporary password with{" "}
+              <span className="text-white">{resetResult.fullName}</span>. They must change it on
+              next login.
+            </p>
+            <div className="bg-bg-base border border-border-strong rounded-xl px-4 py-3 font-mono text-emerald-400 text-center text-lg select-all">
+              {resetResult.temporaryPassword}
+            </div>
+            <div className="flex justify-end mt-6">
+              <button
+                onClick={() => setResetResult(null)}
+                className="px-5 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-semibold text-sm transition-all"
+              >
+                Done
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

@@ -237,8 +237,8 @@ Watch the deploy log for errors. A successful deploy ends with **"Site is live"*
 
 Local child-process code execution is disabled on Netlify. After the first successful deploy:
 
-1. Log in to your site as the teacher admin.
-2. Go to **Settings → Platform Settings**.
+1. Log in to your site as the platform admin (`platform_admin`).
+2. Go to **Admin Settings → Platform Settings** (`/admin/settings`).
 3. Set **Execution Mode** to `API_ONLY`.
 4. Save. All student code submissions will now route exclusively through the Piston API.
 

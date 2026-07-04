@@ -1,22 +1,41 @@
 import { db } from "@/db";
 import { workspaces, workspaceMemberships, workspaceTeachers } from "@/db/schema";
-import { and, eq, exists, or, sql } from "drizzle-orm";
+import { and, eq, exists, sql } from "drizzle-orm";
 
-/** Condition: teacher created the workspace or is assigned via workspace_teachers (RSD v9 §2.3). */
-export function teacherAssignedCondition(teacherId: string) {
-  return or(
-    eq(workspaces.createdBy, teacherId),
-    exists(
-      db
-        .select({ one: sql`1` })
-        .from(workspaceTeachers)
-        .where(
-          and(
-            eq(workspaceTeachers.workspaceId, workspaces.id),
-            eq(workspaceTeachers.teacherId, teacherId)
-          )
-        )
+/** Distinct ACTIVE-member student ids across all workspaces assigned to the teacher. */
+export async function getTeacherScopedStudentIds(teacherId: string): Promise<string[]> {
+  const rows = await db
+    .selectDistinct({ studentId: workspaceMemberships.studentId })
+    .from(workspaceMemberships)
+    .innerJoin(
+      workspaceTeachers,
+      eq(workspaceTeachers.workspaceId, workspaceMemberships.workspaceId)
     )
+    .where(
+      and(
+        eq(workspaceTeachers.teacherId, teacherId),
+        eq(workspaceMemberships.status, "ACTIVE")
+      )
+    );
+  return rows.map((r) => r.studentId);
+}
+
+/**
+ * Condition: teacher is assigned to the workspace via workspace_teachers (RSD v9 §4.4).
+ * Assignment is the only access path — workspace creation is admin-only, and
+ * migration 0009 backfilled legacy creators as assignees.
+ */
+export function teacherAssignedCondition(teacherId: string) {
+  return exists(
+    db
+      .select({ one: sql`1` })
+      .from(workspaceTeachers)
+      .where(
+        and(
+          eq(workspaceTeachers.workspaceId, workspaces.id),
+          eq(workspaceTeachers.teacherId, teacherId)
+        )
+      )
   );
 }
 
