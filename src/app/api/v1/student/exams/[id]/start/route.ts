@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { examSubmissions, exams, examAssignments } from "@/db/schema";
 import { eq, and, isNull, isNotNull } from "drizzle-orm";
 import { getUserId } from "@/lib/get-user-id";
+import { checkWorkspaceExamAccess } from "@/lib/workspace-access";
 
 export async function POST(
   request: NextRequest,
@@ -31,6 +32,16 @@ export async function POST(
     }
 
     // 1. Enforce access control permissions check
+    // Rule W1: workspace-linked exams require an ACTIVE workspace membership,
+    // regardless of the exam's global access_type
+    const workspaceAccess = await checkWorkspaceExamAccess(examId, studentId);
+    if (workspaceAccess.workspaceLinked && !workspaceAccess.isMember) {
+      return NextResponse.json(
+        { error: "STUDENT_NOT_MEMBER", message: "You are not an active member of this exam's workspace" },
+        { status: 403 }
+      );
+    }
+
     if (exam.accessType === "RESTRICTED") {
       const [assignment] = await db
         .select()

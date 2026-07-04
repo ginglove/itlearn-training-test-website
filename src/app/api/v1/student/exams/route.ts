@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { exams, examSubmissions, examAssignments } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
+import { getWorkspaceExamAccess } from "@/lib/workspace-access";
 
 export async function GET(request: NextRequest) {
   try {
@@ -18,9 +19,16 @@ export async function GET(request: NextRequest) {
       .where(eq(examAssignments.studentId, studentId));
     const assignedExamIds = new Set(assignments.map(a => a.examId));
 
-    const accessibleExams = allExams.filter(
-      exam => exam.accessType === "ALL" || assignedExamIds.has(exam.id)
-    );
+    // Rule W1: workspace-linked exams are only visible to ACTIVE workspace members,
+    // regardless of the exam's global access_type
+    const { linkedExamIds, accessibleExamIds } = await getWorkspaceExamAccess(studentId);
+
+    const accessibleExams = allExams.filter(exam => {
+      if (linkedExamIds.has(exam.id)) {
+        return accessibleExamIds.has(exam.id);
+      }
+      return exam.accessType === "ALL" || assignedExamIds.has(exam.id);
+    });
 
     const submissions = await db
       .select({

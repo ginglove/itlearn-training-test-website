@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { questions, quizOptions, codeConfigs, testCases, xpathConfigs, xpathTestCases, exams, examSubmissions } from "@/db/schema";
 import { eq, asc, and, isNull } from "drizzle-orm";
+import { checkWorkspaceExamAccess } from "@/lib/workspace-access";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,16 @@ export async function GET(
     const [exam] = await db.select().from(exams).where(eq(exams.id, examId));
     if (!exam) {
       return NextResponse.json({ error: "EXAM_NOT_FOUND" }, { status: 404 });
+    }
+
+    // Rule W1: workspace-linked exams require an ACTIVE workspace membership,
+    // regardless of the exam's global access_type
+    const workspaceAccess = await checkWorkspaceExamAccess(examId, studentId);
+    if (workspaceAccess.workspaceLinked && !workspaceAccess.isMember) {
+      return NextResponse.json(
+        { error: "STUDENT_NOT_MEMBER", message: "You are not an active member of this exam's workspace" },
+        { status: 403 }
+      );
     }
 
     const examQuestions = await db
