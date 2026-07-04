@@ -5,6 +5,7 @@ import {
   teachingDays,
   attendanceRecords,
   workspaceActivities,
+  workspaceActivityAttempts,
   examSubmissions,
   questions,
   users,
@@ -122,6 +123,21 @@ export async function buildStudentActivityList(workspaceId: string, studentId: s
 
   const endTimeByExam = await fetchExamEndTimes(examIds);
 
+  // Standalone (non exam-backed) activity attempts for this student
+  const standaloneIds = activities.filter((a) => !a.examId).map((a) => a.id);
+  const attempts = standaloneIds.length
+    ? await db
+        .select()
+        .from(workspaceActivityAttempts)
+        .where(
+          and(
+            inArray(workspaceActivityAttempts.activityId, standaloneIds),
+            eq(workspaceActivityAttempts.studentId, studentId)
+          )
+        )
+    : [];
+  const attemptByActivity = new Map(attempts.map((at) => [at.activityId, at]));
+
   return activities.map((a) => {
     let status = "NOT_STARTED";
     let scorePercentage: number | null = null;
@@ -135,6 +151,14 @@ export async function buildStudentActivityList(workspaceId: string, studentId: s
         const maxPoints = maxPointsByExam.get(a.examId) ?? 0;
         scorePercentage =
           maxPoints > 0 ? round1((Number(sub.totalScore ?? 0) / maxPoints) * 100) : null;
+      }
+    } else {
+      const attempt = attemptByActivity.get(a.id);
+      if (attempt) {
+        status = "SUBMITTED";
+        submittedAt = attempt.submittedAt.toISOString();
+        scorePercentage =
+          attempt.scorePercentage !== null ? round1(Number(attempt.scorePercentage)) : null;
       }
     }
 
@@ -235,6 +259,18 @@ export async function buildWorkspaceReport(workspaceId: string): Promise<Workspa
 
   const endTimeByExam = await fetchExamEndTimes(examIds);
 
+  // Standalone (non exam-backed) activity attempts across all students
+  const standaloneActivityIds = activities.filter((a) => !a.examId).map((a) => a.id);
+  const standaloneAttempts = standaloneActivityIds.length
+    ? await db
+        .select()
+        .from(workspaceActivityAttempts)
+        .where(inArray(workspaceActivityAttempts.activityId, standaloneActivityIds))
+    : [];
+  const attemptByKey = new Map(
+    standaloneAttempts.map((at) => [`${at.activityId}:${at.studentId}`, at])
+  );
+
   // total_conducted_days = days with at least one roll call record
   const conductedDayIds = new Set(attendance.map((a) => a.teachingDayId));
   const totalConductedDays = conductedDayIds.size;
@@ -263,6 +299,14 @@ export async function buildWorkspaceReport(workspaceId: string): Promise<Workspa
           const maxPoints = maxPointsByExam.get(a.examId) ?? 0;
           scorePercentage =
             maxPoints > 0 ? round1((Number(sub.totalScore ?? 0) / maxPoints) * 100) : null;
+        }
+      } else {
+        const attempt = attemptByKey.get(`${a.id}:${m.studentId}`);
+        if (attempt) {
+          submissionStatus = "SUBMITTED";
+          submittedAt = attempt.submittedAt.toISOString();
+          scorePercentage =
+            attempt.scorePercentage !== null ? round1(Number(attempt.scorePercentage)) : null;
         }
       }
 

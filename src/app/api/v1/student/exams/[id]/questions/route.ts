@@ -92,7 +92,7 @@ export async function GET(
 
     // Fetch the active submission
     const [activeSubmission] = await db
-      .select({ id: examSubmissions.id, questionOrder: examSubmissions.questionOrder, activeSeconds: examSubmissions.activeSeconds })
+      .select({ id: examSubmissions.id, questionOrder: examSubmissions.questionOrder, activeSeconds: examSubmissions.activeSeconds, focusLossCount: examSubmissions.focusLossCount })
       .from(examSubmissions)
       .where(
         and(
@@ -142,6 +142,8 @@ export async function GET(
       examTitle: exam.title,
       focusLossPolicy: exam.focusLossPolicy ?? "LOG_ONLY",
       activeSeconds,
+      // Server-synced counter so a page reload cannot reset the offense count
+      focusLossCount: activeSubmission?.focusLossCount ?? 0,
       examDurationMins: exam.duration,
     });
   } catch (error) {

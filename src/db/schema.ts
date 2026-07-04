@@ -188,6 +188,8 @@ export const examSubmissions = pgTable(
     focusLossCount: integer("focus_loss_count").notNull().default(0),
     closeReason: varchar("close_reason", { length: 50 }),
     activeSeconds: integer("active_seconds").notNull().default(0),
+    // Heartbeat for server-side activeSeconds verification (anti-tamper clamp)
+    activeSecondsUpdatedAt: timestamp("active_seconds_updated_at", { withTimezone: true }),
     attempt: integer("attempt").default(1).notNull(),
   },
   (table) => [
@@ -377,6 +379,29 @@ export const workspaceActivities = pgTable(
   (table) => [
     uniqueIndex("unique_workspace_exam").on(table.workspaceId, table.examId),
     index("idx_activities_workspace").on(table.workspaceId),
+  ]
+);
+
+// ── Workspace Activity Attempts (standalone EXERCISE/HOMEWORK submissions) ────
+export const workspaceActivityAttempts = pgTable(
+  "workspace_activity_attempts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    activityId: uuid("activity_id")
+      .notNull()
+      .references(() => workspaceActivities.id, { onDelete: "cascade" }),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    textResponse: text("text_response").notNull(),
+    submittedAt: timestamp("submitted_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    scorePercentage: decimal("score_percentage", { precision: 5, scale: 2 }),
+  },
+  (table) => [
+    uniqueIndex("unique_activity_student_attempt").on(table.activityId, table.studentId),
+    index("idx_activity_attempts_student").on(table.studentId),
   ]
 );
 

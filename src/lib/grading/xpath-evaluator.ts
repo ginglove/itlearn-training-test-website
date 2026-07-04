@@ -42,7 +42,34 @@ const PRIVATE_IP_PATTERNS = [
   /^https?:\/\/\[fd/i,
 ];
 
-async function fetchHtml(url: string): Promise<string> {
+const MAX_REDIRECTS = 3;
+
+/** True if the (already resolved) IP address falls in a private/loopback/link-local range. */
+function isPrivateIp(ip: string): boolean {
+  if (ip === "::1" || ip.toLowerCase().startsWith("fc") || ip.toLowerCase().startsWith("fd")) {
+    return true;
+  }
+  // Handle IPv4-mapped IPv6 (::ffff:a.b.c.d)
+  const v4 = ip.includes(":") ? ip.split(":").pop() ?? "" : ip;
+  const parts = v4.split(".").map(Number);
+  if (parts.length !== 4 || parts.some((p) => Number.isNaN(p))) {
+    // Non-IPv4 (pure IPv6 public) — allow unless matched above
+    return false;
+  }
+  const [a, b] = parts;
+  return (
+    a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 169 && b === 254)
+  );
+}
+
+/** Resolve the hostname via DNS and reject private/loopback targets (DNS-rebinding guard). */
+async function assertPublicTarget(url: string): Promise<void> {
   if (!/^https?:\/\//i.test(url)) {
     throw new Error("SSRF_BLOCKED: Only http:// and https:// URLs are permitted.");
   }
@@ -51,11 +78,53 @@ async function fetchHtml(url: string): Promise<string> {
       throw new Error("SSRF_BLOCKED: Target URL resolves to a private network address.");
     }
   }
+  const hostname = new URL(url).hostname.replace(/^\[|\]$/g, "");
+  // Literal IPs are checked directly; hostnames are resolved before fetching
+  let addresses: string[];
+  if (/^[\d.]+$/.test(hostname) || hostname.includes(":")) {
+    addresses = [hostname];
+  } else {
+    const dns = await import("dns");
+    const results = await dns.promises.lookup(hostname, { all: true }).catch(() => {
+      throw new Error("SSRF_BLOCKED: Target hostname could not be resolved.");
+    });
+    addresses = results.map((r) => r.address);
+  }
+  if (addresses.length === 0 || addresses.some(isPrivateIp)) {
+    throw new Error("SSRF_BLOCKED: Target URL resolves to a private network address.");
+  }
+}
+
+async function fetchHtml(url: string): Promise<string> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 5000);
   try {
-    const res = await fetch(url, { signal: controller.signal });
+    // Follow redirects manually (max 3), re-validating every hop against SSRF
+    let currentUrl = url;
+    let res: Response | null = null;
+    for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+      await assertPublicTarget(currentUrl);
+      res = await fetch(currentUrl, { signal: controller.signal, redirect: "manual" });
+      if (res.status >= 300 && res.status < 400) {
+        const location = res.headers.get("location");
+        if (!location) throw new Error("SSRF_BLOCKED: Redirect without location header.");
+        if (hop === MAX_REDIRECTS) {
+          throw new Error("SSRF_BLOCKED: Too many redirects (max 3).");
+        }
+        currentUrl = new URL(location, currentUrl).toString();
+        continue;
+      }
+      break;
+    }
+    if (!res) throw new Error("SSRF_BLOCKED: Fetch failed.");
     if (!res.ok) throw new Error(`HTTP ${res.status} fetching target URL`);
+
+    // Text/HTML only — media and binary downloads are rejected
+    const contentType = res.headers.get("content-type") ?? "";
+    if (contentType && !/text\/html|application\/xhtml|text\/plain|text\/xml|application\/xml/i.test(contentType)) {
+      throw new Error("SSRF_BLOCKED: Target is not an HTML/text document.");
+    }
+
     const contentLength = parseInt(res.headers.get("content-length") ?? "0", 10);
     if (contentLength > MAX_RESPONSE_BYTES) {
       throw new Error("SSRF_BLOCKED: Response too large.");

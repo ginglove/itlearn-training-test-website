@@ -85,6 +85,9 @@ export default function StudentWorkspaceDetailPage({
   const [report, setReport] = useState<any>(null);
   const [tab, setTab] = useState<Tab>("activities");
   const [error, setError] = useState<string | null>(null);
+  const [respondTo, setRespondTo] = useState<Activity | null>(null);
+  const [responseText, setResponseText] = useState("");
+  const [isSubmittingResponse, setIsSubmittingResponse] = useState(false);
 
   const fetchDetail = useCallback(async () => {
     const res = await fetch(`/api/v1/student/workspaces/${id}`);
@@ -118,6 +121,28 @@ export default function StudentWorkspaceDetailPage({
         .then((d) => setReport(d?.status === "SUCCESS" ? d : null));
     }
   }, [tab, id]);
+
+  const submitResponse = async () => {
+    if (!respondTo || !responseText.trim()) return;
+    setIsSubmittingResponse(true);
+    try {
+      const res = await fetch(
+        `/api/v1/student/workspaces/${id}/activities/${respondTo.id}/submit`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ textResponse: responseText }),
+        }
+      );
+      if (res.ok) {
+        setRespondTo(null);
+        setResponseText("");
+        fetchDetail();
+      }
+    } finally {
+      setIsSubmittingResponse(false);
+    }
+  };
 
   if (error) {
     return <div className="p-10 text-rose-400">{error}</div>;
@@ -229,6 +254,17 @@ export default function StudentWorkspaceDetailPage({
                         <span className="text-xs font-mono text-text-secondary w-14 text-right">
                           {a.scorePercentage !== null ? `${a.scorePercentage}%` : "—"}
                         </span>
+                        {!a.examId && workspace.status === "ACTIVE" && (
+                          <button
+                            onClick={() => {
+                              setRespondTo(a);
+                              setResponseText("");
+                            }}
+                            className="px-3 py-1.5 bg-brand-500 hover:bg-brand-600 text-white rounded-lg text-xs font-semibold transition-all"
+                          >
+                            {a.status === "SUBMITTED" ? "Resubmit" : "Submit Response"}
+                          </button>
+                        )}
                         {a.examId &&
                           workspace.status === "ACTIVE" &&
                           ["NOT_STARTED", "IN_PROGRESS", "PENDING"].includes(a.status) && (
@@ -249,6 +285,40 @@ export default function StudentWorkspaceDetailPage({
                 </div>
               </div>
             ))}
+        </div>
+      )}
+
+      {/* Standalone activity response modal */}
+      {respondTo && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-bg-surface border border-border-strong rounded-2xl p-6 w-full max-w-lg">
+            <h2 className="text-lg font-semibold text-white mb-1">{respondTo.title}</h2>
+            {respondTo.description && (
+              <p className="text-text-secondary text-sm mb-3">{respondTo.description}</p>
+            )}
+            <textarea
+              value={responseText}
+              onChange={(e) => setResponseText(e.target.value)}
+              rows={8}
+              placeholder="Type your answer here…"
+              className="w-full bg-bg-base border border-border-strong rounded-xl px-4 py-3 text-sm text-white focus:border-brand-500 focus:outline-none"
+            />
+            <div className="flex justify-end gap-3 mt-5">
+              <button
+                onClick={() => setRespondTo(null)}
+                className="px-4 py-2 text-sm text-text-secondary hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitResponse}
+                disabled={isSubmittingResponse || !responseText.trim()}
+                className="px-5 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white rounded-xl font-semibold text-sm transition-all"
+              >
+                {isSubmittingResponse ? "Submitting…" : "Submit"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

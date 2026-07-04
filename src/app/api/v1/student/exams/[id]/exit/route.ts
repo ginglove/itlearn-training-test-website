@@ -53,12 +53,31 @@ export async function POST(
 
     // #2: Clamp activeSeconds to exam duration ceiling
     const durationCap = (exam.duration ?? 60) * 60;
-    const clampedSeconds = Math.min(activeSeconds, durationCap);
+
+    // Anti-tamper verification (RSD_improvement_technical §1): reported
+    // activeSeconds cannot exceed the stored value plus real elapsed time since
+    // the last heartbeat (+5s drift), and cannot go backwards.
+    const DRIFT_SECONDS = 5;
+    const lastHeartbeat = submission.activeSecondsUpdatedAt ?? submission.startAt;
+    const elapsedSinceHeartbeat = Math.max(
+      0,
+      Math.floor((Date.now() - new Date(lastHeartbeat).getTime()) / 1000)
+    );
+    const maxAllowed = submission.activeSeconds + elapsedSinceHeartbeat + DRIFT_SECONDS;
+    const clampedSeconds = Math.min(
+      Math.max(activeSeconds, submission.activeSeconds),
+      maxAllowed,
+      durationCap
+    );
 
     // #5: All side-effects atomically
     await db
       .update(examSubmissions)
-      .set({ closeReason: "SAVE_AND_EXIT", activeSeconds: clampedSeconds })
+      .set({
+        closeReason: "SAVE_AND_EXIT",
+        activeSeconds: clampedSeconds,
+        activeSecondsUpdatedAt: new Date(),
+      })
       .where(eq(examSubmissions.id, submissionId));
 
     return NextResponse.json({
