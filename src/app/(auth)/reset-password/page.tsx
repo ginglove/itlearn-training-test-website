@@ -64,7 +64,9 @@ export default function ResetPasswordPage() {
         localStorage.setItem("user", JSON.stringify(data.user));
       }
 
-      if (data.role === "TEACHER") {
+      if (data.role === "ADMIN") {
+        router.push("/admin");
+      } else if (data.role === "TEACHER") {
         router.push("/teacher");
       } else {
         router.push("/student/exams");

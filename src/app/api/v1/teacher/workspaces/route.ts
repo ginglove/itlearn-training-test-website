@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { workspaces, workspaceMemberships, teachingDays } from "@/db/schema";
-import { eq, desc, and, sql } from "drizzle-orm";
+import { workspaces, workspaceMemberships, teachingDays, workspaceTeachers } from "@/db/schema";
+import { desc, sql } from "drizzle-orm";
 import { getUserId } from "@/lib/get-user-id";
+import { teacherAssignedCondition } from "@/lib/workspace";
 
 export async function GET(request: NextRequest) {
   try {
@@ -18,7 +19,7 @@ export async function GET(request: NextRequest) {
         dayCount: sql<number>`(SELECT COUNT(*) FROM ${teachingDays} WHERE ${teachingDays.workspaceId} = ${workspaces.id})`,
       })
       .from(workspaces)
-      .where(eq(workspaces.createdBy, teacherId))
+      .where(teacherAssignedCondition(teacherId))
       .orderBy(desc(workspaces.createdAt));
 
     return NextResponse.json({
@@ -55,17 +56,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const [workspace] = await db
-      .insert(workspaces)
-      .values({
-        name: name.trim(),
-        description: description || null,
-        totalDays: totalDays !== undefined ? parseInt(totalDays) || 0 : 0,
-        startDate: startDate || null,
-        endDate: endDate || null,
-        createdBy: teacherId,
-      })
-      .returning();
+    const workspace = await db.transaction(async (tx) => {
+      const [ws] = await tx
+        .insert(workspaces)
+        .values({
+          name: name.trim(),
+          description: description || null,
+          totalDays: totalDays !== undefined ? parseInt(totalDays) || 0 : 0,
+          startDate: startDate || null,
+          endDate: endDate || null,
+          createdBy: teacherId,
+        })
+        .returning();
+      // Creator is implicitly assigned (RSD v9 §3.1 workspace_teachers)
+      await tx.insert(workspaceTeachers).values({ workspaceId: ws.id, teacherId });
+      return ws;
+    });
 
     return NextResponse.json({ status: "SUCCESS", workspace }, { status: 201 });
   } catch (error) {

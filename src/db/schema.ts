@@ -15,7 +15,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 // ── Enums ──────────────────────────────────────────────────────────────────────
-export const userRoleEnum = pgEnum("user_role", ["TEACHER", "STUDENT"]);
+export const userRoleEnum = pgEnum("user_role", ["ADMIN", "TEACHER", "STUDENT"]);
 export const questionTypeEnum = pgEnum("question_type", ["QUIZ", "CODE", "XPATH"]);
 export const workspaceStatusEnum = pgEnum("workspace_status", ["ACTIVE", "ARCHIVED"]);
 export const membershipStatusEnum = pgEnum("membership_status", ["ACTIVE", "REMOVED"]);
@@ -267,6 +267,27 @@ export const workspaces = pgTable(
       .defaultNow(),
   },
   (table) => [index("idx_workspaces_created_by").on(table.createdBy)]
+);
+
+// ── Workspace Teachers (admin-managed assignments, RSD v9 §3.1) ───────────────
+export const workspaceTeachers = pgTable(
+  "workspace_teachers",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    teacherId: uuid("teacher_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    assignedAt: timestamp("assigned_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("unique_workspace_teacher").on(table.workspaceId, table.teacherId),
+    index("idx_workspace_teachers_teacher").on(table.teacherId),
+  ]
 );
 
 // ── Workspace Memberships ──────────────────────────────────────────────────────

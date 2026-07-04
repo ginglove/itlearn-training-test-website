@@ -3,10 +3,13 @@ import type { NextRequest } from "next/server";
 import { verifyToken } from "./lib/auth";
 
 // Routes that require authentication
-const protectedRoutes = ["/api/v1/student", "/api/v1/teacher", "/api/v1/settings", "/student", "/teacher"];
+const protectedRoutes = ["/api/v1/student", "/api/v1/teacher", "/api/v1/admin", "/api/v1/settings", "/student", "/teacher", "/admin"];
 
 // Routes specific to teachers
 const teacherRoutes = ["/api/v1/teacher", "/teacher"];
+
+// Routes specific to admins
+const adminRoutes = ["/api/v1/admin", "/admin"];
 
 // Routes specific to students
 const studentRoutes = ["/api/v1/student", "/student"];
@@ -45,8 +48,16 @@ export async function middleware(request: NextRequest) {
     const devHeaders = new Headers(request.headers);
     if (!devHeaders.has("x-user-id")) {
       const isTeacherPath = teacherRoutes.some((r) => pathname.startsWith(r));
-      devHeaders.set("x-user-id", isTeacherPath ? "00000000-0000-0000-0000-000000000001" : "00000000-0000-0000-0000-000000000002");
-      devHeaders.set("x-user-role", isTeacherPath ? "TEACHER" : "STUDENT");
+      const isAdminPath = adminRoutes.some((r) => pathname.startsWith(r));
+      devHeaders.set(
+        "x-user-id",
+        isAdminPath
+          ? "00000000-0000-0000-0000-000000000003"
+          : isTeacherPath
+          ? "00000000-0000-0000-0000-000000000001"
+          : "00000000-0000-0000-0000-000000000002"
+      );
+      devHeaders.set("x-user-role", isAdminPath ? "ADMIN" : isTeacherPath ? "TEACHER" : "STUDENT");
     }
     return NextResponse.next({
       request: { headers: devHeaders },
@@ -120,19 +131,30 @@ export async function middleware(request: NextRequest) {
 
   // Role-based access control
   const isStudentRoute = studentRoutes.some((route) => pathname.startsWith(route));
+  const isAdminRoute = adminRoutes.some((route) => pathname.startsWith(route));
+
+  const homeFor = (role: string) =>
+    role === "ADMIN" ? "/admin" : role === "TEACHER" ? "/teacher" : "/student/exams";
+
+  if (isAdminRoute && payload.role !== "ADMIN") {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "FORBIDDEN", message: "Admin access required" }, { status: 403 });
+    }
+    return NextResponse.redirect(new URL(homeFor(payload.role), request.url));
+  }
 
   if (isTeacherPath && payload.role !== "TEACHER") {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "FORBIDDEN", message: "Teacher access required" }, { status: 403 });
     }
-    return NextResponse.redirect(new URL("/student/exams", request.url));
+    return NextResponse.redirect(new URL(homeFor(payload.role), request.url));
   }
 
   if (isStudentRoute && payload.role !== "STUDENT") {
     if (pathname.startsWith("/api/")) {
        return NextResponse.json({ error: "FORBIDDEN", message: "Student access required" }, { status: 403 });
     }
-    return NextResponse.redirect(new URL("/teacher", request.url));
+    return NextResponse.redirect(new URL(homeFor(payload.role), request.url));
   }
 
   // Pass user context to headers for API routes if needed
