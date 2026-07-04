@@ -248,3 +248,73 @@ export const platformSettings = pgTable("platform_settings", {
     .notNull()
     .defaultNow(),
 });
+
+// ── Workspace Module (RSD Workspace Module, Section 3) ────────────────────────
+export const workspaceStatusEnum = pgEnum("workspace_status", ["ACTIVE", "ARCHIVED"]);
+export const membershipStatusEnum = pgEnum("membership_status", ["ACTIVE", "REMOVED"]);
+export const activityTypeEnum = pgEnum("activity_type", [
+  "EXERCISE",
+  "HOMEWORK",
+  "ASSESSMENT",
+  "QUIZ",
+]);
+
+export const workspaces = pgTable("workspaces", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: varchar("name", { length: 150 }).notNull(),
+  description: text("description"),
+  createdBy: uuid("created_by")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  status: workspaceStatusEnum("status").notNull().default("ACTIVE"),
+  totalDays: integer("total_days"),
+  startDate: timestamp("start_date", { withTimezone: true }),
+  endDate: timestamp("end_date", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const workspaceMemberships = pgTable(
+  "workspace_memberships",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    joinedAt: timestamp("joined_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    status: membershipStatusEnum("status").notNull().default("ACTIVE"),
+  },
+  (table) => [
+    uniqueIndex("unique_workspace_student").on(table.workspaceId, table.studentId),
+    index("idx_workspace_memberships_student").on(table.studentId),
+  ]
+);
+
+export const workspaceActivities = pgTable(
+  "workspace_activities",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    // NULL for standalone EXERCISE/HOMEWORK activities not backed by the exam engine
+    examId: uuid("exam_id").references(() => exams.id, { onDelete: "cascade" }),
+    activityType: activityTypeEnum("activity_type").notNull(),
+    title: varchar("title", { length: 150 }).notNull(),
+    description: text("description"),
+    dueDate: timestamp("due_date", { withTimezone: true }),
+    assignedAt: timestamp("assigned_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    // References teaching_days.id once the timetable tables land (kept as a bare
+    // uuid until then so the activity table doesn't block on the timetable work)
+    teachingDayId: uuid("teaching_day_id"),
+  },
+  (table) => [index("idx_workspace_activities_exam").on(table.examId)]
+);
