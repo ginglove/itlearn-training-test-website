@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { teachingDays, attendanceRecords } from "@/db/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { getUserId, isAdminRequest } from "@/lib/get-user-id";
-import { getOwnedWorkspace } from "@/lib/workspace";
+import { getOwnedWorkspace, renumberTeachingDays } from "@/lib/workspace";
 
 export async function GET(
   request: NextRequest,
@@ -21,19 +21,31 @@ export async function GET(
       return NextResponse.json({ error: "WORKSPACE_NOT_FOUND" }, { status: 404 });
     }
 
-    const days = await db
-      .select({
-        id: teachingDays.id,
-        dayNumber: teachingDays.dayNumber,
-        scheduledDate: teachingDays.scheduledDate,
-        topic: teachingDays.topic,
-        notes: teachingDays.notes,
-        teacherAbsent: teachingDays.teacherAbsent,
-        hasRollCall: sql<boolean>`EXISTS (SELECT 1 FROM ${attendanceRecords} WHERE ${attendanceRecords.teachingDayId} = ${teachingDays.id})`,
-      })
-      .from(teachingDays)
-      .where(eq(teachingDays.workspaceId, id))
-      .orderBy(teachingDays.scheduledDate);
+    const fetchDays = () =>
+      db
+        .select({
+          id: teachingDays.id,
+          dayNumber: teachingDays.dayNumber,
+          scheduledDate: teachingDays.scheduledDate,
+          topic: teachingDays.topic,
+          notes: teachingDays.notes,
+          teacherAbsent: teachingDays.teacherAbsent,
+          hasRollCall: sql<boolean>`EXISTS (SELECT 1 FROM ${attendanceRecords} WHERE ${attendanceRecords.teachingDayId} = ${teachingDays.id})`,
+        })
+        .from(teachingDays)
+        .where(eq(teachingDays.workspaceId, id))
+        .orderBy(teachingDays.scheduledDate);
+
+    let days = await fetchDays();
+
+    // Self-heal numbering: taught days must count 1..K in date order (absences
+    // marked before the renumbering feature existed left gaps like 6 → 8).
+    let expected = 1;
+    const drifted = days.some((d) => !d.teacherAbsent && d.dayNumber !== expected++);
+    if (drifted) {
+      await renumberTeachingDays(id);
+      days = await fetchDays();
+    }
 
     return NextResponse.json({ status: "SUCCESS", teachingDays: days });
   } catch (error) {
@@ -107,6 +119,10 @@ export async function POST(
         notes: notes || null,
       })
       .returning();
+
+    // Keep taught-day numbering 1..K in date order even when the new day
+    // lands in the middle of the schedule
+    await renumberTeachingDays(id);
 
     return NextResponse.json({ status: "SUCCESS", teachingDay: day }, { status: 201 });
   } catch (error) {
