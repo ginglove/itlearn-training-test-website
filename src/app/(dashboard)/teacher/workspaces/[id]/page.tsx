@@ -104,6 +104,9 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
   const [dayForm, setDayForm] = useState({ scheduledDate: "", topic: "", notes: "" });
   const [editDay, setEditDay] = useState<TeachingDay | null>(null);
   const [editDayForm, setEditDayForm] = useState({ scheduledDate: "", topic: "", notes: "" });
+  const [isTopicsOpen, setIsTopicsOpen] = useState(false);
+  const [topicsDraft, setTopicsDraft] = useState<{ dayId: string; label: string; topic: string }[]>([]);
+  const [isSavingTopics, setIsSavingTopics] = useState(false);
 
   // Roll call
   const [rollCallDayId, setRollCallDayId] = useState<string>("");
@@ -293,6 +296,63 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
     } else {
       notify("error", data.message || "Failed to add teaching day.");
     }
+  };
+
+  const openTopics = () => {
+    setTopicsDraft(
+      days.map((d) => ({
+        dayId: d.id,
+        label: `${d.teacherAbsent ? "–" : "Day " + d.dayNumber} · ${d.scheduledDate}`,
+        topic: d.topic || "",
+      }))
+    );
+    setIsTopicsOpen(true);
+  };
+
+  const saveTopics = async () => {
+    setIsSavingTopics(true);
+    try {
+      const res = await fetch(`/api/v1/teacher/workspaces/${id}/timetable/topics`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: topicsDraft.map((t) => ({ dayId: t.dayId, topic: t.topic })) }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setIsTopicsOpen(false);
+        notify("success", `Updated topics for ${data.updated} day(s).`);
+        fetchDays();
+      } else {
+        notify("error", data.message || "Failed to update topics.");
+      }
+    } finally {
+      setIsSavingTopics(false);
+    }
+  };
+
+  const importTimetable = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(`/api/v1/teacher/workspaces/${id}/timetable/import`, {
+      method: "POST",
+      body: formData,
+    });
+    const data = await res.json();
+    if (res.ok) {
+      notify(
+        data.unmatched?.length
+          ? "error"
+          : "success",
+        `Imported topics for ${data.updated} day(s).` +
+          (data.unmatched?.length ? ` Unmatched dates: ${data.unmatched.join(", ")}.` : "")
+      );
+      fetchDays();
+    } else {
+      notify("error", data.message || "Failed to import timetable.");
+    }
+    e.target.value = "";
   };
 
   const openEditDay = (d: TeachingDay) => {
@@ -772,17 +832,41 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
                 ({days.length}/{workspace.totalDays || "?"} scheduled)
               </span>
             </h2>
-            {!archived &&
-              workspace.scheduleDays &&
-              workspace.scheduleDays.length > 0 &&
-              days.length < workspace.totalDays && (
+            <div className="flex gap-2 flex-wrap">
+              {!archived && days.length > 0 && (
                 <button
-                  onClick={generateTimetable}
-                  className="px-4 py-2 rounded-xl border border-brand-500/30 text-brand-400 hover:bg-brand-500/10 text-sm font-semibold transition-all"
+                  onClick={openTopics}
+                  className="px-4 py-2 rounded-xl border border-purple-500/30 text-purple-400 hover:bg-purple-500/10 text-sm font-semibold transition-all"
                 >
-                  Auto-generate remaining days
+                  Edit Topics
                 </button>
               )}
+              {days.length > 0 && (
+                <a
+                  href={`/api/v1/teacher/workspaces/${id}/timetable/export`}
+                  className="px-4 py-2 rounded-xl border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 text-sm font-semibold transition-all"
+                >
+                  Export .xlsx
+                </a>
+              )}
+              {!archived && days.length > 0 && (
+                <label className="px-4 py-2 rounded-xl border border-sky-500/30 text-sky-400 hover:bg-sky-500/10 text-sm font-semibold transition-all cursor-pointer">
+                  Import .xlsx
+                  <input type="file" accept=".xlsx" className="hidden" onChange={importTimetable} />
+                </label>
+              )}
+              {!archived &&
+                workspace.scheduleDays &&
+                workspace.scheduleDays.length > 0 &&
+                days.length < workspace.totalDays && (
+                  <button
+                    onClick={generateTimetable}
+                    className="px-4 py-2 rounded-xl border border-brand-500/30 text-brand-400 hover:bg-brand-500/10 text-sm font-semibold transition-all"
+                  >
+                    Auto-generate remaining days
+                  </button>
+                )}
+            </div>
           </div>
           {!archived && (
             <div className="flex flex-col md:flex-row gap-3 mb-5">
@@ -1386,6 +1470,50 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
                 className="px-5 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white rounded-xl font-semibold text-sm transition-all"
               >
                 Add {selectedStudents.length || ""}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Bulk edit topics modal ── */}
+      {isTopicsOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-bg-surface border border-border-strong rounded-2xl p-6 w-full max-w-lg max-h-[85vh] flex flex-col">
+            <h2 className="text-lg font-semibold text-white mb-1">Edit Topics</h2>
+            <p className="text-text-secondary text-xs mb-4">
+              Update every day&apos;s topic in one pass, then save all at once.
+            </p>
+            <div className="overflow-y-auto flex-grow space-y-2 pr-1">
+              {topicsDraft.map((t, idx) => (
+                <div key={t.dayId} className="flex items-center gap-3">
+                  <span className="text-text-tertiary text-xs font-mono w-36 shrink-0">{t.label}</span>
+                  <input
+                    value={t.topic}
+                    onChange={(e) =>
+                      setTopicsDraft((prev) =>
+                        prev.map((row, i) => (i === idx ? { ...row, topic: e.target.value } : row))
+                      )
+                    }
+                    placeholder="Topic"
+                    className="flex-grow bg-bg-base border border-border-strong rounded-xl px-3 py-2 text-sm text-white focus:border-brand-500 focus:outline-none"
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-end gap-3 mt-5">
+              <button
+                onClick={() => setIsTopicsOpen(false)}
+                className="px-4 py-2 text-sm text-text-secondary hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveTopics}
+                disabled={isSavingTopics}
+                className="px-5 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white rounded-xl font-semibold text-sm transition-all"
+              >
+                {isSavingTopics ? "Saving…" : "Save All"}
               </button>
             </div>
           </div>

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import StudentWorkspacesModal from "@/app/components/StudentWorkspacesModal";
+import UserImportExport from "@/app/components/UserImportExport";
 
 interface Student {
   id: string;
@@ -122,15 +123,18 @@ export default function AdminStudentsPage() {
             Global student accounts with enrollment metrics across workspaces.
           </p>
         </div>
-        <button
-          onClick={() => {
-            setCreated(null);
-            setIsCreateOpen(true);
-          }}
-          className="px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-semibold text-sm transition-all shadow-lg shadow-brand-500/20"
-        >
-          + New Student
-        </button>
+        <div className="flex gap-2 flex-wrap">
+          <UserImportExport role="STUDENT" onImported={fetchStudents} />
+          <button
+            onClick={() => {
+              setCreated(null);
+              setIsCreateOpen(true);
+            }}
+            className="px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-semibold text-sm transition-all shadow-lg shadow-brand-500/20"
+          >
+            + New Student
+          </button>
+        </div>
       </div>
 
       {message && (

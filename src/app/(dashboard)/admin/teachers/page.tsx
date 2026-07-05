@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import UserImportExport from "@/app/components/UserImportExport";
 
 interface Teacher {
   id: string;
@@ -111,15 +112,18 @@ export default function AdminTeachersPage() {
             Teacher accounts, workspace assignments and workload metrics.
           </p>
         </div>
-        <button
-          onClick={() => {
-            setCreated(null);
-            setIsCreateOpen(true);
-          }}
-          className="px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-semibold text-sm transition-all shadow-lg shadow-brand-500/20"
-        >
-          + New Teacher
-        </button>
+        <div className="flex gap-2 flex-wrap">
+          <UserImportExport role="TEACHER" onImported={fetchTeachers} />
+          <button
+            onClick={() => {
+              setCreated(null);
+              setIsCreateOpen(true);
+            }}
+            className="px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-semibold text-sm transition-all shadow-lg shadow-brand-500/20"
+          >
+            + New Teacher
+          </button>
+        </div>
       </div>
 
       {message && (
