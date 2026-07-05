@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import DateTimePicker from "@/app/components/DateTimePicker";
+import WorkspaceSwitcher from "@/app/components/WorkspaceSwitcher";
 
 interface Workspace {
   id: string;
@@ -488,8 +489,13 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
 
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
         <div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-2xl font-display font-bold text-white">{workspace.name}</h1>
+            <WorkspaceSwitcher
+              currentId={id}
+              listUrl="/api/v1/teacher/workspaces"
+              basePath="/teacher/workspaces"
+            />
             <span
               className={`text-[10px] font-mono px-2 py-1 rounded-full border ${
                 archived

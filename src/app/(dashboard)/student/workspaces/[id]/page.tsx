@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
+import WorkspaceSwitcher from "@/app/components/WorkspaceSwitcher";
 
 interface Workspace {
   id: string;
@@ -165,8 +166,13 @@ export default function StudentWorkspaceDetailPage({
         ← My Workspaces
       </button>
 
-      <div className="flex items-center gap-3 mb-1">
+      <div className="flex items-center gap-3 mb-1 flex-wrap">
         <h1 className="text-2xl font-display font-bold text-white">{workspace.name}</h1>
+        <WorkspaceSwitcher
+          currentId={id}
+          listUrl="/api/v1/student/workspaces"
+          basePath="/student/workspaces"
+        />
         <span
           className={`text-[10px] font-mono px-2 py-1 rounded-full border ${
             workspace.status === "ACTIVE"

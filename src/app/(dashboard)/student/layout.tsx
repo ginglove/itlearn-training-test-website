@@ -13,8 +13,9 @@ export default function StudentLayout({
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // If inside exam workspace, skip sidebar layout but keep toast context
-  const isWorkspace = pathname.includes("/workspace");
+  // Only the fullscreen exam-taking workspace (/student/exams/:id/workspace)
+  // skips the sidebar; the class workspace pages keep the normal layout
+  const isWorkspace = /\/exams\/[^/]+\/workspace/.test(pathname);
   if (isWorkspace) {
     return <ToastProvider>{children}</ToastProvider>;
   }
@@ -65,7 +66,7 @@ export default function StudentLayout({
   ];
 
   const isActive = (href: string) => {
-    return pathname === href;
+    return pathname === href || pathname.startsWith(href + "/");
   };
 
   return (
