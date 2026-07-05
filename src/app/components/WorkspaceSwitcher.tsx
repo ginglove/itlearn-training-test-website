@@ -12,10 +12,13 @@ export default function WorkspaceSwitcher({
   currentId,
   listUrl,
   basePath,
+  variant = "inline",
 }: {
-  currentId: string;
+  currentId?: string;
   listUrl: string;
   basePath: string;
+  /** "inline" sits next to a page title; "menu" renders a sidebar block. */
+  variant?: "inline" | "menu";
 }) {
   const router = useRouter();
   const [options, setOptions] = useState<{ id: string; name: string; status: string }[]>([]);
@@ -31,15 +34,25 @@ export default function WorkspaceSwitcher({
       .catch(() => {});
   }, [listUrl]);
 
-  if (options.length <= 1) return null;
+  if (variant === "inline" && options.length <= 1) return null;
+  if (variant === "menu" && options.length === 0) return null;
 
-  return (
+  const select = (
     <select
-      value={currentId}
+      value={currentId ?? ""}
       onChange={(e) => e.target.value && router.push(`${basePath}/${e.target.value}`)}
-      className="bg-bg-surface border border-border-strong rounded-xl px-3 py-2 text-sm text-white focus:border-brand-500 focus:outline-none max-w-[260px]"
+      className={
+        variant === "menu"
+          ? "w-full bg-bg-surface-elevated border border-border-strong rounded-xl px-3 py-2.5 text-sm text-white focus:border-brand-500 focus:outline-none cursor-pointer"
+          : "bg-bg-surface border border-border-strong rounded-xl px-3 py-2 text-sm text-white focus:border-brand-500 focus:outline-none max-w-[260px]"
+      }
       title="Switch workspace"
     >
+      {currentId === undefined && (
+        <option value="" disabled>
+          Go to workspace…
+        </option>
+      )}
       {options.map((w) => (
         <option key={w.id} value={w.id}>
           {w.name}
@@ -48,4 +61,16 @@ export default function WorkspaceSwitcher({
       ))}
     </select>
   );
+
+  if (variant === "menu") {
+    return (
+      <div className="mt-4 pt-4 border-t border-border-strong">
+        <p className="text-[10px] text-text-tertiary font-mono uppercase tracking-widest mb-2 px-1">
+          My Classes
+        </p>
+        {select}
+      </div>
+    );
+  }
+  return select;
 }

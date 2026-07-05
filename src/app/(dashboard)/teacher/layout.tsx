@@ -3,6 +3,7 @@
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ToastProvider } from "@/components/toast";
+import WorkspaceSwitcher from "@/app/components/WorkspaceSwitcher";
 
 export default function TeacherLayout({
   children,
@@ -112,6 +113,16 @@ export default function TeacherLayout({
   const navItems = isAdminUser ? adminNavItems : teacherNavItems;
   const panelLabel = isAdminUser ? "Admin Panel" : "Teacher Panel";
 
+  const currentWorkspaceId = pathname.match(/^\/teacher\/workspaces\/([^/]+)/)?.[1];
+  const workspaceMenu = !isAdminUser ? (
+    <WorkspaceSwitcher
+      variant="menu"
+      currentId={currentWorkspaceId}
+      listUrl="/api/v1/teacher/workspaces"
+      basePath="/teacher/workspaces"
+    />
+  ) : null;
+
   const isActive = (href: string) => {
     if (href === "/teacher" || href === "/admin") return pathname === href;
     return pathname === href || pathname.startsWith(href + "/");
@@ -165,6 +176,7 @@ export default function TeacherLayout({
                 <span>{item.name}</span>
               </button>
             ))}
+            {workspaceMenu}
             <button
               onClick={handleLogout}
               className="flex items-center gap-3 px-4 py-3.5 rounded-xl font-medium text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition-all border border-transparent text-left mt-4"
@@ -209,6 +221,7 @@ export default function TeacherLayout({
               <span className="text-sm">{item.name}</span>
             </button>
           ))}
+          {workspaceMenu}
         </nav>
 
         <div className="border-t border-border-strong pt-4 mt-auto">

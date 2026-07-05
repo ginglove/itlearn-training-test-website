@@ -191,6 +191,18 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
     fetchActivities();
   }, [fetchWorkspace, fetchMembers, fetchDays, fetchActivities]);
 
+  // Reset workspace-specific view state when switching to another workspace
+  useEffect(() => {
+    setRollCallDayId("");
+    setRollCall([]);
+    setSelectedMembers([]);
+    setSelectedActivities([]);
+    setMatrix(null);
+    setAnalytics(null);
+    setReport(null);
+    setTab("members");
+  }, [id]);
+
   useEffect(() => {
     if (tab === "attendance") fetchMatrix();
     if (tab === "analytics") fetchAnalytics();
@@ -883,18 +895,20 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
               </div>
             )}
           </div>
-          {activities.length === 0 ? (
-            <p className="text-text-secondary text-sm py-8 text-center">No activities assigned.</p>
-          ) : (
+          {(
             <div className="space-y-6">
               {(["QUIZ", "ASSESSMENT", "HOMEWORK", "EXERCISE"] as const)
                 .map((type) => ({ type, items: activities.filter((a) => a.activityType === type) }))
-                .filter((g) => g.items.length > 0)
                 .map((g) => (
               <div key={g.type}>
                 <h3 className="text-xs font-semibold text-text-tertiary font-mono uppercase tracking-wider mb-1">
                   {g.type} ({g.items.length})
                 </h3>
+                {g.items.length === 0 && (
+                  <p className="text-text-tertiary text-xs py-2">
+                    No {g.type.toLowerCase()} activities assigned yet.
+                  </p>
+                )}
                 <div className="divide-y divide-border-strong">
               {g.items.map((a) => (
                 <div key={a.id} className="flex items-center justify-between py-3">

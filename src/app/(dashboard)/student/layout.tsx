@@ -3,6 +3,7 @@
 import { useRouter, usePathname } from "next/navigation";
 import { useState } from "react";
 import { ToastProvider } from "@/components/toast";
+import WorkspaceSwitcher from "@/app/components/WorkspaceSwitcher";
 
 export default function StudentLayout({
   children,
@@ -69,6 +70,17 @@ export default function StudentLayout({
     return pathname === href || pathname.startsWith(href + "/");
   };
 
+  const currentWorkspaceId = pathname.match(/^\/student\/workspaces\/([^/]+)/)?.[1];
+
+  const workspaceMenu = (
+    <WorkspaceSwitcher
+      variant="menu"
+      currentId={currentWorkspaceId}
+      listUrl="/api/v1/student/workspaces"
+      basePath="/student/workspaces"
+    />
+  );
+
   return (
     <div className="min-h-screen bg-bg-base flex flex-col md:flex-row">
       {/* Mobile Top Header */}
@@ -117,6 +129,7 @@ export default function StudentLayout({
                 <span>{item.name}</span>
               </button>
             ))}
+            {workspaceMenu}
             <button
               onClick={handleLogout}
               className="flex items-center gap-3 px-4 py-3.5 rounded-xl font-medium text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition-all border border-transparent text-left mt-4"
@@ -161,6 +174,7 @@ export default function StudentLayout({
               <span className="text-sm">{item.name}</span>
             </button>
           ))}
+          {workspaceMenu}
         </nav>
 
         <div className="border-t border-border-strong pt-4 mt-auto">

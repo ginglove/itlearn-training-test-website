@@ -212,18 +212,15 @@ export default function StudentWorkspaceDetailPage({
 
       {tab === "activities" && (
         <div className="space-y-6">
-          {activities.length === 0 && (
-            <p className="text-text-secondary text-sm py-10 text-center border border-dashed border-border-strong rounded-2xl">
-              No activities assigned yet.
-            </p>
-          )}
-          {grouped
-            .filter((g) => g.items.length > 0)
-            .map((g) => (
+
+          {grouped.map((g) => (
               <div key={g.type} className="bg-bg-surface border border-border-strong rounded-2xl p-5">
                 <h2 className="text-sm font-semibold text-text-secondary mb-3 font-mono">
-                  {g.type}
+                  {g.type} ({g.items.length})
                 </h2>
+                {g.items.length === 0 && (
+                  <p className="text-text-tertiary text-xs py-2">No {g.type.toLowerCase()} activities yet.</p>
+                )}
                 <div className="divide-y divide-border-strong">
                   {g.items.map((a) => (
                     <div
