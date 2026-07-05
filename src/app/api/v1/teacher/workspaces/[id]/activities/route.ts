@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { workspaceActivities, exams, teachingDays } from "@/db/schema";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { getUserId, isAdminRequest } from "@/lib/get-user-id";
 import { getOwnedWorkspace } from "@/lib/workspace";
 
@@ -85,6 +85,76 @@ export async function POST(
         { status: 400 }
       );
     }
+
+    // Bulk exam assignment: one activity per exam, titled after the exam.
+    // Already-assigned exams are skipped and reported.
+    const examIds: string[] = Array.isArray(body.examIds) ? body.examIds : [];
+    if (examIds.length > 0) {
+      if (teachingDayId) {
+        const [day] = await db
+          .select({ id: teachingDays.id })
+          .from(teachingDays)
+          .where(and(eq(teachingDays.id, teachingDayId), eq(teachingDays.workspaceId, id)))
+          .limit(1);
+        if (!day) {
+          return NextResponse.json(
+            { error: "VALIDATION_ERROR", message: "Teaching day not found in this workspace" },
+            { status: 400 }
+          );
+        }
+      }
+
+      const ownedExams = await db
+        .select({ id: exams.id, title: exams.title })
+        .from(exams)
+        .where(
+          and(
+            inArray(exams.id, examIds),
+            isAdminRequest(request) ? sql`TRUE` : eq(exams.createdBy, teacherId)
+          )
+        );
+      const ownedById = new Map(ownedExams.map((e) => [e.id, e]));
+      const notOwned = examIds.filter((eid) => !ownedById.has(eid));
+
+      const existing = await db
+        .select({ examId: workspaceActivities.examId })
+        .from(workspaceActivities)
+        .where(
+          and(
+            eq(workspaceActivities.workspaceId, id),
+            inArray(workspaceActivities.examId, examIds)
+          )
+        );
+      const alreadyAssigned = new Set(existing.map((e) => e.examId));
+
+      const toCreate = examIds.filter((eid) => ownedById.has(eid) && !alreadyAssigned.has(eid));
+      if (toCreate.length > 0) {
+        await db.insert(workspaceActivities).values(
+          toCreate.map((eid) => ({
+            workspaceId: id,
+            examId: eid,
+            teachingDayId: teachingDayId || null,
+            activityType,
+            title: ownedById.get(eid)!.title,
+            description: description || null,
+            dueDate: dueDate ? new Date(dueDate) : null,
+          }))
+        );
+      }
+
+      return NextResponse.json(
+        {
+          status: "SUCCESS",
+          created: toCreate,
+          skipped: [
+            ...[...alreadyAssigned].map((eid) => ({ examId: eid, reason: "DUPLICATE_EXAM_IN_WORKSPACE" })),
+            ...notOwned.map((eid) => ({ examId: eid, reason: "EXAM_NOT_FOUND" })),
+          ],
+        },
+        { status: 201 }
+      );
+    }
+
     if (!title || !String(title).trim()) {
       return NextResponse.json(
         { error: "VALIDATION_ERROR", message: "title is required" },

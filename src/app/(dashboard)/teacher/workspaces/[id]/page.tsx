@@ -82,6 +82,7 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
   const [allStudents, setAllStudents] = useState<{ id: string; fullName: string; username: string }[]>([]);
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
+  const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
 
   // Timetable
   const [days, setDays] = useState<TeachingDay[]>([]);
@@ -98,11 +99,12 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
   const [activities, setActivities] = useState<Activity[]>([]);
   const [exams, setExams] = useState<{ id: string; title: string }[]>([]);
   const [isAssignOpen, setIsAssignOpen] = useState(false);
+  const [selectedActivities, setSelectedActivities] = useState<string[]>([]);
   const [activityForm, setActivityForm] = useState({
     activityType: "EXERCISE",
     title: "",
     description: "",
-    examId: "",
+    examIds: [] as string[],
     teachingDayId: "",
     dueDate: "",
   });
@@ -203,6 +205,29 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
       fetchMembers();
     } else {
       notify("error", data.message || "Failed to remove student.");
+    }
+  };
+
+  const removeSelectedMembers = async () => {
+    if (selectedMembers.length === 0) return;
+    if (!confirm(`Remove ${selectedMembers.length} selected student(s) from this workspace?`)) return;
+    const res = await fetch(`/api/v1/teacher/workspaces/${id}/members/bulk-remove`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ studentIds: selectedMembers }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      const blocked = data.blocked?.length ?? 0;
+      notify(
+        blocked ? "error" : "success",
+        `Removed ${data.removed.length} student(s).` +
+          (blocked ? ` ${blocked} skipped (existing submissions).` : "")
+      );
+      setSelectedMembers([]);
+      fetchMembers();
+    } else {
+      notify("error", data.message || "Failed to remove students.");
     }
   };
 
@@ -311,25 +336,38 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
   const openAssign = async () => {
     const res = await fetch("/api/v1/teacher/exams");
     if (res.ok) setExams((await res.json()).exams || []);
-    setActivityForm({ activityType: "EXERCISE", title: "", description: "", examId: "", teachingDayId: "", dueDate: "" });
+    setActivityForm({ activityType: "EXERCISE", title: "", description: "", examIds: [], teachingDayId: "", dueDate: "" });
     setIsAssignOpen(true);
   };
 
   const assignActivity = async () => {
+    const bulk = activityForm.examIds.length > 0;
     const res = await fetch(`/api/v1/teacher/workspaces/${id}/activities`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        ...activityForm,
-        examId: activityForm.examId || undefined,
+        activityType: activityForm.activityType,
+        description: activityForm.description || undefined,
         teachingDayId: activityForm.teachingDayId || undefined,
         dueDate: activityForm.dueDate || undefined,
+        ...(bulk
+          ? { examIds: activityForm.examIds }
+          : { title: activityForm.title }),
       }),
     });
     const data = await res.json();
     if (res.ok) {
       setIsAssignOpen(false);
-      notify("success", "Activity assigned.");
+      if (bulk) {
+        const skipped = data.skipped?.length ?? 0;
+        notify(
+          skipped ? "error" : "success",
+          `Assigned ${data.created?.length ?? 0} exam(s).` +
+            (skipped ? ` ${skipped} skipped (duplicate or not found).` : "")
+        );
+      } else {
+        notify("success", "Activity assigned.");
+      }
       fetchActivities();
     } else {
       notify("error", data.message || "Failed to assign activity.");
@@ -343,6 +381,29 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
     const data = await res.json();
     if (res.ok) fetchActivities();
     else notify("error", data.message || "Failed to remove activity.");
+  };
+
+  const removeSelectedActivities = async () => {
+    if (selectedActivities.length === 0) return;
+    if (!confirm(`Remove ${selectedActivities.length} selected activit(ies) from this workspace?`)) return;
+    const res = await fetch(`/api/v1/teacher/workspaces/${id}/activities/bulk-remove`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ activityIds: selectedActivities }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      const blocked = data.blocked?.length ?? 0;
+      notify(
+        blocked ? "error" : "success",
+        `Removed ${data.removed.length} activit(ies).` +
+          (blocked ? ` ${blocked} skipped (existing submissions).` : "")
+      );
+      setSelectedActivities([]);
+      fetchActivities();
+    } else {
+      notify("error", data.message || "Failed to remove activities.");
+    }
   };
 
   // ── Archive & report ──
@@ -462,15 +523,25 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
       {/* ── Members tab ── */}
       {tab === "members" && (
         <div className="bg-bg-surface border border-border-strong rounded-2xl p-5">
-          <div className="flex justify-between items-center mb-4">
+          <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
             <h2 className="font-semibold text-white">Enrolled Students</h2>
             {!archived && (
-              <button
-                onClick={openAddMember}
-                className="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-xl text-sm font-semibold transition-all"
-              >
-                + Add Students
-              </button>
+              <div className="flex gap-2">
+                {selectedMembers.length > 0 && (
+                  <button
+                    onClick={removeSelectedMembers}
+                    className="px-4 py-2 rounded-xl border border-rose-500/30 text-rose-400 hover:bg-rose-500/10 text-sm font-semibold transition-all"
+                  >
+                    Remove Selected ({selectedMembers.length})
+                  </button>
+                )}
+                <button
+                  onClick={openAddMember}
+                  className="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-xl text-sm font-semibold transition-all"
+                >
+                  + Add Students
+                </button>
+              </div>
             )}
           </div>
           {activeMembers.length === 0 ? (
@@ -479,11 +550,27 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
             <div className="divide-y divide-border-strong">
               {activeMembers.map((m) => (
                 <div key={m.membershipId} className="flex items-center justify-between py-3">
-                  <div>
-                    <p className="text-white text-sm">{m.fullName}</p>
-                    <p className="text-text-tertiary text-xs font-mono">
-                      {m.username} · {m.email}
-                    </p>
+                  <div className="flex items-center gap-3">
+                    {!archived && (
+                      <input
+                        type="checkbox"
+                        checked={selectedMembers.includes(m.studentId)}
+                        onChange={(e) =>
+                          setSelectedMembers((prev) =>
+                            e.target.checked
+                              ? [...prev, m.studentId]
+                              : prev.filter((x) => x !== m.studentId)
+                          )
+                        }
+                        className="accent-brand-500"
+                      />
+                    )}
+                    <div>
+                      <p className="text-white text-sm">{m.fullName}</p>
+                      <p className="text-text-tertiary text-xs font-mono">
+                        {m.username} · {m.email}
+                      </p>
+                    </div>
                   </div>
                   {!archived && (
                     <button
@@ -656,15 +743,25 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
       {/* ── Activities tab ── */}
       {tab === "activities" && (
         <div className="bg-bg-surface border border-border-strong rounded-2xl p-5">
-          <div className="flex justify-between items-center mb-4">
+          <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
             <h2 className="font-semibold text-white">Assigned Activities</h2>
             {!archived && (
-              <button
-                onClick={openAssign}
-                className="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-xl text-sm font-semibold transition-all"
-              >
-                + Assign Activity
-              </button>
+              <div className="flex gap-2">
+                {selectedActivities.length > 0 && (
+                  <button
+                    onClick={removeSelectedActivities}
+                    className="px-4 py-2 rounded-xl border border-rose-500/30 text-rose-400 hover:bg-rose-500/10 text-sm font-semibold transition-all"
+                  >
+                    Remove Selected ({selectedActivities.length})
+                  </button>
+                )}
+                <button
+                  onClick={openAssign}
+                  className="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-xl text-sm font-semibold transition-all"
+                >
+                  + Assign Activity
+                </button>
+              </div>
             )}
           </div>
           {activities.length === 0 ? (
@@ -674,6 +771,18 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
               {activities.map((a) => (
                 <div key={a.id} className="flex items-center justify-between py-3">
                   <div className="flex items-center gap-3">
+                    {!archived && (
+                      <input
+                        type="checkbox"
+                        checked={selectedActivities.includes(a.id)}
+                        onChange={(e) =>
+                          setSelectedActivities((prev) =>
+                            e.target.checked ? [...prev, a.id] : prev.filter((x) => x !== a.id)
+                          )
+                        }
+                        className="accent-brand-500"
+                      />
+                    )}
                     <span
                       className={`text-[10px] font-mono px-2 py-1 rounded-full border shrink-0 ${TYPE_BADGE[a.activityType]}`}
                     >
@@ -933,47 +1042,64 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
           <div className="bg-bg-surface border border-border-strong rounded-2xl p-6 w-full max-w-md">
             <h2 className="text-lg font-semibold text-white mb-4">Assign Activity</h2>
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs text-text-secondary mb-1.5">Type *</label>
-                  <select
-                    value={activityForm.activityType}
-                    onChange={(e) => setActivityForm({ ...activityForm, activityType: e.target.value })}
-                    className="w-full bg-bg-base border border-border-strong rounded-xl px-3 py-2.5 text-sm text-white focus:border-brand-500 focus:outline-none"
-                  >
-                    <option value="EXERCISE">Exercise</option>
-                    <option value="HOMEWORK">Homework</option>
-                    <option value="QUIZ">Quiz</option>
-                    <option value="ASSESSMENT">Assessment</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs text-text-secondary mb-1.5">
-                    Exam{" "}
-                    {["QUIZ", "ASSESSMENT"].includes(activityForm.activityType) ? "*" : "(optional)"}
-                  </label>
-                  <select
-                    value={activityForm.examId}
-                    onChange={(e) => setActivityForm({ ...activityForm, examId: e.target.value })}
-                    className="w-full bg-bg-base border border-border-strong rounded-xl px-3 py-2.5 text-sm text-white focus:border-brand-500 focus:outline-none"
-                  >
-                    <option value="">— none —</option>
-                    {exams.map((ex) => (
-                      <option key={ex.id} value={ex.id}>
-                        {ex.title}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <div>
+                <label className="block text-xs text-text-secondary mb-1.5">Type *</label>
+                <select
+                  value={activityForm.activityType}
+                  onChange={(e) => setActivityForm({ ...activityForm, activityType: e.target.value })}
+                  className="w-full bg-bg-base border border-border-strong rounded-xl px-3 py-2.5 text-sm text-white focus:border-brand-500 focus:outline-none"
+                >
+                  <option value="EXERCISE">Exercise</option>
+                  <option value="HOMEWORK">Homework</option>
+                  <option value="QUIZ">Quiz</option>
+                  <option value="ASSESSMENT">Assessment</option>
+                </select>
               </div>
               <div>
-                <label className="block text-xs text-text-secondary mb-1.5">Title *</label>
-                <input
-                  value={activityForm.title}
-                  onChange={(e) => setActivityForm({ ...activityForm, title: e.target.value })}
-                  className="w-full bg-bg-base border border-border-strong rounded-xl px-4 py-2.5 text-sm text-white focus:border-brand-500 focus:outline-none"
-                />
+                <label className="block text-xs text-text-secondary mb-1.5">
+                  Exams{" "}
+                  {["QUIZ", "ASSESSMENT"].includes(activityForm.activityType)
+                    ? "* (select one or more)"
+                    : "(optional — select to create one activity per exam)"}
+                </label>
+                <div className="max-h-40 overflow-y-auto border border-border-strong rounded-xl divide-y divide-border-strong bg-bg-base">
+                  {exams.length === 0 && (
+                    <p className="text-text-tertiary text-xs px-4 py-3">No exams available.</p>
+                  )}
+                  {exams.map((ex) => (
+                    <label key={ex.id} className="flex items-center gap-3 px-4 py-2 cursor-pointer hover:bg-bg-surface-elevated/40">
+                      <input
+                        type="checkbox"
+                        checked={activityForm.examIds.includes(ex.id)}
+                        onChange={(e) =>
+                          setActivityForm((prev) => ({
+                            ...prev,
+                            examIds: e.target.checked
+                              ? [...prev.examIds, ex.id]
+                              : prev.examIds.filter((x) => x !== ex.id),
+                          }))
+                        }
+                        className="accent-brand-500"
+                      />
+                      <span className="text-white text-sm truncate">{ex.title}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
+              {activityForm.examIds.length === 0 ? (
+                <div>
+                  <label className="block text-xs text-text-secondary mb-1.5">Title *</label>
+                  <input
+                    value={activityForm.title}
+                    onChange={(e) => setActivityForm({ ...activityForm, title: e.target.value })}
+                    className="w-full bg-bg-base border border-border-strong rounded-xl px-4 py-2.5 text-sm text-white focus:border-brand-500 focus:outline-none"
+                  />
+                </div>
+              ) : (
+                <p className="text-text-tertiary text-xs">
+                  {activityForm.examIds.length} activit(ies) will be created, titled after each exam.
+                </p>
+              )}
               <div>
                 <label className="block text-xs text-text-secondary mb-1.5">Description</label>
                 <textarea
@@ -1016,8 +1142,10 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
               <button
                 onClick={assignActivity}
                 disabled={
-                  !activityForm.title.trim() ||
-                  (["QUIZ", "ASSESSMENT"].includes(activityForm.activityType) && !activityForm.examId)
+                  activityForm.examIds.length === 0
+                    ? !activityForm.title.trim() ||
+                      ["QUIZ", "ASSESSMENT"].includes(activityForm.activityType)
+                    : false
                 }
                 className="px-5 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white rounded-xl font-semibold text-sm transition-all"
               >
