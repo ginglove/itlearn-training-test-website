@@ -41,6 +41,19 @@ export default function AdminWorkspacesPage() {
   const [assignFor, setAssignFor] = useState<AdminWorkspace | null>(null);
   const [assignTeacherId, setAssignTeacherId] = useState("");
 
+  // Per-workspace student enrollment modal
+  const [studentsFor, setStudentsFor] = useState<AdminWorkspace | null>(null);
+  const [studentDirectory, setStudentDirectory] = useState<{ id: string; fullName: string; username: string }[]>([]);
+  const [memberSet, setMemberSet] = useState<Set<string>>(new Set());
+  const [checkedStudents, setCheckedStudents] = useState<Set<string>>(new Set());
+
+  // Per-workspace exam assignment modal
+  const [examsFor, setExamsFor] = useState<AdminWorkspace | null>(null);
+  const [examList, setExamList] = useState<{ id: string; title: string }[]>([]);
+  const [assignedExams, setAssignedExams] = useState<Map<string, string>>(new Map()); // examId -> activityId
+  const [checkedExams, setCheckedExams] = useState<Set<string>>(new Set());
+  const [isSavingModal, setIsSavingModal] = useState(false);
+
   const notify = (type: "success" | "error", text: string) => {
     setMessage({ type, text });
     setTimeout(() => setMessage(null), 5000);
@@ -125,6 +138,109 @@ export default function AdminWorkspacesPage() {
       fetchAll();
     } else {
       notify("error", data.message || "Failed to assign teacher.");
+    }
+  };
+
+  const openStudents = async (ws: AdminWorkspace) => {
+    const [dirRes, memRes] = await Promise.all([
+      fetch("/api/v1/teacher/students?scope=all"),
+      fetch(`/api/v1/teacher/workspaces/${ws.id}/members`),
+    ]);
+    const dir = dirRes.ok ? (await dirRes.json()).students || [] : [];
+    const members = memRes.ok ? (await memRes.json()).members || [] : [];
+    const active = new Set<string>(
+      members.filter((m: any) => m.status === "ACTIVE").map((m: any) => m.studentId)
+    );
+    setStudentDirectory(dir);
+    setMemberSet(active);
+    setCheckedStudents(new Set(active));
+    setStudentsFor(ws);
+  };
+
+  const saveStudents = async () => {
+    if (!studentsFor) return;
+    setIsSavingModal(true);
+    try {
+      const toAdd = [...checkedStudents].filter((id) => !memberSet.has(id));
+      const toRemove = [...memberSet].filter((id) => !checkedStudents.has(id));
+      let blockedCount = 0;
+      if (toAdd.length > 0) {
+        await fetch(`/api/v1/teacher/workspaces/${studentsFor.id}/members`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ studentIds: toAdd }),
+        });
+      }
+      if (toRemove.length > 0) {
+        const res = await fetch(`/api/v1/teacher/workspaces/${studentsFor.id}/members/bulk-remove`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ studentIds: toRemove }),
+        });
+        const data = await res.json().catch(() => null);
+        blockedCount = data?.blocked?.length ?? 0;
+      }
+      notify(
+        blockedCount ? "error" : "success",
+        `Enrollment updated: +${toAdd.length} / -${toRemove.length - blockedCount}.` +
+          (blockedCount ? ` ${blockedCount} removal(s) blocked (existing submissions).` : "")
+      );
+      setStudentsFor(null);
+      fetchAll();
+    } finally {
+      setIsSavingModal(false);
+    }
+  };
+
+  const openExams = async (ws: AdminWorkspace) => {
+    const [examRes, actRes] = await Promise.all([
+      fetch("/api/v1/teacher/exams"),
+      fetch(`/api/v1/teacher/workspaces/${ws.id}/activities`),
+    ]);
+    const allExams = examRes.ok ? (await examRes.json()).exams || [] : [];
+    const activities = actRes.ok ? (await actRes.json()).activities || [] : [];
+    const assigned = new Map<string, string>();
+    for (const a of activities) if (a.examId) assigned.set(a.examId, a.id);
+    setExamList(allExams.map((e: any) => ({ id: e.id, title: e.title })));
+    setAssignedExams(assigned);
+    setCheckedExams(new Set(assigned.keys()));
+    setExamsFor(ws);
+  };
+
+  const saveExams = async () => {
+    if (!examsFor) return;
+    setIsSavingModal(true);
+    try {
+      const toAdd = [...checkedExams].filter((id) => !assignedExams.has(id));
+      const toRemove = [...assignedExams.keys()]
+        .filter((id) => !checkedExams.has(id))
+        .map((id) => assignedExams.get(id)!);
+      let blockedCount = 0;
+      if (toAdd.length > 0) {
+        await fetch(`/api/v1/teacher/workspaces/${examsFor.id}/activities`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ examIds: toAdd, activityType: "QUIZ" }),
+        });
+      }
+      if (toRemove.length > 0) {
+        const res = await fetch(`/api/v1/teacher/workspaces/${examsFor.id}/activities/bulk-remove`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ activityIds: toRemove }),
+        });
+        const data = await res.json().catch(() => null);
+        blockedCount = data?.blocked?.length ?? 0;
+      }
+      notify(
+        blockedCount ? "error" : "success",
+        `Exams updated: +${toAdd.length} / -${toRemove.length - blockedCount}.` +
+          (blockedCount ? ` ${blockedCount} removal(s) blocked (existing submissions).` : "")
+      );
+      setExamsFor(null);
+      fetchAll();
+    } finally {
+      setIsSavingModal(false);
     }
   };
 
@@ -252,6 +368,20 @@ export default function AdminWorkspacesPage() {
                   >
                     Assign Teacher
                   </button>
+                  <button
+                    onClick={() => openStudents(ws)}
+                    disabled={ws.status === "ARCHIVED"}
+                    className="px-3 py-1.5 rounded-lg border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 disabled:opacity-40 text-xs transition-all"
+                  >
+                    Students
+                  </button>
+                  <button
+                    onClick={() => openExams(ws)}
+                    disabled={ws.status === "ARCHIVED"}
+                    className="px-3 py-1.5 rounded-lg border border-sky-500/30 text-sky-400 hover:bg-sky-500/10 disabled:opacity-40 text-xs transition-all"
+                  >
+                    Exams
+                  </button>
                   {ws.status === "ARCHIVED" && (
                     <button
                       onClick={() => unarchive(ws)}
@@ -339,6 +469,110 @@ export default function AdminWorkspacesPage() {
                 className="px-5 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white rounded-xl font-semibold text-sm transition-all"
               >
                 Create
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Workspace students modal */}
+      {studentsFor && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-bg-surface border border-border-strong rounded-2xl p-6 w-full max-w-md max-h-[80vh] flex flex-col">
+            <h2 className="text-lg font-semibold text-white mb-1">Students — {studentsFor.name}</h2>
+            <p className="text-text-secondary text-xs mb-4">
+              Tick to enroll, untick to remove. Removals are skipped for students with submissions.
+            </p>
+            <div className="overflow-y-auto flex-grow divide-y divide-border-strong">
+              {studentDirectory.map((st) => (
+                <label key={st.id} className="flex items-center gap-3 py-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={checkedStudents.has(st.id)}
+                    onChange={(e) =>
+                      setCheckedStudents((prev) => {
+                        const next = new Set(prev);
+                        if (e.target.checked) next.add(st.id);
+                        else next.delete(st.id);
+                        return next;
+                      })
+                    }
+                    className="accent-brand-500"
+                  />
+                  <div>
+                    <p className="text-white text-sm">{st.fullName}</p>
+                    <p className="text-text-tertiary text-xs font-mono">{st.username}</p>
+                  </div>
+                </label>
+              ))}
+              {studentDirectory.length === 0 && (
+                <p className="text-text-secondary text-sm py-8 text-center">No students exist yet.</p>
+              )}
+            </div>
+            <div className="flex justify-end gap-3 mt-5">
+              <button
+                onClick={() => setStudentsFor(null)}
+                className="px-4 py-2 text-sm text-text-secondary hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveStudents}
+                disabled={isSavingModal}
+                className="px-5 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white rounded-xl font-semibold text-sm transition-all"
+              >
+                {isSavingModal ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Workspace exams modal */}
+      {examsFor && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-bg-surface border border-border-strong rounded-2xl p-6 w-full max-w-md max-h-[80vh] flex flex-col">
+            <h2 className="text-lg font-semibold text-white mb-1">Exams — {examsFor.name}</h2>
+            <p className="text-text-secondary text-xs mb-4">
+              Tick to assign as a Quiz activity, untick to remove. Removals are skipped for exams
+              with student submissions.
+            </p>
+            <div className="overflow-y-auto flex-grow divide-y divide-border-strong">
+              {examList.map((ex) => (
+                <label key={ex.id} className="flex items-center gap-3 py-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={checkedExams.has(ex.id)}
+                    onChange={(e) =>
+                      setCheckedExams((prev) => {
+                        const next = new Set(prev);
+                        if (e.target.checked) next.add(ex.id);
+                        else next.delete(ex.id);
+                        return next;
+                      })
+                    }
+                    className="accent-brand-500"
+                  />
+                  <span className="text-white text-sm truncate">{ex.title}</span>
+                </label>
+              ))}
+              {examList.length === 0 && (
+                <p className="text-text-secondary text-sm py-8 text-center">No exams exist yet.</p>
+              )}
+            </div>
+            <div className="flex justify-end gap-3 mt-5">
+              <button
+                onClick={() => setExamsFor(null)}
+                className="px-4 py-2 text-sm text-text-secondary hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveExams}
+                disabled={isSavingModal}
+                className="px-5 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white rounded-xl font-semibold text-sm transition-all"
+              >
+                {isSavingModal ? "Saving…" : "Save"}
               </button>
             </div>
           </div>

@@ -164,6 +164,23 @@ export async function middleware(request: NextRequest) {
   requestHeaders.set("x-user-id", payload.userId);
   requestHeaders.set("x-user-role", payload.role);
 
+  // Admin URLs for exam management/monitoring are served by the teacher route
+  // tree (admins pass through with global scope) so the URL stays under /admin
+  if (payload.role === "ADMIN") {
+    let rewritePath: string | null = null;
+    if (pathname === "/admin/exams") rewritePath = "/teacher";
+    else if (pathname.startsWith("/admin/exams/")) {
+      rewritePath = "/teacher/exams/" + pathname.slice("/admin/exams/".length);
+    } else if (pathname === "/admin/sessions" || pathname.startsWith("/admin/sessions/")) {
+      rewritePath = pathname.replace("/admin/sessions", "/teacher/sessions");
+    }
+    if (rewritePath) {
+      const url = request.nextUrl.clone();
+      url.pathname = rewritePath;
+      return NextResponse.rewrite(url, { request: { headers: requestHeaders } });
+    }
+  }
+
   return NextResponse.next({
     request: {
       headers: requestHeaders,

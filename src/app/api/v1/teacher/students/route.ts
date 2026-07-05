@@ -68,6 +68,13 @@ export async function POST(request: NextRequest) {
     if (!teacherId) {
       return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
     }
+    // Student account creation is Admin-only (v9.2 governance)
+    if (!isAdminRequest(request)) {
+      return NextResponse.json(
+        { error: "FORBIDDEN", message: "Only admins can create student accounts" },
+        { status: 403 }
+      );
+    }
 
     const body = await request.json();
     const { username, fullName, email } = body;

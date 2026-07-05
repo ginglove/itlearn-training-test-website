@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ToastProvider } from "@/components/toast";
 
 export default function TeacherLayout({
@@ -12,6 +12,17 @@ export default function TeacherLayout({
   const router = useRouter();
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  // Admins reach these pages via the /admin/exams and /admin/sessions rewrites;
+  // show them the Admin Panel chrome instead of the teacher chrome.
+  const [isAdminUser, setIsAdminUser] = useState(false);
+  useEffect(() => {
+    try {
+      const user = JSON.parse(localStorage.getItem("user") || "null");
+      setIsAdminUser(user?.role === "ADMIN");
+    } catch {
+      setIsAdminUser(false);
+    }
+  }, []);
 
   const handleLogout = () => {
     document.cookie = "session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT;";
@@ -19,7 +30,23 @@ export default function TeacherLayout({
     router.push("/login");
   };
 
-  const navItems = [
+  const adminNavItems = [
+    { name: "Workspace Governance", href: "/admin" },
+    { name: "Manage Teachers", href: "/admin/teachers" },
+    { name: "Manage Students", href: "/admin/students" },
+    { name: "Manage Exams", href: "/admin/exams" },
+    { name: "Session Monitor", href: "/admin/sessions" },
+    { name: "Admin Settings", href: "/admin/settings" },
+  ].map((item) => ({
+    ...item,
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+      </svg>
+    ),
+  }));
+
+  const teacherNavItems = [
     {
       name: "Manage Exams",
       href: "/teacher",
@@ -58,8 +85,11 @@ export default function TeacherLayout({
     },
   ];
 
+  const navItems = isAdminUser ? adminNavItems : teacherNavItems;
+  const panelLabel = isAdminUser ? "Admin Panel" : "Teacher Panel";
+
   const isActive = (href: string) => {
-    if (href === "/teacher") return pathname === "/teacher";
+    if (href === "/teacher" || href === "/admin") return pathname === href;
     return pathname === href || pathname.startsWith(href + "/");
   };
 
@@ -73,7 +103,7 @@ export default function TeacherLayout({
           </div>
           <div>
             <span className="font-display font-extrabold tracking-tight text-white block text-sm leading-none">IT <span className="text-brand-500">LEARN</span></span>
-            <span className="text-[8px] text-text-tertiary font-mono uppercase tracking-widest leading-none mt-0.5 block">Teacher Panel</span>
+            <span className="text-[8px] text-text-tertiary font-mono uppercase tracking-widest leading-none mt-0.5 block">{panelLabel}</span>
           </div>
         </div>
         <button
@@ -135,7 +165,7 @@ export default function TeacherLayout({
               IT <span className="text-brand-500">LEARN</span>
             </span>
             <span className="text-[9px] text-text-tertiary font-mono uppercase tracking-widest mt-1 block">
-              Teacher Panel
+              {panelLabel}
             </span>
           </div>
         </div>

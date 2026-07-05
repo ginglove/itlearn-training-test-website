@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useState, useEffect, useRef } from "react";
+import StudentWorkspacesModal from "@/app/components/StudentWorkspacesModal";
 import { useRouter } from "next/navigation";
 
 interface Student {
@@ -20,6 +21,9 @@ export default function StudentsManagementPage() {
   
   // Message states
   const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
+
+  // Workspace membership modal
+  const [workspacesFor, setWorkspacesFor] = useState<Student | null>(null);
 
   // Bulk Upload states
   const [isUploading, setIsUploading] = useState(false);
@@ -278,21 +282,8 @@ export default function StudentsManagementPage() {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
           <div>
             <h1 className="text-3xl font-bold text-white tracking-tight">Manage Students</h1>
-            <p className="text-text-secondary mt-1 text-sm">Create, delete, and view all student accounts and their login status.</p>
+            <p className="text-text-secondary mt-1 text-sm">Students enrolled in your assigned workspaces. New accounts are created by an administrator.</p>
           </div>
-          <button 
-            onClick={() => {
-              setAddSuccessResult(null);
-              setAddError(null);
-              setIsAddModalOpen(true);
-            }}
-            className="premium-btn-primary flex items-center gap-2"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-            </svg>
-            Add Student
-          </button>
         </div>
 
         {/* Alerts */}
@@ -348,7 +339,7 @@ export default function StudentsManagementPage() {
                 </svg>
                 <h3 className="text-lg font-medium text-white mb-1">No Students Found</h3>
                 <p className="text-text-secondary text-sm">
-                  {searchQuery ? "Try searching for a different keyword." : "Add a student or upload a roster template to start."}
+                  {searchQuery ? "Try searching for a different keyword." : "Ask an administrator to create student accounts, then enroll them into your workspaces."}
                 </p>
               </div>
             ) : (
@@ -393,6 +384,15 @@ export default function StudentsManagementPage() {
                       </td>
                       <td className="py-4 px-4 text-right">
                         <div className="flex justify-end gap-1">
+                          <button
+                            onClick={() => setWorkspacesFor(student)}
+                            className="text-text-tertiary hover:text-brand-400 transition-colors p-1.5 rounded-lg hover:bg-brand-500/10"
+                            title="Manage workspaces"
+                          >
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1" />
+                            </svg>
+                          </button>
                           <button
                             onClick={() => openHistory(student)}
                             className="text-text-tertiary hover:text-blue-400 transition-colors p-1.5 rounded-lg hover:bg-blue-500/10"
@@ -439,47 +439,6 @@ export default function StudentsManagementPage() {
             </p>
           </div>
 
-          <div className="flex flex-col items-center justify-center border-dashed border-2 border-border-strong rounded-2xl p-10 hover:border-brand-500/40 transition-colors bg-bg-surface/30">
-            <div className="w-14 h-14 bg-bg-surface-elevated rounded-full flex items-center justify-center mb-4 text-brand-400">
-              <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m-9 1V4a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
-              </svg>
-            </div>
-            
-            <a
-              href="/templates/students_roster_template.xlsx"
-              download="students_roster_template.xlsx"
-              className="inline-flex items-center gap-2 text-xs font-semibold text-brand-400 hover:text-brand-300 transition-colors mb-4 group"
-            >
-              <svg
-                className="w-4 h-4 transform group-hover:translate-y-[1px] transition-transform"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-              </svg>
-              <span>Download Roster Template (.xlsx)</span>
-            </a>
-
-            <input 
-              type="file" 
-              accept=".xlsx"
-              className="hidden" 
-              ref={fileInputRef}
-              onChange={handleFileUpload}
-            />
-            
-            <button 
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isUploading}
-              className="premium-btn-primary mb-2"
-            >
-              {isUploading ? "Uploading roster..." : "Upload XLSX Roster"}
-            </button>
-            <p className="text-xs text-text-tertiary">Only standard .xlsx files matching template are accepted.</p>
-          </div>
-
           {bulkResult && (
             <div className="mt-6 bg-brand-500/10 border border-brand-500/20 rounded-xl p-5">
               <h3 className="text-base font-semibold text-brand-400 mb-1.5 flex items-center gap-2">
@@ -505,6 +464,22 @@ export default function StudentsManagementPage() {
         </div>
 
       </div>
+
+      {workspacesFor && (
+        <StudentWorkspacesModal
+          student={workspacesFor}
+          onClose={() => setWorkspacesFor(null)}
+          onSaved={({ added, removed, blocked }) => {
+            setWorkspacesFor(null);
+            setMessage(
+              blocked.length
+                ? { type: "error", text: `Added ${added}, removed ${removed}. Blocked: ${blocked.join("; ")}` }
+                : { type: "success", text: `Workspaces updated (added ${added}, removed ${removed}).` }
+            );
+            fetchStudents();
+          }}
+        />
+      )}
 
       {/* Add Student Overlay Modal */}
       {isAddModalOpen && (

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import StudentWorkspacesModal from "@/app/components/StudentWorkspacesModal";
 
 interface Student {
   id: string;
@@ -18,6 +19,7 @@ export default function AdminStudentsPage() {
   const [message, setMessage] = useState<string | null>(null);
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [workspacesFor, setWorkspacesFor] = useState<Student | null>(null);
   const [form, setForm] = useState({ username: "", fullName: "", email: "" });
   const [created, setCreated] = useState<{ fullName: string; temporaryPassword: string } | null>(null);
 
@@ -102,6 +104,7 @@ export default function AdminStudentsPage() {
                 <th className="py-2 px-2">Email</th>
                 <th className="py-2 px-2">Active Workspaces</th>
                 <th className="py-2 px-2">First Login Pending</th>
+                <th className="py-2 px-2"></th>
               </tr>
             </thead>
             <tbody>
@@ -120,11 +123,19 @@ export default function AdminStudentsPage() {
                       <span className="text-text-tertiary text-xs font-mono">no</span>
                     )}
                   </td>
+                  <td className="py-3 px-2 text-right">
+                    <button
+                      onClick={() => setWorkspacesFor(s)}
+                      className="text-brand-400 hover:text-brand-300 text-xs transition-colors whitespace-nowrap"
+                    >
+                      Workspaces
+                    </button>
+                  </td>
                 </tr>
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="py-10 text-center text-text-secondary">
+                  <td colSpan={5} className="py-10 text-center text-text-secondary">
                     No students found.
                   </td>
                 </tr>
@@ -132,6 +143,22 @@ export default function AdminStudentsPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {workspacesFor && (
+        <StudentWorkspacesModal
+          student={workspacesFor}
+          onClose={() => setWorkspacesFor(null)}
+          onSaved={({ added, removed, blocked }) => {
+            setWorkspacesFor(null);
+            setMessage(
+              blocked.length
+                ? `Added ${added}, removed ${removed}. Blocked: ${blocked.join("; ")}`
+                : null
+            );
+            fetchStudents();
+          }}
+        />
       )}
 
       {isCreateOpen && (
