@@ -144,6 +144,11 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
   const [report, setReport] = useState<any>(null);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
+  // Edit workspace modal (name, days, dates, weekly schedule)
+  const [isEditWsOpen, setIsEditWsOpen] = useState(false);
+  const [wsForm, setWsForm] = useState({ name: "", description: "", totalDays: "", startDate: "", endDate: "" });
+  const [wsScheduleDays, setWsScheduleDays] = useState<number[]>([]);
+
   const archived = workspace?.status === "ARCHIVED";
 
   const fetchWorkspace = useCallback(async () => {
@@ -498,6 +503,43 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
     }
   };
 
+  const openEditWorkspace = () => {
+    if (!workspace) return;
+    setWsForm({
+      name: workspace.name,
+      description: workspace.description || "",
+      totalDays: String(workspace.totalDays || ""),
+      startDate: workspace.startDate || "",
+      endDate: workspace.endDate || "",
+    });
+    setWsScheduleDays(workspace.scheduleDays || []);
+    setIsEditWsOpen(true);
+  };
+
+  const saveWorkspace = async () => {
+    const res = await fetch(`/api/v1/teacher/workspaces/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: wsForm.name,
+        description: wsForm.description,
+        totalDays: wsForm.totalDays ? parseInt(wsForm.totalDays) : 0,
+        startDate: wsForm.startDate || null,
+        endDate: wsForm.endDate || null,
+        scheduleDays: wsScheduleDays,
+      }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setIsEditWsOpen(false);
+      notify("success", "Workspace updated. Use \"Auto-generate remaining days\" in the Timetable tab to apply the new schedule.");
+      fetchWorkspace();
+      fetchDays();
+    } else {
+      notify("error", data.message || "Failed to update workspace.");
+    }
+  };
+
   // ── Archive & report ──
   const archiveWorkspace = async () => {
     if (!confirm("Archive this workspace? This is irreversible and makes it read-only.")) return;
@@ -577,16 +619,31 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
           )}
           <p className="text-text-tertiary text-xs font-mono mt-1">
             Planned {workspace.totalDays} days
+            {workspace.scheduleDays?.length
+              ? ` · ${workspace.scheduleDays.length} days/week (${workspace.scheduleDays
+                  .slice()
+                  .sort()
+                  .map((d) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d])
+                  .join(", ")})`
+              : ""}
             {workspace.startDate ? ` · ${workspace.startDate} → ${workspace.endDate || "?"}` : ""}
           </p>
         </div>
         {!archived && (
-          <button
-            onClick={archiveWorkspace}
-            className="px-4 py-2 text-sm rounded-xl border border-rose-500/30 text-rose-400 hover:bg-rose-500/10 transition-all"
-          >
-            Archive Workspace
-          </button>
+          <div className="flex gap-2 shrink-0">
+            <button
+              onClick={openEditWorkspace}
+              className="px-4 py-2 text-sm rounded-xl border border-brand-500/30 text-brand-400 hover:bg-brand-500/10 transition-all"
+            >
+              Edit Workspace
+            </button>
+            <button
+              onClick={archiveWorkspace}
+              className="px-4 py-2 text-sm rounded-xl border border-rose-500/30 text-rose-400 hover:bg-rose-500/10 transition-all"
+            >
+              Archive Workspace
+            </button>
+          </div>
         )}
       </div>
 
@@ -1224,6 +1281,108 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
                 className="px-5 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white rounded-xl font-semibold text-sm transition-all"
               >
                 Add {selectedStudents.length || ""}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Edit workspace modal ── */}
+      {isEditWsOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-bg-surface border border-border-strong rounded-2xl p-6 w-full max-w-md max-h-[85vh] overflow-y-auto">
+            <h2 className="text-lg font-semibold text-white mb-4">Edit Workspace</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs text-text-secondary mb-1.5">Class Name *</label>
+                <input
+                  value={wsForm.name}
+                  onChange={(e) => setWsForm({ ...wsForm, name: e.target.value })}
+                  className="w-full bg-bg-base border border-border-strong rounded-xl px-4 py-2.5 text-sm text-white focus:border-brand-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-text-secondary mb-1.5">Description</label>
+                <textarea
+                  value={wsForm.description}
+                  onChange={(e) => setWsForm({ ...wsForm, description: e.target.value })}
+                  rows={2}
+                  className="w-full bg-bg-base border border-border-strong rounded-xl px-4 py-2.5 text-sm text-white focus:border-brand-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-text-secondary mb-1.5">Total Days</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={wsForm.totalDays}
+                  onChange={(e) => setWsForm({ ...wsForm, totalDays: e.target.value })}
+                  className="w-full bg-bg-base border border-border-strong rounded-xl px-3 py-2.5 text-sm text-white focus:border-brand-500 focus:outline-none"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <DateTimePicker
+                  mode="date"
+                  label="Start Date"
+                  value={wsForm.startDate}
+                  onChange={(val) => setWsForm({ ...wsForm, startDate: val })}
+                />
+                <DateTimePicker
+                  mode="date"
+                  label="End Date"
+                  value={wsForm.endDate}
+                  onChange={(val) => setWsForm({ ...wsForm, endDate: val })}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-text-secondary mb-1.5">Class Days per Week</label>
+                <div className="flex gap-1.5 flex-wrap">
+                  {[
+                    { d: 1, label: "Mon" },
+                    { d: 2, label: "Tue" },
+                    { d: 3, label: "Wed" },
+                    { d: 4, label: "Thu" },
+                    { d: 5, label: "Fri" },
+                    { d: 6, label: "Sat" },
+                    { d: 0, label: "Sun" },
+                  ].map(({ d, label }) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() =>
+                        setWsScheduleDays((prev) =>
+                          prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]
+                        )
+                      }
+                      className={`px-3 py-1.5 rounded-lg text-xs font-mono border transition-all ${
+                        wsScheduleDays.includes(d)
+                          ? "bg-brand-500/15 border-brand-500/40 text-brand-400"
+                          : "border-border-strong text-text-tertiary hover:text-white"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-text-tertiary text-[11px] mt-1.5">
+                  The timetable generates class days on these weekdays from the start date until
+                  Total Days is reached.
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => setIsEditWsOpen(false)}
+                className="px-4 py-2 text-sm text-text-secondary hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveWorkspace}
+                disabled={!wsForm.name.trim()}
+                className="px-5 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white rounded-xl font-semibold text-sm transition-all"
+              >
+                Save
               </button>
             </div>
           </div>
