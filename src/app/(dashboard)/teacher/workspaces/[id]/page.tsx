@@ -474,7 +474,11 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
     const res = await fetch(`/api/v1/teacher/workspaces/${id}/activities/${editActivity.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(editActivityForm),
+      body: JSON.stringify(
+        editActivity.examId
+          ? { title: editActivityForm.title, description: editActivityForm.description }
+          : editActivityForm
+      ),
     });
     const data = await res.json();
     if (res.ok) {
@@ -494,20 +498,6 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
     const data = await res.json();
     if (res.ok) fetchActivities();
     else notify("error", data.message || "Failed to remove activity.");
-  };
-
-  const resyncActivityTypes = async () => {
-    const res = await fetch(`/api/v1/teacher/workspaces/${id}/activities/resync-types`, {
-      method: "POST",
-    });
-    const data = await res.json();
-    if (res.ok) {
-      notify("success", `Types synced from exam session types (${data.updated} updated).`);
-      fetchActivities();
-      if (tab === "analytics") fetchAnalytics();
-    } else {
-      notify("error", data.message || "Failed to sync types.");
-    }
   };
 
   const removeSelectedActivities = async () => {
@@ -967,13 +957,6 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
                     Remove Selected ({selectedActivities.length})
                   </button>
                 )}
-                <button
-                  onClick={resyncActivityTypes}
-                  title="Re-derive each activity's type from its exam's session type"
-                  className="px-4 py-2 rounded-xl border border-border-strong text-text-secondary hover:text-white text-sm transition-all"
-                >
-                  Sync types from exams
-                </button>
                 <button
                   onClick={openAssign}
                   className="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-xl text-sm font-semibold transition-all"
@@ -1577,23 +1560,29 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
             <h2 className="text-lg font-semibold text-white mb-4">Edit Activity</h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-xs text-text-secondary mb-1.5">Type *</label>
-                <select
-                  value={editActivityForm.activityType}
-                  onChange={(e) =>
-                    setEditActivityForm({ ...editActivityForm, activityType: e.target.value })
-                  }
-                  className="w-full bg-bg-base border border-border-strong rounded-xl px-3 py-2.5 text-sm text-white focus:border-brand-500 focus:outline-none"
-                >
-                  <option value="EXERCISE">Exercise</option>
-                  <option value="HOMEWORK">Homework</option>
-                  <option value="QUIZ" disabled={!editActivity.examId}>
-                    Quiz{!editActivity.examId ? " (needs an exam)" : ""}
-                  </option>
-                  <option value="ASSESSMENT" disabled={!editActivity.examId}>
-                    Assessment{!editActivity.examId ? " (needs an exam)" : ""}
-                  </option>
-                </select>
+                <label className="block text-xs text-text-secondary mb-1.5">Type</label>
+                {editActivity.examId ? (
+                  <div>
+                    <span className={`inline-block text-[10px] font-mono px-2 py-1 rounded-full border ${TYPE_BADGE[editActivity.activityType]}`}>
+                      {editActivity.activityType}
+                    </span>
+                    <p className="text-text-tertiary text-[11px] mt-1.5">
+                      Synced automatically from the exam&apos;s session type. Change the session
+                      type on the exam to change it.
+                    </p>
+                  </div>
+                ) : (
+                  <select
+                    value={editActivityForm.activityType}
+                    onChange={(e) =>
+                      setEditActivityForm({ ...editActivityForm, activityType: e.target.value })
+                    }
+                    className="w-full bg-bg-base border border-border-strong rounded-xl px-3 py-2.5 text-sm text-white focus:border-brand-500 focus:outline-none"
+                  >
+                    <option value="EXERCISE">Exercise</option>
+                    <option value="HOMEWORK">Homework</option>
+                  </select>
+                )}
               </div>
               <div>
                 <label className="block text-xs text-text-secondary mb-1.5">Title *</label>

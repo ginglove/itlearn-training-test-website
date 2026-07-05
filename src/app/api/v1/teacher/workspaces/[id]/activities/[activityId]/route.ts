@@ -69,8 +69,18 @@ export async function PUT(
           { status: 400 }
         );
       }
+      // Exam-backed activities always follow the exam's session type
+      if (activity.examId) {
+        return NextResponse.json(
+          {
+            error: "VALIDATION_ERROR",
+            message: "The type of an exam-backed activity follows the exam's session type; change it on the exam.",
+          },
+          { status: 400 }
+        );
+      }
       // QUIZ/ASSESSMENT must stay exam-backed (§7.1)
-      if (["QUIZ", "ASSESSMENT"].includes(activityType) && !activity.examId) {
+      if (["QUIZ", "ASSESSMENT"].includes(activityType)) {
         return NextResponse.json(
           { error: "VALIDATION_ERROR", message: `${activityType} activities require a linked exam` },
           { status: 400 }

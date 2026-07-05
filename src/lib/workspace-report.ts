@@ -75,13 +75,27 @@ function deriveSubmissionStatus(sub: SubmissionRow | undefined, examEndTime: Dat
   return "IN_PROGRESS";
 }
 
-async function fetchExamEndTimes(examIds: string[]) {
-  if (examIds.length === 0) return new Map<string, Date>();
+/** Activity type always follows the exam's session type for exam-backed activities. */
+export function activityTypeFromSession(sessionType: string): "QUIZ" | "ASSESSMENT" | "EXERCISE" | "HOMEWORK" {
+  switch (sessionType) {
+    case "FINAL":
+      return "ASSESSMENT";
+    case "PRACTICE":
+      return "EXERCISE";
+    case "HOMEWORK":
+      return "HOMEWORK";
+    default:
+      return "QUIZ";
+  }
+}
+
+async function fetchExamMeta(examIds: string[]) {
+  if (examIds.length === 0) return new Map<string, { endTime: Date; sessionType: string }>();
   const rows = await db
-    .select({ id: exams.id, endTime: exams.endTime })
+    .select({ id: exams.id, endTime: exams.endTime, sessionType: exams.sessionType })
     .from(exams)
     .where(inArray(exams.id, examIds));
-  return new Map(rows.map((r) => [r.id, r.endTime]));
+  return new Map(rows.map((r) => [r.id, { endTime: r.endTime, sessionType: r.sessionType }]));
 }
 
 /** Per-student activity list with derived status and score (spec 7.3). */
@@ -121,7 +135,7 @@ export async function buildStudentActivityList(workspaceId: string, studentId: s
   const latestSubmission = new Map<string, (typeof submissions)[number]>();
   for (const s of submissions) latestSubmission.set(s.examId, s);
 
-  const endTimeByExam = await fetchExamEndTimes(examIds);
+  const examMeta = await fetchExamMeta(examIds);
 
   // Standalone (non exam-backed) activity attempts for this student
   const standaloneIds = activities.filter((a) => !a.examId).map((a) => a.id);
@@ -145,7 +159,7 @@ export async function buildStudentActivityList(workspaceId: string, studentId: s
 
     if (a.examId) {
       const sub = latestSubmission.get(a.examId);
-      status = deriveSubmissionStatus(sub, endTimeByExam.get(a.examId));
+      status = deriveSubmissionStatus(sub, examMeta.get(a.examId)?.endTime);
       if (sub?.submittedAt) {
         submittedAt = sub.submittedAt.toISOString();
         const maxPoints = maxPointsByExam.get(a.examId) ?? 0;
@@ -165,7 +179,10 @@ export async function buildStudentActivityList(workspaceId: string, studentId: s
     return {
       id: a.id,
       examId: a.examId,
-      activityType: a.activityType,
+      // Exam-backed activities always report the type derived from the exam
+      activityType: a.examId
+        ? activityTypeFromSession(examMeta.get(a.examId)?.sessionType ?? "QUIZ")
+        : a.activityType,
       title: a.title,
       description: a.description,
       dueDate: a.dueDate,
@@ -257,7 +274,7 @@ export async function buildWorkspaceReport(workspaceId: string): Promise<Workspa
     latestSubmission.set(`${s.examId}:${s.studentId}`, s);
   }
 
-  const endTimeByExam = await fetchExamEndTimes(examIds);
+  const examMeta = await fetchExamMeta(examIds);
 
   // Standalone (non exam-backed) activity attempts across all students
   const standaloneActivityIds = activities.filter((a) => !a.examId).map((a) => a.id);
@@ -293,7 +310,7 @@ export async function buildWorkspaceReport(workspaceId: string): Promise<Workspa
 
       if (a.examId) {
         const sub = latestSubmission.get(`${a.examId}:${m.studentId}`);
-        submissionStatus = deriveSubmissionStatus(sub, endTimeByExam.get(a.examId));
+        submissionStatus = deriveSubmissionStatus(sub, examMeta.get(a.examId)?.endTime);
         if (sub?.submittedAt) {
           submittedAt = sub.submittedAt.toISOString();
           const maxPoints = maxPointsByExam.get(a.examId) ?? 0;
@@ -313,7 +330,9 @@ export async function buildWorkspaceReport(workspaceId: string): Promise<Workspa
       return {
         activityId: a.id,
         title: a.title,
-        type: a.activityType,
+        type: a.examId
+          ? activityTypeFromSession(examMeta.get(a.examId)?.sessionType ?? "QUIZ")
+          : a.activityType,
         submissionStatus,
         scorePercentage,
         submittedAt,

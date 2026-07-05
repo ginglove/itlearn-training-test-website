@@ -4,6 +4,7 @@ import { workspaceActivities, exams, teachingDays } from "@/db/schema";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { getUserId, isAdminRequest } from "@/lib/get-user-id";
 import { getOwnedWorkspace } from "@/lib/workspace";
+import { activityTypeFromSession } from "@/lib/workspace-report";
 
 const VALID_TYPES = ["EXERCISE", "HOMEWORK", "ASSESSMENT", "QUIZ"] as const;
 type ActivityType = (typeof VALID_TYPES)[number];
@@ -29,6 +30,7 @@ export async function GET(
       .select({
         activity: workspaceActivities,
         examTitle: exams.title,
+        examSessionType: exams.sessionType,
         dayNumber: teachingDays.dayNumber,
       })
       .from(workspaceActivities)
@@ -37,10 +39,27 @@ export async function GET(
       .where(eq(workspaceActivities.workspaceId, id))
       .orderBy(workspaceActivities.assignedAt);
 
+    // Exam-backed activities always follow the exam's session type. Persist any
+    // drift lazily so exports and raw queries stay consistent too.
+    const result = rows.map((r) => {
+      const derivedType = r.activity.examId
+        ? activityTypeFromSession(r.examSessionType ?? "QUIZ")
+        : r.activity.activityType;
+      return { row: r, derivedType };
+    });
+    const stale = result.filter((r) => r.row.activity.activityType !== r.derivedType);
+    for (const r of stale) {
+      await db
+        .update(workspaceActivities)
+        .set({ activityType: r.derivedType })
+        .where(eq(workspaceActivities.id, r.row.activity.id));
+    }
+
     return NextResponse.json({
       status: "SUCCESS",
-      activities: rows.map((r) => ({
+      activities: result.map(({ row: r, derivedType }) => ({
         ...r.activity,
+        activityType: derivedType,
         examTitle: r.examTitle,
         dayNumber: r.dayNumber,
       })),
