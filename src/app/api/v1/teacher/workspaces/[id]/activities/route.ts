@@ -79,7 +79,8 @@ export async function POST(
     const body = await request.json();
     const { activityType, title, description, examId, teachingDayId, dueDate } = body;
 
-    if (!VALID_TYPES.includes(activityType)) {
+    const bulkRequest = Array.isArray(body.examIds) && body.examIds.length > 0;
+    if (!bulkRequest && !VALID_TYPES.includes(activityType)) {
       return NextResponse.json(
         { error: "VALIDATION_ERROR", message: "Invalid activityType" },
         { status: 400 }
@@ -105,7 +106,7 @@ export async function POST(
       }
 
       const ownedExams = await db
-        .select({ id: exams.id, title: exams.title })
+        .select({ id: exams.id, title: exams.title, sessionType: exams.sessionType })
         .from(exams)
         .where(
           and(
@@ -127,6 +128,13 @@ export async function POST(
         );
       const alreadyAssigned = new Set(existing.map((e) => e.examId));
 
+      // Each exam's session type determines the activity type:
+      // QUIZ→QUIZ, FINAL→ASSESSMENT, PRACTICE→EXERCISE, HOMEWORK→HOMEWORK
+      const typeFromSession = (sessionType: string) =>
+        (({ QUIZ: "QUIZ", FINAL: "ASSESSMENT", PRACTICE: "EXERCISE", HOMEWORK: "HOMEWORK" }) as const)[
+          sessionType as "QUIZ" | "FINAL" | "PRACTICE" | "HOMEWORK"
+        ] ?? "QUIZ";
+
       const toCreate = examIds.filter((eid) => ownedById.has(eid) && !alreadyAssigned.has(eid));
       if (toCreate.length > 0) {
         await db.insert(workspaceActivities).values(
@@ -134,7 +142,7 @@ export async function POST(
             workspaceId: id,
             examId: eid,
             teachingDayId: teachingDayId || null,
-            activityType,
+            activityType: typeFromSession(ownedById.get(eid)!.sessionType),
             title: ownedById.get(eid)!.title,
             description: description || null,
             dueDate: dueDate ? new Date(dueDate) : null,

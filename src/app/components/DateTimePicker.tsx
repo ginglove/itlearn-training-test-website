@@ -11,6 +11,7 @@ interface DateTimePickerProps {
   mode?: "datetime" | "date";
   maxDate?: string; // YYYY-MM-DD; days after this are disabled (date mode)
   compact?: boolean; // smaller trigger for toolbar usage
+  align?: "left" | "right"; // popup alignment relative to the trigger
 }
 
 // Parse YYYY-MM-DD as a local date (new Date("YYYY-MM-DD") would be UTC)
@@ -29,6 +30,7 @@ export default function DateTimePicker({
   mode = "datetime",
   maxDate,
   compact = false,
+  align = "left",
 }: DateTimePickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -257,7 +259,7 @@ export default function DateTimePicker({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.95 }}
             transition={{ duration: 0.15, ease: "easeOut" }}
-            className="absolute left-0 z-50 mt-2 w-[340px] glass-card p-5 bg-bg-surface/95 border border-border-strong shadow-2xl backdrop-blur-xl"
+            className={`absolute ${align === "right" ? "right-0" : "left-0"} z-50 mt-2 w-[340px] max-w-[calc(100vw-2rem)] glass-card p-5 bg-bg-surface/95 border border-border-strong shadow-2xl backdrop-blur-xl`}
           >
             {/* Header: Month & Year Selector */}
             <div className="flex items-center justify-between mb-4">

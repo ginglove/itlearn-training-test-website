@@ -347,6 +347,14 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
     }
   };
 
+  useEffect(() => {
+    // If the selected roll-call day was marked teacher-absent, clear it
+    if (rollCallDayId && days.some((d) => d.id === rollCallDayId && d.teacherAbsent)) {
+      setRollCallDayId("");
+      setRollCall([]);
+    }
+  }, [days, rollCallDayId]);
+
   const markTeacherAbsent = async (day: TeachingDay) => {
     if (!confirm(`Mark Day ${day.dayNumber} (${day.scheduledDate}) as teacher absent? A makeup day will be added at the end of the timetable.`)) return;
     const res = await fetch(`/api/v1/teacher/workspaces/${id}/timetable/${day.id}/absence`, {
@@ -383,15 +391,12 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
     if (res.ok) setRollCall((await res.json()).rollCall || []);
   };
 
-  const quickRollCall = () => {
-    setRollCall((rows) => rows.map((r) => ({ ...r, status: r.status ?? "PRESENT" })));
-  };
-
-  const saveRollCall = async () => {
-    const records = rollCall
+  // Roll call auto-saves on every change — no separate Save button
+  const persistRollCall = async (rows: RollCallRow[]) => {
+    const records = rows
       .filter((r) => r.status)
       .map((r) => ({ studentId: r.studentId, status: r.status, note: r.note || undefined }));
-    if (records.length === 0) return notify("error", "Mark at least one student.");
+    if (records.length === 0) return;
     setIsSavingRollCall(true);
     try {
       const res = await fetch(`/api/v1/teacher/workspaces/${id}/timetable/${rollCallDayId}/rollcall`, {
@@ -399,16 +404,27 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ records }),
       });
-      const data = await res.json();
-      if (res.ok) {
-        notify("success", "Roll call saved.");
-        fetchDays();
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        notify("error", data?.message || "Failed to save roll call.");
       } else {
-        notify("error", data.message || "Failed to save roll call.");
+        fetchDays();
       }
     } finally {
       setIsSavingRollCall(false);
     }
+  };
+
+  const setStudentStatus = (index: number, status: RollCallRow["status"]) => {
+    const next = rollCall.map((row, i) => (i === index ? { ...row, status } : row));
+    setRollCall(next);
+    persistRollCall(next);
+  };
+
+  const quickRollCall = () => {
+    const next = rollCall.map((r) => ({ ...r, status: r.status ?? ("PRESENT" as const) }));
+    setRollCall(next);
+    persistRollCall(next);
   };
 
   // ── Activities ──
@@ -866,11 +882,13 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
               className="bg-bg-base border border-border-strong rounded-xl px-4 py-2.5 text-sm text-white focus:border-brand-500 focus:outline-none"
             >
               <option value="">Select a teaching day…</option>
-              {days.map((d) => (
-                <option key={d.id} value={d.id}>
-                  Day {d.dayNumber} — {d.scheduledDate} {d.hasRollCall ? "(recorded)" : ""}
-                </option>
-              ))}
+              {days
+                .filter((d) => !d.teacherAbsent)
+                .map((d) => (
+                  <option key={d.id} value={d.id}>
+                    Day {d.dayNumber} — {d.scheduledDate} {d.hasRollCall ? "(recorded)" : ""}
+                  </option>
+                ))}
             </select>
             {rollCallDayId && !archived && (
               <>
@@ -880,13 +898,9 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
                 >
                   Quick Roll Call (all present)
                 </button>
-                <button
-                  onClick={saveRollCall}
-                  disabled={isSavingRollCall}
-                  className="px-5 py-2.5 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white rounded-xl text-sm font-semibold transition-all md:ml-auto"
-                >
-                  {isSavingRollCall ? "Saving…" : "Save Roll Call"}
-                </button>
+                <span className="text-text-tertiary text-xs font-mono md:ml-auto self-center">
+                  {isSavingRollCall ? "Saving…" : "Changes save automatically"}
+                </span>
               </>
             )}
           </div>
@@ -903,11 +917,7 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
                       <button
                         key={s}
                         disabled={archived}
-                        onClick={() =>
-                          setRollCall((rows) =>
-                            rows.map((row, i) => (i === idx ? { ...row, status: s } : row))
-                          )
-                        }
+                        onClick={() => setStudentStatus(idx, s)}
                         className={`px-3 py-1.5 rounded-lg text-xs font-mono border transition-all ${
                           r.status === s
                             ? ATTENDANCE_COLORS[s]
@@ -1329,6 +1339,7 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
                 />
                 <DateTimePicker
                   mode="date"
+                  align="right"
                   label="End Date"
                   value={wsForm.endDate}
                   onChange={(val) => setWsForm({ ...wsForm, endDate: val })}
@@ -1573,6 +1584,8 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
               ) : (
                 <p className="text-text-tertiary text-xs">
                   {activityForm.examIds.length} activit(ies) will be created, titled after each exam.
+                  The activity type follows each exam&apos;s session type (Quiz Session → Quiz,
+                  Final Exam → Assessment, Practice → Exercise, Homework → Homework).
                 </p>
               )}
               <div>

@@ -32,11 +32,13 @@ export async function GET(request: NextRequest) {
     // regardless of the exam's global access_type
     const { linkedExamIds, accessibleExamIds } = await getWorkspaceExamAccess(studentId);
 
+    // Students only see exams of the classes they are enrolled in (workspace
+    // activities they can access per W1) plus exams directly assigned to them.
     const accessibleExams = allExams.filter(exam => {
       if (linkedExamIds.has(exam.id)) {
         return accessibleExamIds.has(exam.id);
       }
-      return exam.accessType === "ALL" || assignedExamIds.has(exam.id);
+      return assignedExamIds.has(exam.id);
     });
 
     const submissions = await db

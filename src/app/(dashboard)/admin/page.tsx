@@ -229,7 +229,7 @@ export default function AdminWorkspacesPage() {
         await fetch(`/api/v1/teacher/workspaces/${examsFor.id}/activities`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ examIds: toAdd, activityType: "QUIZ" }),
+          body: JSON.stringify({ examIds: toAdd }),
         });
       }
       if (toRemove.length > 0) {
@@ -459,6 +459,7 @@ export default function AdminWorkspacesPage() {
                 />
                 <DateTimePicker
                   mode="date"
+                  align="right"
                   label="End Date"
                   value={form.endDate}
                   onChange={(val) => setForm({ ...form, endDate: val })}
@@ -580,7 +581,7 @@ export default function AdminWorkspacesPage() {
           <div className="bg-bg-surface border border-border-strong rounded-2xl p-6 w-full max-w-md max-h-[80vh] flex flex-col">
             <h2 className="text-lg font-semibold text-white mb-1">Exams — {examsFor.name}</h2>
             <p className="text-text-secondary text-xs mb-4">
-              Tick to assign as a Quiz activity, untick to remove. Removals are skipped for exams
+              Tick to assign, untick to remove. Activity type follows each exam's session type. Removals are skipped for exams
               with student submissions.
             </p>
             <div className="overflow-y-auto flex-grow divide-y divide-border-strong">

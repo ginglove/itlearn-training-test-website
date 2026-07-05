@@ -82,8 +82,12 @@ export default function StudentExamsPage() {
     if (exam.submissionStatus === "PENDING") return "PENDING";
     if (exam.submissionStatus === "IN_PROGRESS") return "IN_PROGRESS";
     if (exam.attemptsCount >= exam.allowedAttempts) return "COMPLETED";
+    // Window already closed and never submitted anything: the exam is over
+    if (new Date(exam.endTime).getTime() < Date.now()) return "CLOSED";
     if (exam.isActive) return "ACTIVE";
-    return "UPCOMING";
+    // Not open yet
+    if (new Date(exam.startTime).getTime() > Date.now()) return "UPCOMING";
+    return "CLOSED";
   };
 
   const filtered = useMemo(() => {
@@ -100,6 +104,7 @@ export default function StudentExamsPage() {
         (statusFilter === "PENDING" && status === "PENDING") ||
         (statusFilter === "CANCELLED" && status === "CANCELLED") ||
         (statusFilter === "UPCOMING" && status === "UPCOMING") ||
+        (statusFilter === "CLOSED" && status === "CLOSED") ||
         (statusFilter === "COMPLETED" && status === "COMPLETED");
       return matchSession && matchSearch && matchStatus;
     });
@@ -152,6 +157,7 @@ export default function StudentExamsPage() {
               { value: "IN_PROGRESS", label: "In Progress" },
               { value: "PENDING", label: "Pending" },
               { value: "UPCOMING", label: "Upcoming" },
+              { value: "CLOSED", label: "Closed" },
               { value: "COMPLETED", label: "Completed" },
               { value: "CANCELLED", label: "Cancelled" },
             ].map((s) => (
@@ -215,6 +221,8 @@ export default function StudentExamsPage() {
                         <span className="text-xs font-bold text-text-tertiary bg-bg-surface-elevated px-2.5 py-0.5 rounded-full">Completed</span>
                       ) : status === "ACTIVE" ? (
                         <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full">Active</span>
+                      ) : status === "CLOSED" ? (
+                        <span className="text-xs font-bold text-text-tertiary bg-bg-surface-elevated border border-border-strong px-2.5 py-0.5 rounded-full">Closed</span>
                       ) : (
                         <span className="text-xs font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 rounded-full">Upcoming</span>
                       )}
@@ -274,6 +282,10 @@ export default function StudentExamsPage() {
                     ) : status === "ACTIVE" ? (
                       <button onClick={() => startExam(exam.id)} className="premium-btn-primary w-full text-sm">
                         {exam.attemptsCount > 0 ? `Start Attempt ${exam.attemptsCount + 1}` : "Start Exam"}
+                      </button>
+                    ) : status === "CLOSED" ? (
+                      <button disabled className="premium-btn-secondary w-full text-sm opacity-50 cursor-not-allowed">
+                        Closed {new Date(exam.endTime).toLocaleDateString()}
                       </button>
                     ) : (
                       <button disabled className="premium-btn-secondary w-full text-sm opacity-50 cursor-not-allowed">
