@@ -88,8 +88,8 @@ export default function WorkspaceSwitcher({
       <select
         value={activeId}
         onChange={(e) => handleChange(e.target.value)}
-        className="w-full bg-bg-base border border-border-strong rounded-xl px-3 py-2.5 text-sm text-white focus:border-brand-500 focus:outline-none cursor-pointer"
-        title="Filter the whole panel by class"
+        className="w-full bg-bg-base border border-border-strong rounded-xl pl-3 pr-7 py-2 text-xs text-white focus:border-brand-500 focus:outline-none cursor-pointer truncate"
+        title={selected ? selected.name : "Filter the whole panel by class"}
       >
         <option value="">All classes</option>
         {options.map((w) => (
@@ -99,13 +99,31 @@ export default function WorkspaceSwitcher({
           </option>
         ))}
       </select>
-      {selected && basePath && (
-        <button
-          onClick={() => router.push(`${basePath}/${selected.id}`)}
-          className="mt-2 w-full text-left text-xs text-brand-400 hover:text-brand-300 transition-colors px-0.5"
-        >
-          Open workspace →
-        </button>
+      {selected && (
+        <div className="mt-2.5 px-0.5">
+          <p className="text-white text-xs font-medium leading-snug break-words">
+            {selected.name}
+          </p>
+          <div className="flex items-center justify-between mt-1.5 gap-2">
+            <span
+              className={`text-[9px] font-mono px-1.5 py-0.5 rounded-full border ${
+                selected.status === "ACTIVE"
+                  ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-400"
+                  : "bg-bg-surface-elevated border-border-strong text-text-tertiary"
+              }`}
+            >
+              {selected.status}
+            </span>
+            {basePath && (
+              <button
+                onClick={() => router.push(`${basePath}/${selected.id}`)}
+                className="text-xs text-brand-400 hover:text-brand-300 transition-colors whitespace-nowrap"
+              >
+                Open workspace →
+              </button>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
