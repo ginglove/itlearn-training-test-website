@@ -38,6 +38,7 @@ export default function AdminWorkspacesPage() {
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [form, setForm] = useState({ name: "", description: "", totalDays: "", startDate: "", endDate: "" });
+  const [scheduleDays, setScheduleDays] = useState<number[]>([]);
 
   const [assignFor, setAssignFor] = useState<AdminWorkspace | null>(null);
   const [assignTeacherId, setAssignTeacherId] = useState("");
@@ -90,13 +91,20 @@ export default function AdminWorkspacesPage() {
         totalDays: form.totalDays ? parseInt(form.totalDays) : 0,
         startDate: form.startDate || undefined,
         endDate: form.endDate || undefined,
+        scheduleDays: scheduleDays.length ? scheduleDays : undefined,
       }),
     });
     const data = await res.json();
     if (res.ok) {
       setIsCreateOpen(false);
       setForm({ name: "", description: "", totalDays: "", startDate: "", endDate: "" });
-      notify("success", "Workspace created.");
+      setScheduleDays([]);
+      notify(
+        "success",
+        data.generatedDays
+          ? `Workspace created; ${data.generatedDays} teaching days generated automatically.`
+          : "Workspace created."
+      );
       fetchAll();
     } else {
       notify("error", data.message || "Failed to create workspace.");
@@ -455,6 +463,43 @@ export default function AdminWorkspacesPage() {
                   value={form.endDate}
                   onChange={(val) => setForm({ ...form, endDate: val })}
                 />
+              </div>
+              <div>
+                <label className="block text-xs text-text-secondary mb-1.5">
+                  Class Days per Week
+                </label>
+                <div className="flex gap-1.5 flex-wrap">
+                  {[
+                    { d: 1, label: "Mon" },
+                    { d: 2, label: "Tue" },
+                    { d: 3, label: "Wed" },
+                    { d: 4, label: "Thu" },
+                    { d: 5, label: "Fri" },
+                    { d: 6, label: "Sat" },
+                    { d: 0, label: "Sun" },
+                  ].map(({ d, label }) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() =>
+                        setScheduleDays((prev) =>
+                          prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]
+                        )
+                      }
+                      className={`px-3 py-1.5 rounded-lg text-xs font-mono border transition-all ${
+                        scheduleDays.includes(d)
+                          ? "bg-brand-500/15 border-brand-500/40 text-brand-400"
+                          : "border-border-strong text-text-tertiary hover:text-white"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-text-tertiary text-[11px] mt-1.5">
+                  With a start date and total days, the timetable is generated automatically on
+                  these weekdays.
+                </p>
               </div>
             </div>
             <div className="flex justify-end gap-3 mt-6">

@@ -60,7 +60,23 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { title, description, dueDate, teachingDayId } = body;
+    const { title, description, dueDate, teachingDayId, activityType } = body;
+
+    if (activityType !== undefined) {
+      if (!["EXERCISE", "HOMEWORK", "ASSESSMENT", "QUIZ"].includes(activityType)) {
+        return NextResponse.json(
+          { error: "VALIDATION_ERROR", message: "Invalid activityType" },
+          { status: 400 }
+        );
+      }
+      // QUIZ/ASSESSMENT must stay exam-backed (§7.1)
+      if (["QUIZ", "ASSESSMENT"].includes(activityType) && !activity.examId) {
+        return NextResponse.json(
+          { error: "VALIDATION_ERROR", message: `${activityType} activities require a linked exam` },
+          { status: 400 }
+        );
+      }
+    }
 
     if (teachingDayId) {
       const [day] = await db
@@ -79,6 +95,7 @@ export async function PUT(
     const [updated] = await db
       .update(workspaceActivities)
       .set({
+        ...(activityType !== undefined ? { activityType } : {}),
         ...(title !== undefined ? { title: String(title).trim() } : {}),
         ...(description !== undefined ? { description: description || null } : {}),
         ...(dueDate !== undefined ? { dueDate: dueDate ? new Date(dueDate) : null } : {}),

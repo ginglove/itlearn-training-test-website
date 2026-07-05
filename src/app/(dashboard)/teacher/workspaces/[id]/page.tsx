@@ -13,6 +13,7 @@ interface Workspace {
   totalDays: number;
   startDate: string | null;
   endDate: string | null;
+  scheduleDays: number[] | null;
 }
 interface Member {
   membershipId: string;
@@ -28,6 +29,7 @@ interface TeachingDay {
   scheduledDate: string;
   topic: string | null;
   notes: string | null;
+  teacherAbsent: boolean;
   hasRollCall: boolean;
 }
 interface Activity {
@@ -113,6 +115,8 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
   const [exams, setExams] = useState<{ id: string; title: string }[]>([]);
   const [isAssignOpen, setIsAssignOpen] = useState(false);
   const [selectedActivities, setSelectedActivities] = useState<string[]>([]);
+  const [editActivity, setEditActivity] = useState<Activity | null>(null);
+  const [editActivityForm, setEditActivityForm] = useState({ activityType: "EXERCISE", title: "", description: "" });
   const [activityForm, setActivityForm] = useState({
     activityType: "EXERCISE",
     title: "",
@@ -313,6 +317,38 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
     }
   };
 
+  const generateTimetable = async () => {
+    const res = await fetch(`/api/v1/teacher/workspaces/${id}/timetable/generate`, {
+      method: "POST",
+    });
+    const data = await res.json();
+    if (res.ok) {
+      notify("success", `Generated ${data.created} teaching day(s).`);
+      fetchDays();
+    } else {
+      notify("error", data.message || "Failed to generate timetable.");
+    }
+  };
+
+  const markTeacherAbsent = async (day: TeachingDay) => {
+    if (!confirm(`Mark Day ${day.dayNumber} (${day.scheduledDate}) as teacher absent? A makeup day will be added at the end of the timetable.`)) return;
+    const res = await fetch(`/api/v1/teacher/workspaces/${id}/timetable/${day.id}/absence`, {
+      method: "POST",
+    });
+    const data = await res.json();
+    if (res.ok) {
+      notify(
+        "success",
+        data.makeupDate
+          ? `Day marked absent; makeup day added on ${data.makeupDate}.`
+          : "Day marked absent."
+      );
+      fetchDays();
+    } else {
+      notify("error", data.message || "Failed to mark absence.");
+    }
+  };
+
   const deleteDay = async (dayId: string) => {
     const res = await fetch(`/api/v1/teacher/workspaces/${id}/timetable/${dayId}`, {
       method: "DELETE",
@@ -397,6 +433,24 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
       fetchActivities();
     } else {
       notify("error", data.message || "Failed to assign activity.");
+    }
+  };
+
+  const saveEditActivity = async () => {
+    if (!editActivity) return;
+    const res = await fetch(`/api/v1/teacher/workspaces/${id}/activities/${editActivity.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(editActivityForm),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setEditActivity(null);
+      notify("success", "Activity updated. Analytics reflect the new type immediately.");
+      fetchActivities();
+      if (tab === "analytics") fetchAnalytics();
+    } else {
+      notify("error", data.message || "Failed to update activity.");
     }
   };
 
@@ -622,7 +676,25 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
       {/* ── Timetable tab ── */}
       {tab === "timetable" && (
         <div className="bg-bg-surface border border-border-strong rounded-2xl p-5">
-          <h2 className="font-semibold text-white mb-4">Teaching Days</h2>
+          <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
+            <h2 className="font-semibold text-white">
+              Teaching Days{" "}
+              <span className="text-text-tertiary text-xs font-mono">
+                ({days.length}/{workspace.totalDays || "?"} scheduled)
+              </span>
+            </h2>
+            {!archived &&
+              workspace.scheduleDays &&
+              workspace.scheduleDays.length > 0 &&
+              days.length < workspace.totalDays && (
+                <button
+                  onClick={generateTimetable}
+                  className="px-4 py-2 rounded-xl border border-brand-500/30 text-brand-400 hover:bg-brand-500/10 text-sm font-semibold transition-all"
+                >
+                  Auto-generate remaining days
+                </button>
+              )}
+          </div>
           {!archived && (
             <div className="flex flex-col md:flex-row gap-3 mb-5">
               <div className="md:w-56">
@@ -658,11 +730,26 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
                       {d.dayNumber}
                     </span>
                     <div>
-                      <p className="text-white text-sm">{d.scheduledDate}</p>
+                      <p className={`text-sm ${d.teacherAbsent ? "text-text-tertiary line-through" : "text-white"}`}>
+                        {d.scheduledDate}
+                      </p>
                       <p className="text-text-tertiary text-xs">{d.topic || "No topic"}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-4">
+                    {d.teacherAbsent && (
+                      <span className="text-[10px] font-mono px-2 py-1 rounded-full bg-amber-500/10 border border-amber-500/25 text-amber-400">
+                        TEACHER ABSENT
+                      </span>
+                    )}
+                    {!archived && !d.teacherAbsent && !d.hasRollCall && (
+                      <button
+                        onClick={() => markTeacherAbsent(d)}
+                        className="text-amber-400 hover:text-amber-300 text-xs transition-colors"
+                      >
+                        Teacher Absent
+                      </button>
+                    )}
                     {d.hasRollCall && (
                       <span className="text-[10px] font-mono px-2 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-400">
                         ROLL CALL ✓
@@ -839,12 +926,27 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
                     </div>
                   </div>
                   {!archived && (
-                    <button
-                      onClick={() => removeActivity(a.id)}
-                      className="text-rose-400 hover:text-rose-300 text-xs transition-colors"
-                    >
-                      Remove
-                    </button>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => {
+                          setEditActivity(a);
+                          setEditActivityForm({
+                            activityType: a.activityType,
+                            title: a.title,
+                            description: a.description || "",
+                          });
+                        }}
+                        className="text-text-secondary hover:text-white text-xs transition-colors"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => removeActivity(a.id)}
+                        className="text-rose-400 hover:text-rose-300 text-xs transition-colors"
+                      >
+                        Remove
+                      </button>
+                    </div>
                   )}
                 </div>
               ))}
@@ -1163,6 +1265,70 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
               <button
                 onClick={saveEditDay}
                 disabled={!editDayForm.scheduledDate}
+                className="px-5 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white rounded-xl font-semibold text-sm transition-all"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Edit activity modal ── */}
+      {editActivity && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-bg-surface border border-border-strong rounded-2xl p-6 w-full max-w-md">
+            <h2 className="text-lg font-semibold text-white mb-4">Edit Activity</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs text-text-secondary mb-1.5">Type *</label>
+                <select
+                  value={editActivityForm.activityType}
+                  onChange={(e) =>
+                    setEditActivityForm({ ...editActivityForm, activityType: e.target.value })
+                  }
+                  className="w-full bg-bg-base border border-border-strong rounded-xl px-3 py-2.5 text-sm text-white focus:border-brand-500 focus:outline-none"
+                >
+                  <option value="EXERCISE">Exercise</option>
+                  <option value="HOMEWORK">Homework</option>
+                  <option value="QUIZ" disabled={!editActivity.examId}>
+                    Quiz{!editActivity.examId ? " (needs an exam)" : ""}
+                  </option>
+                  <option value="ASSESSMENT" disabled={!editActivity.examId}>
+                    Assessment{!editActivity.examId ? " (needs an exam)" : ""}
+                  </option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-text-secondary mb-1.5">Title *</label>
+                <input
+                  value={editActivityForm.title}
+                  onChange={(e) => setEditActivityForm({ ...editActivityForm, title: e.target.value })}
+                  className="w-full bg-bg-base border border-border-strong rounded-xl px-4 py-2.5 text-sm text-white focus:border-brand-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-text-secondary mb-1.5">Description</label>
+                <textarea
+                  value={editActivityForm.description}
+                  onChange={(e) =>
+                    setEditActivityForm({ ...editActivityForm, description: e.target.value })
+                  }
+                  rows={2}
+                  className="w-full bg-bg-base border border-border-strong rounded-xl px-4 py-2.5 text-sm text-white focus:border-brand-500 focus:outline-none"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => setEditActivity(null)}
+                className="px-4 py-2 text-sm text-text-secondary hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveEditActivity}
+                disabled={!editActivityForm.title.trim()}
                 className="px-5 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white rounded-xl font-semibold text-sm transition-all"
               >
                 Save

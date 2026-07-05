@@ -59,7 +59,10 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { name, description, totalDays, startDate, endDate } = body;
+    const { name, description, totalDays, startDate, endDate, scheduleDays } = body;
+    const validScheduleDays = Array.isArray(scheduleDays)
+      ? [...new Set(scheduleDays.map(Number).filter((d: number) => Number.isInteger(d) && d >= 0 && d <= 6))]
+      : undefined;
 
     const [updated] = await db
       .update(workspaces)
@@ -69,6 +72,9 @@ export async function PUT(
         ...(totalDays !== undefined ? { totalDays: parseInt(totalDays) || 0 } : {}),
         ...(startDate !== undefined ? { startDate: startDate || null } : {}),
         ...(endDate !== undefined ? { endDate: endDate || null } : {}),
+        ...(validScheduleDays !== undefined
+          ? { scheduleDays: validScheduleDays.length ? validScheduleDays : null }
+          : {}),
       })
       .where(eq(workspaces.id, id))
       .returning();

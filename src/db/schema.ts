@@ -263,6 +263,8 @@ export const workspaces = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     status: workspaceStatusEnum("status").notNull().default("ACTIVE"),
     totalDays: integer("total_days").notNull().default(0),
+    // Weekdays the class meets (0=Sunday .. 6=Saturday); drives timetable generation
+    scheduleDays: integer("schedule_days").array(),
     startDate: date("start_date"),
     endDate: date("end_date"),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -327,6 +329,8 @@ export const teachingDays = pgTable(
     scheduledDate: date("scheduled_date").notNull(),
     topic: varchar("topic", { length: 200 }),
     notes: text("notes"),
+    // Teacher absence: the day is not conducted and a makeup day is appended
+    teacherAbsent: boolean("teacher_absent").notNull().default(false),
   },
   (table) => [
     uniqueIndex("unique_workspace_day_number").on(table.workspaceId, table.dayNumber),

@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { workspaces, workspaceMemberships, workspaceTeachers, workspaceActivities, users } from "@/db/schema";
 import { count, desc, eq, isNotNull } from "drizzle-orm";
 import { getAdminId } from "@/lib/admin";
+import { generateTimetableDays } from "@/lib/workspace";
 
 // GET /api/v1/admin/workspaces — global workspace list with teacher assignments
 export async function GET(request: NextRequest) {
@@ -76,7 +77,10 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, description, totalDays, startDate, endDate } = body;
+    const { name, description, totalDays, startDate, endDate, scheduleDays } = body;
+    const validScheduleDays = Array.isArray(scheduleDays)
+      ? [...new Set(scheduleDays.map(Number).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))]
+      : null;
     if (!name || !String(name).trim()) {
       return NextResponse.json(
         { error: "VALIDATION_ERROR", message: "Workspace name is required" },
@@ -92,11 +96,18 @@ export async function POST(request: NextRequest) {
         totalDays: totalDays !== undefined ? parseInt(totalDays) || 0 : 0,
         startDate: startDate || null,
         endDate: endDate || null,
+        scheduleDays: validScheduleDays?.length ? validScheduleDays : null,
         createdBy: adminId,
       })
       .returning();
 
-    return NextResponse.json({ status: "SUCCESS", workspace }, { status: 201 });
+    // Auto-generate the timetable when a weekly schedule was provided
+    let generatedDays = 0;
+    if (workspace.startDate && workspace.totalDays > 0 && validScheduleDays?.length) {
+      generatedDays = await generateTimetableDays(workspace.id);
+    }
+
+    return NextResponse.json({ status: "SUCCESS", workspace, generatedDays }, { status: 201 });
   } catch (error) {
     console.error("Admin create workspace error:", error);
     return NextResponse.json(

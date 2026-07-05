@@ -28,6 +28,7 @@ export async function GET(
         scheduledDate: teachingDays.scheduledDate,
         topic: teachingDays.topic,
         notes: teachingDays.notes,
+        teacherAbsent: teachingDays.teacherAbsent,
         hasRollCall: sql<boolean>`EXISTS (SELECT 1 FROM ${attendanceRecords} WHERE ${attendanceRecords.teachingDayId} = ${teachingDays.id})`,
       })
       .from(teachingDays)

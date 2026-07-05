@@ -207,6 +207,7 @@ CREATE TABLE "workspaces" (
 	"created_by" uuid NOT NULL,
 	"status" "workspace_status" DEFAULT 'ACTIVE' NOT NULL,
 	"total_days" integer DEFAULT 0 NOT NULL,
+	"schedule_days" integer[],
 	"start_date" date,
 	"end_date" date,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
@@ -233,7 +234,8 @@ CREATE TABLE "teaching_days" (
 	"day_number" integer NOT NULL,
 	"scheduled_date" date NOT NULL,
 	"topic" varchar(200),
-	"notes" text
+	"notes" text,
+	"teacher_absent" boolean DEFAULT false NOT NULL
 );
 
 CREATE TABLE "attendance_records" (
