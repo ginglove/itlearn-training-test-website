@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { workspaces, workspaceMemberships, teachingDays } from "@/db/schema";
-import { desc, sql } from "drizzle-orm";
+import { count, desc, eq, sql } from "drizzle-orm";
 import { getUserId, isAdminRequest } from "@/lib/get-user-id";
 import { teacherAssignedCondition } from "@/lib/workspace";
 
@@ -13,21 +13,30 @@ export async function GET(request: NextRequest) {
     }
 
     const rows = await db
-      .select({
-        workspace: workspaces,
-        memberCount: sql<number>`(SELECT COUNT(*) FROM ${workspaceMemberships} WHERE ${workspaceMemberships.workspaceId} = ${workspaces.id} AND ${workspaceMemberships.status} = 'ACTIVE')`,
-        dayCount: sql<number>`(SELECT COUNT(*) FROM ${teachingDays} WHERE ${teachingDays.workspaceId} = ${workspaces.id})`,
-      })
+      .select({ workspace: workspaces })
       .from(workspaces)
       .where(isAdminRequest(request) ? sql`TRUE` : teacherAssignedCondition(teacherId))
       .orderBy(desc(workspaces.createdAt));
+
+    const memberCounts = await db
+      .select({ workspaceId: workspaceMemberships.workspaceId, total: count() })
+      .from(workspaceMemberships)
+      .where(eq(workspaceMemberships.status, "ACTIVE"))
+      .groupBy(workspaceMemberships.workspaceId);
+    const membersByWorkspace = new Map(memberCounts.map((r) => [r.workspaceId, Number(r.total)]));
+
+    const dayCounts = await db
+      .select({ workspaceId: teachingDays.workspaceId, total: count() })
+      .from(teachingDays)
+      .groupBy(teachingDays.workspaceId);
+    const daysByWorkspace = new Map(dayCounts.map((r) => [r.workspaceId, Number(r.total)]));
 
     return NextResponse.json({
       status: "SUCCESS",
       workspaces: rows.map((r) => ({
         ...r.workspace,
-        memberCount: Number(r.memberCount),
-        dayCount: Number(r.dayCount),
+        memberCount: membersByWorkspace.get(r.workspace.id) ?? 0,
+        dayCount: daysByWorkspace.get(r.workspace.id) ?? 0,
       })),
     });
   } catch (error) {

@@ -12,6 +12,7 @@ interface AdminWorkspace {
   startDate: string | null;
   endDate: string | null;
   memberCount: number;
+  examCount: number;
   teachers: { teacherId: string; fullName: string }[];
 }
 interface TeacherOption {
@@ -328,7 +329,7 @@ export default function AdminWorkspacesPage() {
                     </span>
                   </div>
                   <p className="text-text-tertiary text-xs font-mono mt-1">
-                    {ws.memberCount} students · {ws.totalDays} planned days
+                    {ws.memberCount} students · {ws.examCount} exams · {ws.totalDays} planned days
                     {ws.startDate ? ` · ${ws.startDate} → ${ws.endDate || "?"}` : ""}
                   </p>
                   <div className="flex flex-wrap gap-2 mt-3">

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { workspaces, workspaceMemberships, workspaceTeachers, users } from "@/db/schema";
-import { desc, eq, sql } from "drizzle-orm";
+import { workspaces, workspaceMemberships, workspaceTeachers, workspaceActivities, users } from "@/db/schema";
+import { count, desc, eq, isNotNull } from "drizzle-orm";
 import { getAdminId } from "@/lib/admin";
 
 // GET /api/v1/admin/workspaces — global workspace list with teacher assignments
@@ -13,16 +13,25 @@ export async function GET(request: NextRequest) {
     }
 
     const rows = await db
-      .select({
-        workspace: workspaces,
-        memberCount: sql<number>`(
-          SELECT COUNT(*) FROM ${workspaceMemberships}
-          WHERE ${workspaceMemberships.workspaceId} = ${workspaces.id}
-            AND ${workspaceMemberships.status} = 'ACTIVE'
-        )`,
-      })
+      .select({ workspace: workspaces })
       .from(workspaces)
       .orderBy(desc(workspaces.createdAt));
+
+    // Active member count per workspace
+    const memberCounts = await db
+      .select({ workspaceId: workspaceMemberships.workspaceId, total: count() })
+      .from(workspaceMemberships)
+      .where(eq(workspaceMemberships.status, "ACTIVE"))
+      .groupBy(workspaceMemberships.workspaceId);
+    const membersByWorkspace = new Map(memberCounts.map((r) => [r.workspaceId, Number(r.total)]));
+
+    // Exam-backed activity count per workspace
+    const examCounts = await db
+      .select({ workspaceId: workspaceActivities.workspaceId, total: count() })
+      .from(workspaceActivities)
+      .where(isNotNull(workspaceActivities.examId))
+      .groupBy(workspaceActivities.workspaceId);
+    const examsByWorkspace = new Map(examCounts.map((r) => [r.workspaceId, Number(r.total)]));
 
     const assignments = await db
       .select({
@@ -44,7 +53,8 @@ export async function GET(request: NextRequest) {
       status: "SUCCESS",
       workspaces: rows.map((r) => ({
         ...r.workspace,
-        memberCount: Number(r.memberCount),
+        memberCount: membersByWorkspace.get(r.workspace.id) ?? 0,
+        examCount: examsByWorkspace.get(r.workspace.id) ?? 0,
         teachers: byWorkspace.get(r.workspace.id) ?? [],
       })),
     });
