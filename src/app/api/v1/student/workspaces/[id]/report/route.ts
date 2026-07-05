@@ -4,7 +4,7 @@ import { workspaceClassReports } from "@/db/schema";
 import { desc, eq } from "drizzle-orm";
 import { getUserId } from "@/lib/get-user-id";
 import { getMemberWorkspace } from "@/lib/workspace";
-import type { WorkspaceReportData } from "@/lib/workspace-report";
+import { buildWorkspaceReport, type WorkspaceReportData } from "@/lib/workspace-report";
 
 // W9: student sees only their own section of the latest report, post-archive only
 export async function GET(
@@ -25,27 +25,22 @@ export async function GET(
         { status: 403 }
       );
     }
-    if (workspace.status !== "ARCHIVED") {
-      return NextResponse.json(
-        { error: "REPORT_NOT_GENERATED", message: "Report is available after the class ends" },
-        { status: 404 }
-      );
-    }
+    // Prefer the canonical archived snapshot; otherwise build the student's
+    // results live so they always see their current standing automatically.
+    const [report] =
+      workspace.status === "ARCHIVED"
+        ? await db
+            .select()
+            .from(workspaceClassReports)
+            .where(eq(workspaceClassReports.workspaceId, id))
+            .orderBy(desc(workspaceClassReports.generatedAt))
+            .limit(1)
+        : [undefined];
 
-    const [report] = await db
-      .select()
-      .from(workspaceClassReports)
-      .where(eq(workspaceClassReports.workspaceId, id))
-      .orderBy(desc(workspaceClassReports.generatedAt))
-      .limit(1);
-    if (!report) {
-      return NextResponse.json(
-        { error: "REPORT_NOT_GENERATED", message: "No report generated yet" },
-        { status: 404 }
-      );
-    }
-
-    const data = report.reportData as WorkspaceReportData;
+    const live = !report;
+    const data = report
+      ? (report.reportData as WorkspaceReportData)
+      : await buildWorkspaceReport(id);
     const mySection = data.students.find((s) => s.studentId === studentId);
     if (!mySection) {
       return NextResponse.json(
@@ -56,7 +51,8 @@ export async function GET(
 
     return NextResponse.json({
       status: "SUCCESS",
-      generatedAt: report.generatedAt,
+      live,
+      generatedAt: report ? report.generatedAt : data.generatedAt,
       workspaceName: data.workspaceName,
       totalScheduledDays: data.totalScheduledDays,
       totalConductedDays: data.totalConductedDays,

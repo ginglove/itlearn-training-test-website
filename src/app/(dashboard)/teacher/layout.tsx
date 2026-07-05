@@ -19,7 +19,14 @@ export default function TeacherLayout({
   useEffect(() => {
     try {
       const user = JSON.parse(localStorage.getItem("user") || "null");
-      setIsAdminUser(user?.role === "ADMIN");
+      const admin = user?.role === "ADMIN";
+      setIsAdminUser(admin);
+      // Admins have no class filter UI here — clear any leftover selection so
+      // Manage Exams / Session Monitor always show everything
+      if (admin && localStorage.getItem("activeWorkspaceId")) {
+        localStorage.removeItem("activeWorkspaceId");
+        window.dispatchEvent(new Event("active-workspace-changed"));
+      }
     } catch {
       setIsAdminUser(false);
     }

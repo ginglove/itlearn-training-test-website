@@ -185,3 +185,44 @@ export async function getWorkspaceExamIds(workspaceId: string): Promise<Set<stri
     .where(and(eq(workspaceActivities.workspaceId, workspaceId), isNotNull(workspaceActivities.examId)));
   return new Set(rows.map((r) => r.examId!));
 }
+
+
+/**
+ * Renumber teaching days so taught days count 1..K in date order and
+ * teacher-absent days are pushed to the end of the numbering (their number is
+ * not shown in the UI). Runs as two-phase updates to avoid unique collisions.
+ */
+export async function renumberTeachingDays(workspaceId: string): Promise<void> {
+  const { teachingDays } = await import("@/db/schema");
+  const days = await db
+    .select({
+      id: teachingDays.id,
+      scheduledDate: teachingDays.scheduledDate,
+      teacherAbsent: teachingDays.teacherAbsent,
+    })
+    .from(teachingDays)
+    .where(eq(teachingDays.workspaceId, workspaceId));
+  if (days.length === 0) return;
+
+  const byDate = [...days].sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate));
+  const taught = byDate.filter((d) => !d.teacherAbsent);
+  const absent = byDate.filter((d) => d.teacherAbsent);
+  const target = new Map<string, number>();
+  taught.forEach((d, i) => target.set(d.id, i + 1));
+  absent.forEach((d, i) => target.set(d.id, taught.length + i + 1));
+
+  await db.transaction(async (tx) => {
+    // Phase 1: park all numbers in negative space to avoid transient conflicts
+    let park = -1;
+    for (const d of byDate) {
+      await tx.update(teachingDays).set({ dayNumber: park-- }).where(eq(teachingDays.id, d.id));
+    }
+    // Phase 2: apply the final numbering
+    for (const d of byDate) {
+      await tx
+        .update(teachingDays)
+        .set({ dayNumber: target.get(d.id)! })
+        .where(eq(teachingDays.id, d.id));
+    }
+  });
+}

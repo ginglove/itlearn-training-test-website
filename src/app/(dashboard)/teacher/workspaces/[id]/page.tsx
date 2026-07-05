@@ -496,6 +496,20 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
     else notify("error", data.message || "Failed to remove activity.");
   };
 
+  const resyncActivityTypes = async () => {
+    const res = await fetch(`/api/v1/teacher/workspaces/${id}/activities/resync-types`, {
+      method: "POST",
+    });
+    const data = await res.json();
+    if (res.ok) {
+      notify("success", `Types synced from exam session types (${data.updated} updated).`);
+      fetchActivities();
+      if (tab === "analytics") fetchAnalytics();
+    } else {
+      notify("error", data.message || "Failed to sync types.");
+    }
+  };
+
   const removeSelectedActivities = async () => {
     if (selectedActivities.length === 0) return;
     if (!confirm(`Remove ${selectedActivities.length} selected activit(ies) from this workspace?`)) return;
@@ -812,7 +826,7 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
                 <div key={d.id} className="flex items-center justify-between py-3">
                   <div className="flex items-center gap-4">
                     <span className="w-10 h-10 rounded-xl bg-bg-surface-elevated border border-border-strong flex items-center justify-center text-brand-400 font-mono text-sm shrink-0">
-                      {d.dayNumber}
+                      {d.teacherAbsent ? "–" : d.dayNumber}
                     </span>
                     <div>
                       <p className={`text-sm ${d.teacherAbsent ? "text-text-tertiary line-through" : "text-white"}`}>
@@ -953,6 +967,13 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
                     Remove Selected ({selectedActivities.length})
                   </button>
                 )}
+                <button
+                  onClick={resyncActivityTypes}
+                  title="Re-derive each activity's type from its exam's session type"
+                  className="px-4 py-2 rounded-xl border border-border-strong text-text-secondary hover:text-white text-sm transition-all"
+                >
+                  Sync types from exams
+                </button>
                 <button
                   onClick={openAssign}
                   className="px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-xl text-sm font-semibold transition-all"
@@ -1208,12 +1229,102 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
               The workspace must be archived before a report can be generated.
             </p>
           )}
-          {report?.reportData && (
+          {report?.reportData && (() => {
+            const students: any[] = report.reportData.students || [];
+            const daily: any[] = report.reportData.dailySummary || [];
+            const scored = students.filter((st) => st.summary.averageScore !== null);
+            const classAvg = scored.length
+              ? Math.round((scored.reduce((sum, st) => sum + st.summary.averageScore, 0) / scored.length) * 10) / 10
+              : null;
+            const passCount = scored.filter((st) => st.summary.averageScore >= 50).length;
+            const avgAttendance = students.length
+              ? Math.round(
+                  (students.reduce((sum, st) => sum + st.attendance.attendanceRate, 0) / students.length) * 10
+                ) / 10
+              : 0;
+            const totalSubmissions = students.reduce((sum, st) => sum + st.summary.submittedCount, 0);
+            const maxPresent = Math.max(1, ...daily.map((d) => d.presentCount + d.lateCount));
+            return (
             <div className="overflow-x-auto">
-              <p className="text-text-tertiary text-xs font-mono mb-3">
+              <p className="text-text-tertiary text-xs font-mono mb-4">
                 Generated {new Date(report.generatedAt).toLocaleString()} · conducted{" "}
                 {report.totalConductedDays}/{report.totalScheduledDays} days
               </p>
+
+              {/* Summary cards */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                {[
+                  { label: "Class Average", value: classAvg !== null ? `${classAvg}%` : "—", detail: `${scored.length} graded student(s)` },
+                  { label: "Pass Rate", value: scored.length ? `${Math.round((passCount / scored.length) * 100)}%` : "—", detail: `${passCount}/${scored.length} at ≥50%` },
+                  { label: "Avg Attendance", value: `${avgAttendance}%`, detail: `${report.totalConductedDays} conducted days` },
+                  { label: "Submissions", value: totalSubmissions, detail: `${students.length} students` },
+                ].map((c) => (
+                  <div key={c.label} className="bg-bg-base border border-border-strong rounded-xl p-4 text-center">
+                    <p className="text-2xl font-bold text-white font-mono">{c.value}</p>
+                    <p className="text-text-secondary text-xs mt-1">{c.label}</p>
+                    <p className="text-text-tertiary text-[10px] mt-0.5">{c.detail}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Average score per student — horizontal bar chart */}
+              <div className="bg-bg-base border border-border-strong rounded-xl p-4 mb-6">
+                <h3 className="text-xs font-semibold text-text-tertiary font-mono uppercase tracking-wider mb-3">
+                  Average Score by Student
+                </h3>
+                <div className="space-y-2">
+                  {students.map((st) => (
+                    <div key={st.studentId} className="flex items-center gap-3">
+                      <span className="text-white text-xs w-40 truncate shrink-0">{st.fullName}</span>
+                      <div className="flex-grow h-3 bg-bg-surface-elevated rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${
+                            (st.summary.averageScore ?? 0) >= 80
+                              ? "bg-emerald-500"
+                              : (st.summary.averageScore ?? 0) >= 50
+                                ? "bg-amber-500"
+                                : "bg-rose-500"
+                          }`}
+                          style={{ width: `${Math.min(100, st.summary.averageScore ?? 0)}%` }}
+                        />
+                      </div>
+                      <span className="text-text-secondary text-xs font-mono w-12 text-right shrink-0">
+                        {st.summary.averageScore !== null ? `${st.summary.averageScore}%` : "—"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Attendance per day — column chart */}
+              {daily.length > 0 && (
+                <div className="bg-bg-base border border-border-strong rounded-xl p-4 mb-6">
+                  <h3 className="text-xs font-semibold text-text-tertiary font-mono uppercase tracking-wider mb-3">
+                    Attendance by Teaching Day (present + late)
+                  </h3>
+                  <div className="flex items-end gap-1 h-24 overflow-x-auto pb-1">
+                    {daily.map((d) => {
+                      const attended = d.presentCount + d.lateCount;
+                      return (
+                        <div key={d.teachingDayId} className="flex flex-col items-center gap-1 min-w-[22px]">
+                          <div className="w-4 flex flex-col justify-end h-16">
+                            <div
+                              className="w-full bg-brand-500/70 rounded-t"
+                              style={{ height: `${(attended / maxPresent) * 100}%` }}
+                              title={`${d.scheduledDate}: ${attended} attended, ${d.absentCount} absent`}
+                            />
+                          </div>
+                          <span className="text-text-tertiary text-[9px] font-mono">{d.dayNumber}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <h3 className="text-xs font-semibold text-text-tertiary font-mono uppercase tracking-wider mb-2">
+                Per-Student Details
+              </h3>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-text-tertiary text-xs font-mono text-left">
@@ -1243,7 +1354,8 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
                 </tbody>
               </table>
             </div>
-          )}
+            );
+          })()}
         </div>
       )}
 

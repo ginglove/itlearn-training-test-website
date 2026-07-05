@@ -1,13 +1,22 @@
 "use client";
 
 import { useRouter, usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ToastProvider } from "@/components/toast";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // The admin panel has no class filter — clear any selection left over from a
+  // teacher/student session in the same browser so admin lists show everything
+  useEffect(() => {
+    if (localStorage.getItem("activeWorkspaceId")) {
+      localStorage.removeItem("activeWorkspaceId");
+      window.dispatchEvent(new Event("active-workspace-changed"));
+    }
+  }, []);
 
   const handleLogout = () => {
     document.cookie = "session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT;";

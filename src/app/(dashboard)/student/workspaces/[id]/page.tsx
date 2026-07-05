@@ -386,8 +386,12 @@ export default function StudentWorkspaceDetailPage({
           ) : (
             <div>
               <p className="text-text-tertiary text-xs font-mono mb-4">
-                Generated {new Date(report.generatedAt).toLocaleString()} · conducted{" "}
-                {report.totalConductedDays}/{report.totalScheduledDays} days
+                {report.live ? (
+                  <span className="text-emerald-400">LIVE — updates automatically</span>
+                ) : (
+                  <>Generated {new Date(report.generatedAt).toLocaleString()}</>
+                )}{" "}
+                · conducted {report.totalConductedDays}/{report.totalScheduledDays} days
               </p>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
                 {[
@@ -425,6 +429,14 @@ export default function StudentWorkspaceDetailPage({
                       >
                         {a.submissionStatus}
                       </span>
+                      <div className="w-24 h-1.5 bg-bg-surface-elevated rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${
+                            (a.scorePercentage ?? 0) >= 50 ? "bg-emerald-500" : "bg-rose-500"
+                          }`}
+                          style={{ width: `${Math.min(100, a.scorePercentage ?? 0)}%` }}
+                        />
+                      </div>
                       <span className="text-xs font-mono text-text-secondary w-14 text-right">
                         {a.scorePercentage !== null ? `${a.scorePercentage}%` : "—"}
                       </span>

@@ -33,7 +33,7 @@ export async function GET(
       })
       .from(teachingDays)
       .where(eq(teachingDays.workspaceId, id))
-      .orderBy(teachingDays.dayNumber);
+      .orderBy(teachingDays.scheduledDate);
 
     return NextResponse.json({ status: "SUCCESS", teachingDays: days });
   } catch (error) {

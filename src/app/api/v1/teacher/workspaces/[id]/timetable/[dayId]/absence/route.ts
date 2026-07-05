@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { teachingDays } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { getUserId, isAdminRequest } from "@/lib/get-user-id";
-import { getOwnedWorkspace, appendMakeupDay } from "@/lib/workspace";
+import { getOwnedWorkspace, appendMakeupDay, renumberTeachingDays } from "@/lib/workspace";
 
 // POST — mark a teaching day as teacher-absent and auto-append a makeup day
 // after the current last day so the class still reaches its planned length.
@@ -46,6 +46,9 @@ export async function POST(
 
     await db.update(teachingDays).set({ teacherAbsent: true }).where(eq(teachingDays.id, dayId));
     const makeupDate = await appendMakeupDay(id);
+    // Subsequent days shift up so numbering counts taught days only
+    // (absent day 7 → the next class becomes day 7, and so on)
+    await renumberTeachingDays(id);
 
     return NextResponse.json({ status: "SUCCESS", makeupDate });
   } catch (error) {

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { teachingDays, attendanceRecords } from "@/db/schema";
-import { and, eq, gt, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getUserId, isAdminRequest } from "@/lib/get-user-id";
-import { getOwnedWorkspace } from "@/lib/workspace";
+import { getOwnedWorkspace, renumberTeachingDays } from "@/lib/workspace";
 
 async function getDay(workspaceId: string, dayId: string) {
   const [day] = await db
@@ -143,18 +143,9 @@ export async function DELETE(
       );
     }
 
-    await db.transaction(async (tx) => {
-      await tx.delete(teachingDays).where(eq(teachingDays.id, dayId));
-      // Two-phase shift to avoid transient unique(day_number) collisions
-      await tx
-        .update(teachingDays)
-        .set({ dayNumber: sql`-${teachingDays.dayNumber}` })
-        .where(and(eq(teachingDays.workspaceId, id), gt(teachingDays.dayNumber, day.dayNumber)));
-      await tx
-        .update(teachingDays)
-        .set({ dayNumber: sql`-${teachingDays.dayNumber} - 1` })
-        .where(and(eq(teachingDays.workspaceId, id), sql`${teachingDays.dayNumber} < 0`));
-    });
+    await db.delete(teachingDays).where(eq(teachingDays.id, dayId));
+    // W3: close the gap — taught days renumber 1..K in date order
+    await renumberTeachingDays(id);
 
     return NextResponse.json({ status: "SUCCESS" });
   } catch (error) {

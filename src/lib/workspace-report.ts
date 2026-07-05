@@ -206,7 +206,7 @@ export async function buildWorkspaceReport(workspaceId: string): Promise<Workspa
     .select()
     .from(teachingDays)
     .where(eq(teachingDays.workspaceId, workspaceId))
-    .orderBy(teachingDays.dayNumber);
+    .orderBy(teachingDays.scheduledDate);
   const dayIds = days.map((d) => d.id);
 
   const attendance = dayIds.length
