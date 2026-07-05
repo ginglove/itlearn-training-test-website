@@ -10,7 +10,7 @@ import {
   exams,
 } from "@/db/schema";
 import { and, eq, inArray, isNull, isNotNull, lte, sql } from "drizzle-orm";
-import { getUserId } from "@/lib/get-user-id";
+import { getUserId, isAdminRequest } from "@/lib/get-user-id";
 import { getOwnedWorkspace } from "@/lib/workspace";
 
 // W8: archive pre-check — no IN_PROGRESS submissions, all past days have roll call
@@ -25,7 +25,7 @@ export async function POST(
     }
     const { id } = await params;
 
-    const workspace = await getOwnedWorkspace(teacherId, id);
+    const workspace = await getOwnedWorkspace(teacherId, id, isAdminRequest(request));
     if (!workspace) {
       return NextResponse.json({ error: "WORKSPACE_NOT_FOUND" }, { status: 404 });
     }

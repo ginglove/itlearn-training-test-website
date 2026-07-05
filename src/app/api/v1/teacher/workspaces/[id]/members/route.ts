@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { workspaceMemberships, users } from "@/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
-import { getUserId } from "@/lib/get-user-id";
+import { getUserId, isAdminRequest } from "@/lib/get-user-id";
 import { getOwnedWorkspace } from "@/lib/workspace";
 
 export async function GET(
@@ -16,7 +16,7 @@ export async function GET(
     }
     const { id } = await params;
 
-    const workspace = await getOwnedWorkspace(teacherId, id);
+    const workspace = await getOwnedWorkspace(teacherId, id, isAdminRequest(request));
     if (!workspace) {
       return NextResponse.json({ error: "WORKSPACE_NOT_FOUND" }, { status: 404 });
     }
@@ -57,7 +57,7 @@ export async function POST(
     }
     const { id } = await params;
 
-    const workspace = await getOwnedWorkspace(teacherId, id);
+    const workspace = await getOwnedWorkspace(teacherId, id, isAdminRequest(request));
     if (!workspace) {
       return NextResponse.json({ error: "WORKSPACE_NOT_FOUND" }, { status: 404 });
     }

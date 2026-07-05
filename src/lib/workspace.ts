@@ -39,12 +39,23 @@ export function teacherAssignedCondition(teacherId: string) {
   );
 }
 
-/** Fetch a workspace the teacher created or is assigned to, or null. */
-export async function getOwnedWorkspace(teacherId: string, workspaceId: string) {
+/**
+ * Fetch a workspace the teacher is assigned to, or null.
+ * Admins (isAdminUser) can manage any workspace (§2.3 access matrix).
+ */
+export async function getOwnedWorkspace(
+  teacherId: string,
+  workspaceId: string,
+  isAdminUser = false
+) {
   const [ws] = await db
     .select()
     .from(workspaces)
-    .where(and(eq(workspaces.id, workspaceId), teacherAssignedCondition(teacherId)))
+    .where(
+      isAdminUser
+        ? eq(workspaces.id, workspaceId)
+        : and(eq(workspaces.id, workspaceId), teacherAssignedCondition(teacherId))
+    )
     .limit(1);
   return ws ?? null;
 }

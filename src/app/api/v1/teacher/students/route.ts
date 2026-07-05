@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { getTeacherScopedStudentIds } from "@/lib/workspace";
+import { isAdminRequest } from "@/lib/get-user-id";
 import { generateTemporaryPassword, hashPassword } from "@/lib/auth";
 
 // GET /api/v1/teacher/students - List students scoped to the teacher's assigned
@@ -26,8 +27,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ status: "SUCCESS", students: directory });
     }
 
-    const scopedIds = await getTeacherScopedStudentIds(teacherId);
-    if (scopedIds.length === 0) {
+    // Admins see the full student roster; teachers only their workspace members
+    const isAdminUser = isAdminRequest(request);
+    const scopedIds = isAdminUser ? [] : await getTeacherScopedStudentIds(teacherId);
+    if (!isAdminUser && scopedIds.length === 0) {
       return NextResponse.json({ status: "SUCCESS", students: [] });
     }
 
@@ -41,7 +44,11 @@ export async function GET(request: NextRequest) {
         createdAt: users.createdAt,
       })
       .from(users)
-      .where(and(eq(users.role, "STUDENT"), inArray(users.id, scopedIds)))
+      .where(
+        isAdminUser
+          ? eq(users.role, "STUDENT")
+          : and(eq(users.role, "STUDENT"), inArray(users.id, scopedIds))
+      )
       .orderBy(users.createdAt);
 
     return NextResponse.json({ status: "SUCCESS", students });

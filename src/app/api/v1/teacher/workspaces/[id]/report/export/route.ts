@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { workspaceClassReports } from "@/db/schema";
 import { desc, eq } from "drizzle-orm";
 import * as XLSX from "xlsx";
-import { getUserId } from "@/lib/get-user-id";
+import { getUserId, isAdminRequest } from "@/lib/get-user-id";
 import { getOwnedWorkspace } from "@/lib/workspace";
 import type { WorkspaceReportData } from "@/lib/workspace-report";
 
@@ -19,7 +19,7 @@ export async function GET(
     }
     const { id } = await params;
 
-    const workspace = await getOwnedWorkspace(teacherId, id);
+    const workspace = await getOwnedWorkspace(teacherId, id, isAdminRequest(request));
     if (!workspace) {
       return NextResponse.json({ error: "WORKSPACE_NOT_FOUND" }, { status: 404 });
     }

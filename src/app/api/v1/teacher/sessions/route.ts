@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
+import { isAdminRequest } from "@/lib/get-user-id";
 import { exams, examSubmissions, users, questions } from "@/db/schema";
-import { eq, and, gte, lt, inArray, sum } from "drizzle-orm";
+import { eq, and, gte, lt, inArray, sum, sql } from "drizzle-orm";
 import { getTeacherScopedStudentIds } from "@/lib/workspace";
 
 export async function GET(request: NextRequest) {
@@ -26,9 +27,11 @@ export async function GET(request: NextRequest) {
     const dayStart = new Date(localMidnight.getTime() - offsetMs);
     const dayEnd   = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000); // exactly +24h
 
-    // Teachers only see sessions of students enrolled in their assigned workspaces
-    const scopedStudentIds = await getTeacherScopedStudentIds(teacherId);
-    if (scopedStudentIds.length === 0) {
+    // Teachers only see sessions of students enrolled in their assigned
+    // workspaces; admins monitor everything
+    const isAdminUser = isAdminRequest(request);
+    const scopedStudentIds = isAdminUser ? [] : await getTeacherScopedStudentIds(teacherId);
+    if (!isAdminUser && scopedStudentIds.length === 0) {
       return NextResponse.json({ status: "SUCCESS", date: resolvedDate, sessions: [] });
     }
 
@@ -57,8 +60,8 @@ export async function GET(request: NextRequest) {
       .innerJoin(users, eq(users.id, examSubmissions.studentId))
       .where(
         and(
-          eq(exams.createdBy, teacherId),
-          inArray(examSubmissions.studentId, scopedStudentIds),
+          (isAdminRequest(request) ? sql`TRUE` : eq(exams.createdBy, teacherId)),
+          isAdminUser ? sql`TRUE` : inArray(examSubmissions.studentId, scopedStudentIds),
           gte(examSubmissions.startAt, dayStart),
           lt(examSubmissions.startAt, dayEnd)
         )

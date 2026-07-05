@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { workspaceActivities, exams, teachingDays } from "@/db/schema";
-import { and, eq } from "drizzle-orm";
-import { getUserId } from "@/lib/get-user-id";
+import { and, eq, sql } from "drizzle-orm";
+import { getUserId, isAdminRequest } from "@/lib/get-user-id";
 import { getOwnedWorkspace } from "@/lib/workspace";
 
 const VALID_TYPES = ["EXERCISE", "HOMEWORK", "ASSESSMENT", "QUIZ"] as const;
@@ -20,7 +20,7 @@ export async function GET(
     }
     const { id } = await params;
 
-    const workspace = await getOwnedWorkspace(teacherId, id);
+    const workspace = await getOwnedWorkspace(teacherId, id, isAdminRequest(request));
     if (!workspace) {
       return NextResponse.json({ error: "WORKSPACE_NOT_FOUND" }, { status: 404 });
     }
@@ -65,7 +65,7 @@ export async function POST(
     }
     const { id } = await params;
 
-    const workspace = await getOwnedWorkspace(teacherId, id);
+    const workspace = await getOwnedWorkspace(teacherId, id, isAdminRequest(request));
     if (!workspace) {
       return NextResponse.json({ error: "WORKSPACE_NOT_FOUND" }, { status: 404 });
     }
@@ -103,7 +103,7 @@ export async function POST(
       const [exam] = await db
         .select({ id: exams.id })
         .from(exams)
-        .where(and(eq(exams.id, examId), eq(exams.createdBy, teacherId)))
+        .where(and(eq(exams.id, examId), (isAdminRequest(request) ? sql`TRUE` : eq(exams.createdBy, teacherId))))
         .limit(1);
       if (!exam) {
         return NextResponse.json(

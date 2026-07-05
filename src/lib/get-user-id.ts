@@ -2,6 +2,13 @@
  * Extracts the authenticated user ID from the request.
  * In development, falls back to a default dev identity if no header is present.
  */
+/** True when the authenticated caller is a platform admin (role injected by middleware). */
+export function isAdminRequest(request: {
+  headers: { get(name: string): string | null };
+}): boolean {
+  return request.headers.get("x-user-role") === "ADMIN";
+}
+
 export function getUserId(
   request: { headers: { get(name: string): string | null } },
   fallbackRole: "teacher" | "student" = "student"

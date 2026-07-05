@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { exams } from "@/db/schema";
-import { eq, desc } from "drizzle-orm";
-import { getUserId } from "@/lib/get-user-id";
+import { eq, desc, sql } from "drizzle-orm";
+import { getUserId, isAdminRequest } from "@/lib/get-user-id";
 
 export async function GET(request: NextRequest) {
   try {
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     const teacherExams = await db
       .select()
       .from(exams)
-      .where(eq(exams.createdBy, teacherId))
+      .where((isAdminRequest(request) ? sql`TRUE` : eq(exams.createdBy, teacherId)))
       .orderBy(desc(exams.createdAt));
 
     return NextResponse.json({ status: "SUCCESS", exams: teacherExams });

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { workspaceMemberships, workspaceActivities, examSubmissions } from "@/db/schema";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
-import { getUserId } from "@/lib/get-user-id";
+import { getUserId, isAdminRequest } from "@/lib/get-user-id";
 import { getOwnedWorkspace } from "@/lib/workspace";
 
 // W2: a student with submissions in this workspace cannot be removed
@@ -17,7 +17,7 @@ export async function DELETE(
     }
     const { id, studentId } = await params;
 
-    const workspace = await getOwnedWorkspace(teacherId, id);
+    const workspace = await getOwnedWorkspace(teacherId, id, isAdminRequest(request));
     if (!workspace) {
       return NextResponse.json({ error: "WORKSPACE_NOT_FOUND" }, { status: 404 });
     }

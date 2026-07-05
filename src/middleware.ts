@@ -143,7 +143,9 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL(homeFor(payload.role), request.url));
   }
 
-  if (isTeacherPath && payload.role !== "TEACHER") {
+  // Admins have full access to the teacher panel (exam management, monitors,
+  // workspace administration) per the v9 access matrix
+  if (isTeacherPath && payload.role !== "TEACHER" && payload.role !== "ADMIN") {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "FORBIDDEN", message: "Teacher access required" }, { status: 403 });
     }

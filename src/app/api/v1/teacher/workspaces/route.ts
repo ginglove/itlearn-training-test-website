@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { workspaces, workspaceMemberships, teachingDays } from "@/db/schema";
 import { desc, sql } from "drizzle-orm";
-import { getUserId } from "@/lib/get-user-id";
+import { getUserId, isAdminRequest } from "@/lib/get-user-id";
 import { teacherAssignedCondition } from "@/lib/workspace";
 
 export async function GET(request: NextRequest) {
@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
         dayCount: sql<number>`(SELECT COUNT(*) FROM ${teachingDays} WHERE ${teachingDays.workspaceId} = ${workspaces.id})`,
       })
       .from(workspaces)
-      .where(teacherAssignedCondition(teacherId))
+      .where(isAdminRequest(request) ? sql`TRUE` : teacherAssignedCondition(teacherId))
       .orderBy(desc(workspaces.createdAt));
 
     return NextResponse.json({

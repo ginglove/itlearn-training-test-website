@@ -236,7 +236,13 @@ export default function AdminWorkspacesPage() {
                     )}
                   </div>
                 </div>
-                <div className="flex gap-2 shrink-0">
+                <div className="flex gap-2 shrink-0 flex-wrap">
+                  <a
+                    href={`/teacher/workspaces/${ws.id}`}
+                    className="px-3 py-1.5 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-xs font-semibold transition-all"
+                  >
+                    Manage
+                  </a>
                   <button
                     onClick={() => {
                       setAssignFor(ws);

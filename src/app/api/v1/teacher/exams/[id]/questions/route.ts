@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
+import { isAdminRequest } from "@/lib/get-user-id";
 import { questions, quizOptions, codeConfigs, testCases, exams, xpathConfigs, xpathTestCases } from "@/db/schema";
-import { eq, asc, and, inArray } from "drizzle-orm";
+import { eq, asc, and, inArray, sql } from "drizzle-orm";
 
 export async function GET(
   request: NextRequest,
@@ -15,7 +16,7 @@ export async function GET(
 
     const { id: examId } = await params;
 
-    const [exam] = await db.select().from(exams).where(and(eq(exams.id, examId), eq(exams.createdBy, teacherId))).limit(1);
+    const [exam] = await db.select().from(exams).where(and(eq(exams.id, examId), (isAdminRequest(request) ? sql`TRUE` : eq(exams.createdBy, teacherId)))).limit(1);
     if (!exam) {
       return NextResponse.json({ error: "NOT_FOUND", message: "Exam not found" }, { status: 404 });
     }
@@ -90,7 +91,7 @@ export async function POST(
       return NextResponse.json({ error: "VALIDATION_ERROR", message: "Missing required fields" }, { status: 400 });
     }
 
-    const [exam] = await db.select().from(exams).where(and(eq(exams.id, examId), eq(exams.createdBy, teacherId))).limit(1);
+    const [exam] = await db.select().from(exams).where(and(eq(exams.id, examId), (isAdminRequest(request) ? sql`TRUE` : eq(exams.createdBy, teacherId)))).limit(1);
     if (!exam) {
       return NextResponse.json({ error: "NOT_FOUND", message: "Exam not found" }, { status: 404 });
     }
@@ -147,7 +148,7 @@ export async function DELETE(
       return NextResponse.json({ error: "VALIDATION_ERROR", message: "questionIds array is required" }, { status: 400 });
     }
 
-    const [exam] = await db.select().from(exams).where(and(eq(exams.id, examId), eq(exams.createdBy, teacherId))).limit(1);
+    const [exam] = await db.select().from(exams).where(and(eq(exams.id, examId), (isAdminRequest(request) ? sql`TRUE` : eq(exams.createdBy, teacherId)))).limit(1);
     if (!exam) {
       return NextResponse.json({ error: "NOT_FOUND", message: "Exam not found" }, { status: 404 });
     }
