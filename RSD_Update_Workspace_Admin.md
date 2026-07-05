@@ -1,13 +1,21 @@
 ```markdown
 # Requirements Specification Document (RSD)
 ## Enterprise Online Quiz, Hybrid Coding & Class Workspace Governance Platform
-**Document Version:** 9.1 (Unified Core Engine, Multi-Tier Admin Governance & Workspace Management Module)  
+**Document Version:** 9.2 (Unified Core Engine, Multi-Tier Admin Governance & Workspace Management Module)  
 **Target Environments:** Python 3.10+, Node.js 18+ LTS  
 **Core Framework Integration:** itlearn.edu.vn Core Platform Standard  
 
 ---
 
 ## Revision History
+
+### Version 9.2 — 2026-07-05
+*   **Strict Role Boundary Enforcement:** Platform Settings mutation is now Admin-only (the read endpoint remains available to all authenticated roles for exam workspace configuration). The teacher panel no longer exposes Platform Settings. Workspace creation is Admin-only; the teacher creation endpoint is removed and teachers operate exclusively on workspaces assigned via `workspace_teachers`.
+*   **Admin Operational Parity:** Admins gain full, globally-scoped access to exam management (list, create, edit, delete, questions, clone, regrade, force-submit), the daily Session Monitor, the live SSE exam monitor, and all workspace operations (members, activities, timetable, roll call, attendance, reports) in any workspace.
+*   **Teacher Scoping:** Teacher student management, the Session Monitor, and the live exam monitor are restricted to students enrolled (ACTIVE membership) in the teacher's assigned workspaces. A minimal global student directory (`?scope=all`) exists solely for workspace enrollment.
+*   **Admin Account & User Administration:** Admin Settings page (own profile edit + password change with complexity policy), plus teacher administration actions: edit profile, issue temporary password reset, and delete (blocked while exams or assignments exist).
+*   **Bulk Workspace Operations:** Multi-select add/remove of students and multi-select assign/remove of exams (activities) with per-item skip reporting for guarded records.
+*   **Security Hardening (from the v9.1 technical review):** server-synchronized focus-loss counter (reload-proof), `active_seconds` anti-tamper heartbeat clamp, standalone activity submissions table (`workspace_activity_attempts`) with teacher grading, and SSRF DNS-rebinding/redirect/content-type hardening for XPath URL fetches.
 
 ### Version 9.1 — 2026-07-02
 *   **Admin Dashboard Metrics Integration:** Introduces a formal admin overview subsystem mapping global counters for active students, active teachers, active workspaces, total exams, and total questions.
@@ -72,6 +80,9 @@ Self-registration is disabled. Account provisioning is restricted to admin uploa
 | Create / Edit / Import Students | ✅ | 👤 *(Assigned Workspaces)* | ❌ |
 | View Student enrollment metrics across workspaces | ✅ | ❌ | ❌ |
 | View Teacher workload metrics | ✅ | 👤 *(Own only)* | ❌ |
+| Configure Platform Settings (execution, security, auto-save) | ✅ | ❌ | ❌ |
+| Edit own profile / change own password | ✅ | 👤 | 👤 |
+| Reset another user's password | ✅ | 👤 *(Students in assigned workspaces)* | ❌ |
 | **Workspace Governance** | | | |
 | Create / Delete Workspaces | ✅ | ❌ | ❌ |
 | Assign / Remove Teachers to Workspaces | ✅ | ❌ | ❌ |
@@ -84,7 +95,10 @@ Self-registration is disabled. Account provisioning is restricted to admin uploa
 | View own attendance records | ❌ | ❌ | 👤 |
 | View all workspace attendance matrices | ✅ | 👤 *(Assigned Workspaces)* | ❌ |
 | **Activity & Exam Operations** | | | |
-| Assign Quiz / Exercise / Homework / Assessment | ✅ | 👤 *(Assigned Workspaces)* | ❌ |
+| Create / Edit / Delete / Clone Exams | ✅ *(All exams)* | 👤 *(Own exams)* | ❌ |
+| Monitor live exam sessions & daily session archive | ✅ *(All students)* | 👤 *(Students in assigned workspaces)* | ❌ |
+| Assign Quiz / Exercise / Homework / Assessment (single or bulk) | ✅ *(Any workspace)* | 👤 *(Assigned Workspaces)* | ❌ |
+| Grade standalone activity attempts | ✅ | 👤 *(Assigned Workspaces)* | ❌ |
 | Force-Submit Active / Pending Student Exams | ✅ | 👤 *(Assigned Workspaces)* | ❌ |
 | Attempt Assigned Activities | ❌ | ❌ | 👤 *(Enrolled Members)* |
 | View activity results | ✅ | 👤 *(Assigned Workspaces)* | 👤 *(Own only)* |
@@ -160,12 +174,33 @@ Self-registration is disabled. Account provisioning is restricted to admin uploa
                                          +-----------------------------+
 ```
 
+### 3.1.b. v9.2 Schema Additions
+
+```text
+  +------------------------------------+       exam_submissions (extended):
+  |    workspace_activity_attempts     |       +  active_seconds_updated_at
+  +------------------------------------+          (timestamptz, heartbeat for
+  | PK id (UUID)                       |           server-side active-time
+  | FK activity_id                     |           verification)
+  | FK student_id                      |
+  |    text_response (Text)            |
+  |    submitted_at (Timestamp)        |
+  |    score_percentage (Numeric)      |
+  +------------------------------------+
+  UNIQUE (activity_id, student_id) — one attempt per student; resubmission
+  overwrites the text and resets the score.
+```
+
+Junction tables `workspace_teachers` and `workspace_memberships` carry
+database-level compound unique indexes on `(workspace_id, teacher_id)` and
+`(workspace_id, student_id)` respectively.
+
 ### 3.2. Primary Schema Enums
 *   `user_role`: `ADMIN`, `TEACHER`, `STUDENT`
 *   `workspace_status`: `ACTIVE`, `ARCHIVED`
 *   `membership_status`: `ACTIVE`, `REMOVED`
 *   `attendance_status`: `PRESENT`, `ABSENT`, `LATE`, `EXCUSED`
-*   `activity_type`: `EXERCISE`, `HOMEWORK`, `ABSENT`, `QUIZ`, `ASSESSMENT`
+*   `activity_type`: `EXERCISE`, `HOMEWORK`, `QUIZ`, `ASSESSMENT`
 *   `execution_status`: `AC`, `WA`, `CE`, `RE`, `TLE`, `OFE`
 
 ---
@@ -194,9 +229,26 @@ When an Admin accesses the Teacher Management panel, the system displays real-ti
 When an Admin views the Student Management panel, the system displays:
 *   **Active Workspaces:** The count of active workspaces the student is currently enrolled in (`membership_status = ACTIVE` AND `workspace.status = ACTIVE`).
 
-### 4.4. Workspace Assignment & Execution
+### 4.4. Admin Account Settings
+Admins manage their own credentials and the global platform configuration from the Admin Settings page (`/admin/settings`):
+*   **Profile:** edit own full name and email (`GET/PATCH /api/v1/admin/account`); email uniqueness is enforced. Username is immutable.
+*   **Password:** change own password (`POST /api/v1/admin/account/change-password`) after verifying the current password; the platform complexity policy (Section 2.2.3) applies.
+*   **Platform Settings:** execution mode, Piston endpoint, IP binding, first-login reset enforcement, focus tracking, and auto-save interval. `PUT /api/v1/settings` is **Admin-only**; `GET /api/v1/settings` remains readable by any authenticated user because the student exam workspace consumes `autoSaveInterval` and `focusTrackingEnabled`.
+
+### 4.5. Teacher Administration Actions
+From the Teacher Management panel an Admin can, per teacher:
+*   **Edit** full name and email (`PUT /api/v1/admin/users/teachers/:teacherId`).
+*   **Reset Password** (`POST /api/v1/admin/users/teachers/:teacherId/reset-password`) — issues a new temporary password (displayed once) and sets `is_first_login = true`.
+*   **Delete** (`DELETE /api/v1/admin/users/teachers/:teacherId`) — rejected with `409` while the teacher still owns exams or workspace assignments, to prevent cascading data loss.
+
+### 4.6. Workspace Assignment & Execution
 *   Workspaces are not isolated to a single creator. Admins create workspaces and explicitly map one or more teachers via the `workspace_teachers` junction table.
-*   A Teacher cannot view or modify a Workspace unless their `user_id` is present in the `workspace_teachers` table for that specific workspace.
+*   A Teacher cannot view or modify a Workspace unless their `user_id` is present in the `workspace_teachers` table for that specific workspace. Workspace creation is **Admin-only**; no teacher-facing creation endpoint exists.
+*   Admins bypass the assignment check and may operate on any workspace with the full management surface (members, activities, timetable, roll call, attendance, reports).
+
+### 4.7. Teacher Visibility Scoping
+*   **Student management:** `GET /api/v1/teacher/students` returns only students with an ACTIVE membership in one of the teacher's assigned workspaces. The `?scope=all` variant returns a minimal directory (`id`, `username`, `fullName`) used exclusively by the workspace enrollment picker. Admins receive the full roster on both variants.
+*   **Session Monitor & Live Exam Monitor:** teachers see only submissions from students enrolled in their assigned workspaces; admins see all exams and all students, including exams they did not create.
 
 ---
 
@@ -213,14 +265,16 @@ The workspace coordinates tab/window status using the `focus_loss_policy` proper
 #### Focus Loss Guard Rule
 Auto-submission on the 3rd infraction is permitted *only* if `questions.length > 0` at the moment the window blur triggers. If a tab change is logged before the query for questions completes (such as during network initialization delay), the penalty is incremented in system state but auto-submission is **deferred**. Once questions load and `questions.length > 0` resolves, if the counter is already $\ge 3$, auto-submission fires.
 
-`focusLossCount` is held in frontend memory space and resets to `0` on page reload. The cumulative history is tracked on the `exam_submissions` database record.
+#### Server-Synchronized Counter (v9.2)
+Each blur offense immediately triggers `POST /api/v1/student/exams/:id/focus-loss`, which atomically increments `exam_submissions.focus_loss_count` and returns the authoritative value. `GET /:id/questions` returns the persisted `focusLossCount`, and the workspace hydrates its local counter with `max(local, server)` on load and re-entry. A page reload therefore **cannot** reset the `WARN_AND_LOCK` offense count; if the synchronized counter is already ≥ 3 when questions finish loading, auto-submission fires immediately.
 
 ### 5.2. Active-Time Timer, Floor, & Re-entry Logic
 1.  **Countdown Calculation:** The countdown timer calculates the candidate's remaining duration using the workspace active-time metric instead of the local system clock:
     $$\text{remainingSeconds} = (\text{examDurationMins} \times 60) - \text{activeSeconds}$$
 2.  **Timer Floor and Overflow Protection:** If $\text{remainingSeconds} \le 0$ (indicating total elapsed session activity meets or exceeds the designated duration limit), the system sets remaining time to $0$ and displays the Time's Up modal. The interface is blocked from rendering negative counts. If the value returned from the backend exceeds the allocated limit, the system clamps the runtime limit to $(\text{examDurationMins} \times 60)$ prior to evaluating remaining time.
 3.  **Exit Serialization:** Exiting via **Save & Exit** makes a POST request to `/exit`, which saves the candidate's draft answers and writes `close_reason: "SAVE_AND_EXIT"` along with the updated `activeSeconds` value.
-4.  **Re-entry Database Transaction:** When a student re-enters the exam via `GET /api/v1/student/exams/:id/questions`, the server clears `close_reason` back to `NULL` within the **same database transaction** that returns the question schema. This ensures the monitor dashboard cannot observe a submission in a transient `PENDING` state while the student is actively in the workspace.
+4.  **Active-Time Anti-Tamper Verification (v9.2):** the server tracks `exam_submissions.active_seconds_updated_at` as a heartbeat. On `POST /exit`, the reported `activeSeconds` is clamped to `stored + elapsed_since_heartbeat + 5s drift`, may never decrease below the stored value, and remains capped at `examDurationMins × 60`. Client-side payload manipulation therefore cannot inflate or deflate active time beyond real elapsed wall time.
+5.  **Re-entry Database Transaction:** When a student re-enters the exam via `GET /api/v1/student/exams/:id/questions`, the server clears `close_reason` back to `NULL` within the **same database transaction** that returns the question schema. This ensures the monitor dashboard cannot observe a submission in a transient `PENDING` state while the student is actively in the workspace.
 
 ### 5.3. Submission Status Priority Algorithm
 The system evaluates and displays candidate session status across teacher monitoring dashboards, session archives, and student portal views using a strict, single-pass priority algorithm:
@@ -287,6 +341,14 @@ Assigned activities use the following configurations:
 1.  **Access Isolation:** Activities assigned to a workspace are accessible *only* to enrolled student members of that workspace, regardless of the exam's global `access_type` setting. Students not on the workspace roster cannot access the exam or submit answers.
 2.  **Assignment Limits:** An `exam_id` can be reused across different class workspaces, but cannot be assigned more than once to the same workspace. If a duplicate assignment is attempted, the system rejects it with a `409 Conflict` error (`DUPLICATE_EXAM_IN_WORKSPACE`).
 3.  **Active Assignment Protection:** Deleting or unassigning an activity from a workspace is blocked if any student has already submitted an attempt for that activity within that workspace.
+4.  **Bulk Exam Assignment (v9.2):** `POST /teacher/workspaces/:id/activities` accepts `examIds: []` to assign several exams in one request — one activity is created per exam, titled after the exam and sharing the chosen type, teaching day, and due date. Already-assigned or inaccessible exams are skipped and itemized in the response (`created` / `skipped`).
+5.  **Bulk Removal (v9.2):** `POST .../members/bulk-remove` and `POST .../activities/bulk-remove` remove multiple students/activities in one action. Guarded records (submissions present) are skipped, not failed, and reported per item (`removed` / `blocked`).
+
+### 7.3. Standalone Activity Submissions (v9.2)
+`EXERCISE` and `HOMEWORK` activities without an `exam_id` accept free-text student responses:
+*   **Student:** `POST /student/workspaces/:id/activities/:activityId/submit` with `{ textResponse }`. One attempt per student (resubmission overwrites and clears any score). Blocked on archived workspaces and rejected for exam-backed activities.
+*   **Teacher grading:** `GET/PUT /teacher/workspaces/:id/activities/:activityId/attempts` lists attempts and records a `scorePercentage` (0–100).
+*   **Reporting:** a standalone attempt surfaces as `SUBMITTED` (with its graded score) in the student activity list and in end-of-class report calculations, identical to exam-backed activities.
 
 ---
 
@@ -333,7 +395,7 @@ The unsandboxed local fallback execution engine is restricted to staging and dev
 Locator evaluation is performed on the server inside a virtual DOM environment using `jsdom`:
 
 1.  **Page Isolation:** For each test case, the system instantiates a fresh `jsdom` instance from the configured `target_payload` (either by rendering raw HTML snippet payloads or fetching static source files from remote URLs).
-2.  **SSRF Mitigation Guard:** Remote URL fetches are validated before execution. Requests to private, loopback, or local IP address spaces (`127.0.0.0/8`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `169.254.0.0/16`, `::1`) are blocked and return a `400 Bad Request` error (`SSRF_BLOCKED`). Remote fetches have a hard 5-second timeout (`XPATH_FETCH_TIMEOUT`).
+2.  **SSRF Mitigation Guard:** Remote URL fetches are validated before execution. Requests to private, loopback, or local IP address spaces (`127.0.0.0/8`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `169.254.0.0/16`, `::1`) are blocked and return a `400 Bad Request` error (`SSRF_BLOCKED`). Remote fetches have a hard 5-second timeout (`XPATH_FETCH_TIMEOUT`). **v9.2 hardening:** the target hostname is resolved via DNS *before* fetching and every resolved address is checked against the private CIDR ranges (DNS-rebinding guard, including IPv4-mapped IPv6); redirects are followed manually with a maximum of 3 hops, re-validating each hop; and non-HTML/text content types are rejected (no media/binary downloads).
 3.  **XPath 1.0 Specification Constraint:** The server-side evaluation engine supports the **XPath 1.0 standard**. XPath 2.0 or 3.0 functions (such as `fn:matches()`, regular expression filters, or string manipulation helpers) are not supported and will return a parse error (`XPATH_PARSE_ERROR`). CSS Selector Mode is recommended for complex attribute matching.
 4.  **Static Execution Model:** `jsdom` parses static markup only. Embedded JavaScript on target pages is not executed. For pages with dynamic client-side rendering, teachers must paste the fully rendered HTML output from browser developer tools into the HTML Snippet field.
 5.  **AC vs. WA Selector Match Verification:** Matches are evaluated using the following criteria:
@@ -387,18 +449,33 @@ All routes are prefixed with `/api/v1`.
 | `POST` | `/admin/workspaces/:id/teachers/:teacherId` | Link a teacher to a workspace in the `workspace_teachers` table. |
 | `DELETE` | `/admin/workspaces/:id/teachers/:teacherId` | Remove a teacher's workspace access. |
 | `POST` | `/admin/workspaces/:id/unarchive` | Admin override to restore an `ARCHIVED` workspace to `ACTIVE`. |
+| `GET / POST` | `/admin/workspaces` | Global workspace list with teacher assignments and member counts / create a workspace. |
+| `DELETE` | `/admin/workspaces/:id` | Delete an empty workspace (blocked with related records; archive instead). |
+| `PUT / DELETE` | `/admin/users/teachers/:teacherId` | Edit a teacher profile / delete the account (blocked while exams or assignments exist). |
+| `POST` | `/admin/users/teachers/:teacherId/reset-password` | Issue a new temporary password; forces change on next login. |
+| `GET / PATCH` | `/admin/account` | View / update the admin's own profile (full name, email). |
+| `POST` | `/admin/account/change-password` | Change the admin's own password (complexity policy enforced). |
+| `GET / PUT` | `/settings` | Read platform settings (any authenticated role) / update them (**Admin-only**). |
+
+> **Admin pass-through:** the ADMIN role is additionally authorized on every `/teacher/**` route below with global scope — ownership (`created_by`) and workspace-assignment filters are bypassed for admins.
 
 ### 10.3. Teacher Workspace & Class Scheduling Routes
 | Method | Route | Description |
 | :--- | :--- | :--- |
 | `GET` | `/teacher/workspaces` | List active workspaces assigned to the authenticated teacher. |
-| `POST` | `/teacher/workspaces` | Create a new workspace. |
 | `GET` | `/teacher/workspaces/:id` | Get details for an assigned workspace. Rejects with `403 Forbidden` if the teacher is not assigned. |
 | `PUT` | `/teacher/workspaces/:id` | Update workspace parameters (name, description, total_days). |
 | `POST` | `/teacher/workspaces/:id/archive` | Archive the workspace. Validates that no active student sessions exist. |
 | `GET` | `/teacher/workspaces/:id/members` | Retrieve student list for the workspace. |
 | `POST` | `/teacher/workspaces/:id/members` | Enroll students into the workspace. |
 | `DELETE` | `/teacher/workspaces/:id/members/:studentId` | Unenroll a student. Blocked if the student has submission records. |
+| `POST` | `/teacher/workspaces/:id/members/bulk-remove` | Remove multiple students at once; guarded students are skipped and itemized. |
+| `GET / POST` | `/teacher/workspaces/:id/activities` | List activities / assign an activity. `POST` accepts `examIds: []` for bulk exam assignment. |
+| `PUT / DELETE` | `/teacher/workspaces/:id/activities/:activityId` | Update or remove an activity assignment. |
+| `POST` | `/teacher/workspaces/:id/activities/bulk-remove` | Remove multiple activities at once; guarded activities are skipped and itemized. |
+| `GET / PUT` | `/teacher/workspaces/:id/activities/:activityId/attempts` | List / grade standalone activity attempts. |
+
+> `GET /teacher/workspaces` lists only workspaces assigned to the authenticated teacher (all workspaces for admins). Workspace creation is Admin-only as of v9.2.
 
 ### 10.4. Timetable & Daily Attendance Routes
 | Method | Route | Description |
@@ -409,6 +486,7 @@ All routes are prefixed with `/api/v1`.
 | `DELETE` | `/teacher/workspaces/:id/timetable/:dayId` | Remove a teaching day from the timetable. Blocks if attendance records exist. |
 | `GET` | `/teacher/workspaces/:id/timetable/:dayId/rollcall` | Get the recorded attendance list for a teaching day. |
 | `POST` | `/teacher/workspaces/:id/timetable/:dayId/rollcall` | Save or overwrite attendance data for a teaching day. Updates run atomically. |
+| `DELETE` | `/teacher/workspaces/:id/timetable/:dayId/rollcall` | Void all attendance records for a day (prerequisite for deleting the day). |
 | `GET` | `/teacher/workspaces/:id/attendance` | Retrieve the global attendance matrix for the workspace (all enrolled students $\times$ all scheduled days). |
 
 ### 10.5. Exam Creation & Question Config Routes
@@ -482,6 +560,8 @@ Force-submitting locks the student out of the exam session and saves their final
 | `GET` | `/student/workspaces/:id/attendance` | Read-only view of the student's own attendance records. |
 | `GET` | `/student/workspaces/:id/activities` | List activities assigned to the student's workspace. |
 | `GET` | `/student/workspaces/:id/report` | View own report summary (only accessible post-archive). |
+| `POST` | `/student/workspaces/:id/activities/:activityId/submit` | Submit a free-text response for a standalone (non exam-backed) activity. |
+| `POST` | `/student/exams/:id/focus-loss` | Persist one focus-loss offense server-side; returns the authoritative counter. |
 
 ---
 
@@ -592,5 +672,5 @@ When active exams are force-submitted or timers expire, instant status changes n
 
 ---
 
-*END OF REQUIREMENTS SPECIFICATION DOCUMENT (RSD) — v9.1*
+*END OF REQUIREMENTS SPECIFICATION DOCUMENT (RSD) — v9.2*
 ```
