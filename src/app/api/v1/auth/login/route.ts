@@ -42,6 +42,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Deactivated accounts cannot authenticate
+    if (user.isActive === false) {
+      return NextResponse.json(
+        { error: "ACCOUNT_DEACTIVATED", message: "This account has been deactivated. Contact an administrator." },
+        { status: 403 }
+      );
+    }
+
     // Verify password
     const isValidPassword = await verifyPassword(password, user.passwordHash);
     if (!isValidPassword) {

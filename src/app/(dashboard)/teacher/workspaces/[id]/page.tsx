@@ -62,7 +62,19 @@ const ATTENDANCE_COLORS: Record<string, string> = {
   EXCUSED: "bg-sky-500/15 text-sky-400 border-sky-500/30",
 };
 
-type Tab = "members" | "timetable" | "rollcall" | "activities" | "attendance" | "report";
+type Tab = "members" | "timetable" | "rollcall" | "activities" | "attendance" | "analytics" | "report";
+
+interface AnalyticsStudent {
+  studentId: string;
+  fullName: string;
+  studentCode: string;
+  daysStudied: number;
+  attendanceRate: number;
+  byType: Record<
+    string,
+    { assigned: number; attempts: number; passed: number; failed: number; averageScore: number | null }
+  >;
+}
 
 export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -116,6 +128,13 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
     matrix: Record<string, Record<string, string>>;
   } | null>(null);
 
+  // Analytics (visual report)
+  const [analytics, setAnalytics] = useState<{
+    totalConductedDays: number;
+    totalScheduledDays: number;
+    students: AnalyticsStudent[];
+  } | null>(null);
+
   // Report
   const [report, setReport] = useState<any>(null);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
@@ -150,6 +169,11 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
     if (res.ok) setMatrix(await res.json());
   }, [id]);
 
+  const fetchAnalytics = useCallback(async () => {
+    const res = await fetch(`/api/v1/teacher/workspaces/${id}/analytics`);
+    setAnalytics(res.ok ? await res.json() : null);
+  }, [id]);
+
   const fetchReport = useCallback(async () => {
     const res = await fetch(`/api/v1/teacher/workspaces/${id}/report`);
     setReport(res.ok ? (await res.json()).report : null);
@@ -164,8 +188,9 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
 
   useEffect(() => {
     if (tab === "attendance") fetchMatrix();
+    if (tab === "analytics") fetchAnalytics();
     if (tab === "report") fetchReport();
-  }, [tab, fetchMatrix, fetchReport]);
+  }, [tab, fetchMatrix, fetchAnalytics, fetchReport]);
 
   // ── Members ──
   const openAddMember = async () => {
@@ -448,6 +473,7 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
     { key: "rollcall", label: "Roll Call" },
     { key: "activities", label: `Activities (${activities.length})` },
     { key: "attendance", label: "Attendance" },
+    { key: "analytics", label: "Analytics" },
     { key: "report", label: "Report" },
   ];
 
@@ -767,8 +793,17 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
           {activities.length === 0 ? (
             <p className="text-text-secondary text-sm py-8 text-center">No activities assigned.</p>
           ) : (
-            <div className="divide-y divide-border-strong">
-              {activities.map((a) => (
+            <div className="space-y-6">
+              {(["QUIZ", "ASSESSMENT", "HOMEWORK", "EXERCISE"] as const)
+                .map((type) => ({ type, items: activities.filter((a) => a.activityType === type) }))
+                .filter((g) => g.items.length > 0)
+                .map((g) => (
+              <div key={g.type}>
+                <h3 className="text-xs font-semibold text-text-tertiary font-mono uppercase tracking-wider mb-1">
+                  {g.type} ({g.items.length})
+                </h3>
+                <div className="divide-y divide-border-strong">
+              {g.items.map((a) => (
                 <div key={a.id} className="flex items-center justify-between py-3">
                   <div className="flex items-center gap-3">
                     {!archived && (
@@ -807,6 +842,9 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
                   )}
                 </div>
               ))}
+                </div>
+              </div>
+                ))}
             </div>
           )}
         </div>
@@ -856,6 +894,98 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
                 ))}
               </tbody>
             </table>
+          )}
+        </div>
+      )}
+
+      {/* ── Analytics (visual report) tab ── */}
+      {tab === "analytics" && (
+        <div className="bg-bg-surface border border-border-strong rounded-2xl p-5">
+          <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
+            <h2 className="font-semibold text-white">Student Performance Analytics</h2>
+            {analytics && (
+              <span className="text-text-tertiary text-xs font-mono">
+                {analytics.totalConductedDays}/{analytics.totalScheduledDays} days conducted
+              </span>
+            )}
+          </div>
+          {!analytics || analytics.students.length === 0 ? (
+            <p className="text-text-secondary text-sm py-8 text-center">No data yet.</p>
+          ) : (
+            <div className="space-y-4">
+              {analytics.students.map((st) => (
+                <div key={st.studentId} className="bg-bg-base border border-border-strong rounded-xl p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                    <div>
+                      <p className="text-white text-sm font-semibold">{st.fullName}</p>
+                      <p className="text-text-tertiary text-xs font-mono">{st.studentCode}</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-text-secondary">
+                        Days studied:{" "}
+                        <span className="text-white font-mono">
+                          {st.daysStudied}/{analytics.totalConductedDays}
+                        </span>
+                      </span>
+                      <div className="w-28 h-2 bg-bg-surface-elevated rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-emerald-500 rounded-full"
+                          style={{ width: `${Math.min(100, st.attendanceRate)}%` }}
+                        />
+                      </div>
+                      <span className="text-emerald-400 text-xs font-mono w-12">
+                        {st.attendanceRate}%
+                      </span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    {(["QUIZ", "ASSESSMENT", "HOMEWORK", "EXERCISE"] as const).map((type) => {
+                      const t = st.byType[type];
+                      if (!t || t.assigned === 0) return (
+                        <div key={type} className="border border-border-strong/50 rounded-lg p-3 opacity-40">
+                          <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${TYPE_BADGE[type]}`}>
+                            {type}
+                          </span>
+                          <p className="text-text-tertiary text-xs mt-2">No activities</p>
+                        </div>
+                      );
+                      return (
+                        <div key={type} className="border border-border-strong rounded-lg p-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${TYPE_BADGE[type]}`}>
+                              {type}
+                            </span>
+                            <span className="text-text-tertiary text-[10px] font-mono">
+                              {t.attempts}/{t.assigned} done
+                            </span>
+                          </div>
+                          <div className="flex items-end justify-between gap-2">
+                            <div className="text-xs space-y-0.5">
+                              <p className="text-emerald-400 font-mono">✓ {t.passed} pass</p>
+                              <p className="text-rose-400 font-mono">✗ {t.failed} fail</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-lg font-bold text-white font-mono leading-none">
+                                {t.averageScore !== null ? `${t.averageScore}%` : "—"}
+                              </p>
+                              <p className="text-text-tertiary text-[10px] mt-0.5">avg score</p>
+                            </div>
+                          </div>
+                          <div className="w-full h-1.5 bg-bg-surface-elevated rounded-full overflow-hidden mt-2">
+                            <div
+                              className={`h-full rounded-full ${
+                                (t.averageScore ?? 0) >= 50 ? "bg-emerald-500" : "bg-rose-500"
+                              }`}
+                              style={{ width: `${Math.min(100, t.averageScore ?? 0)}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}

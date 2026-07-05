@@ -46,6 +46,7 @@ CREATE TABLE "users" (
 	"email" varchar(100) NOT NULL,
 	"role" "user_role" DEFAULT 'STUDENT' NOT NULL,
 	"is_first_login" boolean DEFAULT true NOT NULL,
+	"is_active" boolean DEFAULT true NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "users_username_unique" UNIQUE("username"),
 	CONSTRAINT "users_email_unique" UNIQUE("email")

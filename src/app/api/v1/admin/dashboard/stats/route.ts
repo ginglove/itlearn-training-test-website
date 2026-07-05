@@ -14,8 +14,8 @@ export async function GET(request: NextRequest) {
 
     const [stats] = await db
       .select({
-        totalActiveStudents: sql<number>`(SELECT COUNT(*) FROM ${users} WHERE ${users.role} = 'STUDENT')`,
-        totalActiveTeachers: sql<number>`(SELECT COUNT(*) FROM ${users} WHERE ${users.role} = 'TEACHER')`,
+        totalActiveStudents: sql<number>`(SELECT COUNT(*) FROM ${users} WHERE ${users.role} = 'STUDENT' AND ${users.isActive} = true)`,
+        totalActiveTeachers: sql<number>`(SELECT COUNT(*) FROM ${users} WHERE ${users.role} = 'TEACHER' AND ${users.isActive} = true)`,
         totalActiveWorkspaces: sql<number>`(SELECT COUNT(*) FROM ${workspaces} WHERE ${workspaces.status} = 'ACTIVE')`,
         totalExams: sql<number>`(SELECT COUNT(*) FROM ${exams})`,
         totalQuestions: sql<number>`(SELECT COUNT(*) FROM ${questions})`,

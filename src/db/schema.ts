@@ -49,6 +49,7 @@ export const users = pgTable("users", {
   email: varchar("email", { length: 100 }).unique().notNull(),
   role: userRoleEnum("role").notNull().default("STUDENT"),
   isFirstLogin: boolean("is_first_login").notNull().default(true),
+  isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

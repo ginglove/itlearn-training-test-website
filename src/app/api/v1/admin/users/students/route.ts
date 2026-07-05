@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
         fullName: users.fullName,
         email: users.email,
         isFirstLogin: users.isFirstLogin,
+        isActive: users.isActive,
         createdAt: users.createdAt,
         activeWorkspaces: sql<number>`(
           SELECT COUNT(*) FROM ${workspaceMemberships}
