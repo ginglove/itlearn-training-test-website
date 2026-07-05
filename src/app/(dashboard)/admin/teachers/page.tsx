@@ -30,7 +30,17 @@ export default function AdminTeachersPage() {
     setIsLoading(true);
     try {
       const res = await fetch("/api/v1/admin/users/teachers");
-      if (res.ok) setTeachers((await res.json()).teachers || []);
+      const data = await res.json().catch(() => null);
+      if (res.ok) {
+        setTeachers(data?.teachers || []);
+      } else {
+        setMessage({
+          type: "error",
+          text: `Failed to load teachers (${res.status}): ${data?.message || data?.error || "unknown error"}`,
+        });
+      }
+    } catch {
+      setMessage({ type: "error", text: "Network error while loading teachers." });
     } finally {
       setIsLoading(false);
     }

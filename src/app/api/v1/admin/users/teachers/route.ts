@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { users, workspaces, workspaceTeachers, teachingDays, attendanceRecords } from "@/db/schema";
-import { eq, sql } from "drizzle-orm";
+import { countDistinct, eq, exists, sql } from "drizzle-orm";
 import { generateTemporaryPassword, hashPassword } from "@/lib/auth";
 import { getAdminId } from "@/lib/admin";
 
@@ -21,21 +21,30 @@ export async function GET(request: NextRequest) {
         email: users.email,
         isFirstLogin: users.isFirstLogin,
         createdAt: users.createdAt,
-        workspaceCount: sql<number>`(
-          SELECT COUNT(*) FROM ${workspaceTeachers}
-          WHERE ${workspaceTeachers.teacherId} = ${users.id}
-        )`,
-        conductedDays: sql<number>`(
-          SELECT COUNT(DISTINCT td.id)
-          FROM ${workspaceTeachers} wt
-          JOIN ${teachingDays} td ON td.workspace_id = wt.workspace_id
-          WHERE wt.teacher_id = ${users.id}
-            AND EXISTS (SELECT 1 FROM ${attendanceRecords} ar WHERE ar.teaching_day_id = td.id)
-        )`,
       })
       .from(users)
       .where(eq(users.role, "TEACHER"))
       .orderBy(users.fullName);
+
+    // Conducted days per teacher: distinct teaching days with at least one
+    // roll call record, across the teacher's assigned workspaces
+    const conductedRows = await db
+      .select({
+        teacherId: workspaceTeachers.teacherId,
+        days: countDistinct(teachingDays.id),
+      })
+      .from(workspaceTeachers)
+      .innerJoin(teachingDays, eq(teachingDays.workspaceId, workspaceTeachers.workspaceId))
+      .where(
+        exists(
+          db
+            .select({ one: sql`1` })
+            .from(attendanceRecords)
+            .where(eq(attendanceRecords.teachingDayId, teachingDays.id))
+        )
+      )
+      .groupBy(workspaceTeachers.teacherId);
+    const conductedByTeacher = new Map(conductedRows.map((r) => [r.teacherId, Number(r.days)]));
 
     const assignments = await db
       .select({
@@ -56,16 +65,19 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       status: "SUCCESS",
-      teachers: teachers.map((t) => ({
-        ...t,
-        workspaceCount: Number(t.workspaceCount),
-        conductedDays: Number(t.conductedDays),
-        workspaces: (byTeacher.get(t.id) ?? []).map((a) => ({
-          id: a.workspaceId,
-          name: a.workspaceName,
-          status: a.workspaceStatus,
-        })),
-      })),
+      teachers: teachers.map((t) => {
+        const teacherAssignments = byTeacher.get(t.id) ?? [];
+        return {
+          ...t,
+          workspaceCount: teacherAssignments.length,
+          conductedDays: conductedByTeacher.get(t.id) ?? 0,
+          workspaces: teacherAssignments.map((a) => ({
+            id: a.workspaceId,
+            name: a.workspaceName,
+            status: a.workspaceStatus,
+          })),
+        };
+      }),
     });
   } catch (error) {
     console.error("Admin list teachers error:", error);
