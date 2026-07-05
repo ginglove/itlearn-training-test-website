@@ -29,8 +29,31 @@ export async function GET(request: NextRequest) {
 
     // Admins see the full student roster; teachers only their workspace members
     const isAdminUser = isAdminRequest(request);
-    const scopedIds = isAdminUser ? [] : await getTeacherScopedStudentIds(teacherId);
-    if (!isAdminUser && scopedIds.length === 0) {
+    let scopedIds = isAdminUser ? [] : await getTeacherScopedStudentIds(teacherId);
+
+    // Global class filter: restrict to the selected workspace's ACTIVE members
+    const workspaceFilter = searchParams.get("workspaceId");
+    if (workspaceFilter) {
+      const { workspaceMemberships } = await import("@/db/schema");
+      const members = await db
+        .select({ studentId: workspaceMemberships.studentId })
+        .from(workspaceMemberships)
+        .where(
+          and(
+            eq(workspaceMemberships.workspaceId, workspaceFilter),
+            eq(workspaceMemberships.status, "ACTIVE")
+          )
+        );
+      const memberIds = new Set(members.map((m) => m.studentId));
+      scopedIds = isAdminUser
+        ? [...memberIds]
+        : scopedIds.filter((sid) => memberIds.has(sid));
+      if (scopedIds.length === 0) {
+        return NextResponse.json({ status: "SUCCESS", students: [] });
+      }
+    }
+
+    if (!isAdminUser && !workspaceFilter && scopedIds.length === 0) {
       return NextResponse.json({ status: "SUCCESS", students: [] });
     }
 
@@ -45,7 +68,7 @@ export async function GET(request: NextRequest) {
       })
       .from(users)
       .where(
-        isAdminUser
+        isAdminUser && scopedIds.length === 0
           ? eq(users.role, "STUDENT")
           : and(eq(users.role, "STUDENT"), inArray(users.id, scopedIds))
       )

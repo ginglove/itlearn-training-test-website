@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import StudentWorkspacesModal from "@/app/components/StudentWorkspacesModal";
+import { useActiveWorkspace, withWorkspaceParam } from "@/app/components/useActiveWorkspace";
 import { useRouter } from "next/navigation";
 
 interface Student {
@@ -15,6 +16,7 @@ interface Student {
 
 export default function StudentsManagementPage() {
   const router = useRouter();
+  const [activeWorkspaceId] = useActiveWorkspace();
   const [students, setStudents] = useState<Student[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -57,7 +59,7 @@ export default function StudentsManagementPage() {
 
   useEffect(() => {
     fetchStudents();
-  }, []);
+  }, [activeWorkspaceId]);
 
   const getCookie = (name: string) => {
     if (typeof document === "undefined") return "";
@@ -69,7 +71,7 @@ export default function StudentsManagementPage() {
   const fetchStudents = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch("/api/v1/teacher/students", {
+      const res = await fetch(withWorkspaceParam("/api/v1/teacher/students", activeWorkspaceId), {
         headers: {
           "Authorization": `Bearer ${getCookie("session")}`
         }

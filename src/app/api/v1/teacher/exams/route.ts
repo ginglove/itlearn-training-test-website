@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { exams } from "@/db/schema";
 import { eq, desc, sql } from "drizzle-orm";
 import { getUserId, isAdminRequest } from "@/lib/get-user-id";
+import { getWorkspaceExamIds } from "@/lib/workspace";
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,11 +12,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
     }
 
-    const teacherExams = await db
+    let teacherExams = await db
       .select()
       .from(exams)
       .where((isAdminRequest(request) ? sql`TRUE` : eq(exams.createdBy, teacherId)))
       .orderBy(desc(exams.createdAt));
+
+    // Global class filter: only exams assigned to the selected workspace
+    const { searchParams } = new URL(request.url);
+    const workspaceId = searchParams.get("workspaceId");
+    if (workspaceId) {
+      const wsExamIds = await getWorkspaceExamIds(workspaceId);
+      teacherExams = teacherExams.filter((e) => wsExamIds.has(e.id));
+    }
 
     return NextResponse.json({ status: "SUCCESS", exams: teacherExams });
   } catch (error) {

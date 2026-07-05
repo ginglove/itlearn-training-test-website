@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
+import { useActiveWorkspace, withWorkspaceParam } from "@/app/components/useActiveWorkspace";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/toast";
 
@@ -24,6 +25,7 @@ const PAGE_SIZE = 9;
 export default function StudentExamsPage() {
   const router = useRouter();
   const showToast = useToast();
+  const [activeWorkspaceId] = useActiveWorkspace();
   const [exams, setExams] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -32,12 +34,12 @@ export default function StudentExamsPage() {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [page, setPage] = useState(1);
 
-  useEffect(() => { fetchExams(); }, []);
+  useEffect(() => { fetchExams(); }, [activeWorkspaceId]);
   useEffect(() => { setPage(1); }, [search, sessionFilter, statusFilter]);
 
   const fetchExams = async () => {
     try {
-      const res = await fetch("/api/v1/student/exams", {
+      const res = await fetch(withWorkspaceParam("/api/v1/student/exams", activeWorkspaceId), {
         headers: { "Authorization": `Bearer ${getCookie("session")}` }
       });
       if (res.ok) {

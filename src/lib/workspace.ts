@@ -173,3 +173,15 @@ export async function appendMakeupDay(workspaceId: string): Promise<string | nul
   }
   return null;
 }
+
+
+/** Exam ids assigned as activities of a workspace (for workspace filtering). */
+export async function getWorkspaceExamIds(workspaceId: string): Promise<Set<string>> {
+  const { workspaceActivities } = await import("@/db/schema");
+  const { isNotNull } = await import("drizzle-orm");
+  const rows = await db
+    .select({ examId: workspaceActivities.examId })
+    .from(workspaceActivities)
+    .where(and(eq(workspaceActivities.workspaceId, workspaceId), isNotNull(workspaceActivities.examId)));
+  return new Set(rows.map((r) => r.examId!));
+}

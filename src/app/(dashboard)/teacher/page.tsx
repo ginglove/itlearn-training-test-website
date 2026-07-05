@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
+import { useActiveWorkspace, withWorkspaceParam } from "@/app/components/useActiveWorkspace";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/toast";
 
@@ -28,16 +29,17 @@ export default function TeacherDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [cloningId, setCloningId] = useState<string | null>(null);
 
+  const [activeWorkspaceId] = useActiveWorkspace();
   const [search, setSearch] = useState("");
   const [sessionFilter, setSessionFilter] = useState("ALL");
   const [page, setPage] = useState(1);
 
-  useEffect(() => { fetchExams(); }, []);
+  useEffect(() => { fetchExams(); }, [activeWorkspaceId]);
   useEffect(() => { setPage(1); }, [search, sessionFilter]);
 
   const fetchExams = async () => {
     try {
-      const res = await fetch("/api/v1/teacher/exams", {
+      const res = await fetch(withWorkspaceParam("/api/v1/teacher/exams", activeWorkspaceId), {
         headers: { "Authorization": `Bearer ${getCookie("session")}` }
       });
       if (res.ok) {

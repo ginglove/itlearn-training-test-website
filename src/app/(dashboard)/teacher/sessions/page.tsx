@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import DateTimePicker from "@/app/components/DateTimePicker";
+import { useActiveWorkspace, withWorkspaceParam } from "@/app/components/useActiveWorkspace";
 
 /* ─────────────────────────── helpers ─────────────────────────────────────── */
 function todayISO() {
@@ -115,6 +116,7 @@ function StatPill({ label, value, color }: { label: string; value: string | numb
 /* ─────────────────────────── main page ───────────────────────────────────── */
 export default function SessionsPage() {
   const router = useRouter();
+  const [activeWorkspaceId] = useActiveWorkspace();
   const [date, setDate] = useState(todayISO());
   const [sessions, setSessions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -125,7 +127,7 @@ export default function SessionsPage() {
   const fetchSessions = useCallback(async (d: string) => {
     try {
       setFetchError(null);
-      const res = await fetch(`/api/v1/teacher/sessions?date=${d}&tz=${tzOffsetMinutes()}`);
+      const res = await fetch(withWorkspaceParam(`/api/v1/teacher/sessions?date=${d}&tz=${tzOffsetMinutes()}`, activeWorkspaceId));
       const data = await res.json();
       if (res.ok) {
         setSessions(data.sessions ?? []);
@@ -137,7 +139,7 @@ export default function SessionsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [activeWorkspaceId]);
 
   // Initial + manual refresh
   useEffect(() => {

@@ -2,11 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { exams, examSubmissions, questions } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
+import { getWorkspaceExamIds } from "@/lib/workspace";
 
 export async function GET(request: NextRequest) {
   try {
     const studentId = request.headers.get("x-user-id");
     if (!studentId) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+
+    const { searchParams } = new URL(request.url);
+    const workspaceId = searchParams.get("workspaceId");
 
     const rows = await db
       .select({
@@ -50,7 +54,13 @@ export async function GET(request: NextRequest) {
       .groupBy(exams.id, exams.title, exams.description, exams.endTime)
       .orderBy(sql`MAX(${examSubmissions.submittedAt}) DESC NULLS LAST`);
 
-    return NextResponse.json({ status: "SUCCESS", groups: rows });
+    let groups = rows;
+    if (workspaceId) {
+      const wsExamIds = await getWorkspaceExamIds(workspaceId);
+      groups = rows.filter((r) => wsExamIds.has(r.examId));
+    }
+
+    return NextResponse.json({ status: "SUCCESS", groups });
   } catch (error) {
     console.error("Exam groups error:", error);
     return NextResponse.json({ error: "INTERNAL_ERROR" }, { status: 500 });

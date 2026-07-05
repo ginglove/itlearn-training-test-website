@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { exams, examSubmissions, examAssignments } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { getWorkspaceExamAccess } from "@/lib/workspace-access";
+import { getWorkspaceExamIds } from "@/lib/workspace";
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,7 +12,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
     }
 
-    const allExams = await db.select().from(exams).orderBy(desc(exams.startTime));
+    const { searchParams } = new URL(request.url);
+    const workspaceId = searchParams.get("workspaceId");
+
+    let allExams = await db.select().from(exams).orderBy(desc(exams.startTime));
+    if (workspaceId) {
+      // Global class filter: only exams assigned to the selected workspace
+      const wsExamIds = await getWorkspaceExamIds(workspaceId);
+      allExams = allExams.filter((e) => wsExamIds.has(e.id));
+    }
 
     const assignments = await db
       .select({ examId: examAssignments.examId })

@@ -159,6 +159,7 @@ export default function TeacherLayout({
       {isMobileMenuOpen && (
         <div className="md:hidden fixed inset-0 top-[57px] bg-bg-base/95 backdrop-blur-md z-30 flex flex-col p-6 animate-fade-in border-t border-border-strong">
           <nav className="flex flex-col gap-2">
+            {workspaceMenu}
             {navItems.map((item) => (
               <button
                 key={item.name}
@@ -176,7 +177,6 @@ export default function TeacherLayout({
                 <span>{item.name}</span>
               </button>
             ))}
-            {workspaceMenu}
             <button
               onClick={handleLogout}
               className="flex items-center gap-3 px-4 py-3.5 rounded-xl font-medium text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition-all border border-transparent text-left mt-4"
@@ -207,6 +207,7 @@ export default function TeacherLayout({
         </div>
 
         <nav className="flex flex-col gap-1.5 flex-grow">
+          {workspaceMenu}
           {navItems.map((item) => (
             <button
               key={item.name}
@@ -221,7 +222,6 @@ export default function TeacherLayout({
               <span className="text-sm">{item.name}</span>
             </button>
           ))}
-          {workspaceMenu}
         </nav>
 
         <div className="border-t border-border-strong pt-4 mt-auto">
