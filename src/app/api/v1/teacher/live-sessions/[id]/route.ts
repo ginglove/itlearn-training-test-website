@@ -69,6 +69,17 @@ export async function GET(
       .where(eq(liveParticipants.sessionId, id))
       .orderBy(sql`${liveParticipants.score} DESC`, users.fullName);
 
+    // Per-question detail for the leaderboard: every answer in the session
+    const allAnswers = await db
+      .select({
+        studentId: liveAnswers.studentId,
+        questionId: liveAnswers.questionId,
+        isCorrect: liveAnswers.isCorrect,
+        points: liveAnswers.points,
+      })
+      .from(liveAnswers)
+      .where(eq(liveAnswers.sessionId, id));
+
     let currentQuestion = null;
     let answerDistribution: Record<string, number> = {};
     let answeredCount = 0;
@@ -127,6 +138,8 @@ export async function GET(
         finished: Boolean(p.finishedAt),
         progress: Math.min(p.currentQuestionIndex, sessionQuestions.length),
       })),
+      questions: sessionQuestions.map((q) => ({ id: q.id, title: q.title })),
+      answers: allAnswers,
       currentQuestion,
       answerDistribution,
       answeredCount,

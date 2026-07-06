@@ -32,6 +32,8 @@ interface HostState {
   } | null;
   answerDistribution: Record<string, number>;
   answeredCount: number;
+  questions: { id: string; title: string }[];
+  answers: { studentId: string; questionId: string; isCorrect: boolean; points: number }[];
 }
 
 const OPTION_COLORS = ["bg-rose-500", "bg-sky-500", "bg-amber-500", "bg-emerald-500", "bg-purple-500", "bg-teal-500"];
@@ -72,8 +74,15 @@ export default function LiveHostPage({ params }: { params: Promise<{ id: string 
   if (error) return <div className="p-10 text-rose-400">{error}</div>;
   if (!state) return <div className="p-10 text-text-secondary">Loading live session…</div>;
 
-  const { session, participants, currentQuestion, answerDistribution, answeredCount } = state;
+  const { session, participants, currentQuestion, answerDistribution, answeredCount, questions, answers } = state;
   const isLast = session.currentQuestionIndex >= session.totalQuestions - 1;
+
+  // studentId → questionId → answer, for the per-question leaderboard detail
+  const answersByStudent = new Map<string, Map<string, { isCorrect: boolean; points: number }>>();
+  for (const a of answers ?? []) {
+    if (!answersByStudent.has(a.studentId)) answersByStudent.set(a.studentId, new Map());
+    answersByStudent.get(a.studentId)!.set(a.questionId, { isCorrect: a.isCorrect, points: a.points });
+  }
 
   return (
     <div className="p-6 md:p-10 max-w-5xl mx-auto">
@@ -218,7 +227,8 @@ export default function LiveHostPage({ params }: { params: Promise<{ id: string 
         ) : (
           <div className="divide-y divide-border-strong">
             {participants.map((p, i) => (
-              <div key={p.studentId} className="flex items-center gap-4 py-2.5">
+              <div key={p.studentId} className="py-2.5">
+                <div className="flex items-center gap-4">
                 <span
                   className={`w-8 h-8 rounded-full flex items-center justify-center font-mono text-sm shrink-0 ${
                     session.status !== "LOBBY" && i === 0
@@ -249,6 +259,32 @@ export default function LiveHostPage({ params }: { params: Promise<{ id: string 
                 )}
                 {session.status !== "LOBBY" && (
                   <span className="text-brand-400 font-mono font-bold">{p.score}</span>
+                )}
+                </div>
+                {/* Per-question detail: one cell per question */}
+                {session.status !== "LOBBY" && questions?.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2 ml-12">
+                    {questions.map((q, qi) => {
+                      const a = answersByStudent.get(p.studentId)?.get(q.id);
+                      return (
+                        <span
+                          key={q.id}
+                          title={`Q${qi + 1}: ${q.title} — ${
+                            !a ? "no answer" : a.isCorrect ? `correct, +${a.points}` : "wrong"
+                          }`}
+                          className={`w-6 h-6 rounded flex items-center justify-center text-[10px] font-mono border ${
+                            !a
+                              ? "border-border-strong text-text-tertiary"
+                              : a.isCorrect
+                                ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
+                                : "bg-rose-500/20 text-rose-400 border-rose-500/40"
+                          }`}
+                        >
+                          {!a ? qi + 1 : a.isCorrect ? "✓" : "✗"}
+                        </span>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
             ))}

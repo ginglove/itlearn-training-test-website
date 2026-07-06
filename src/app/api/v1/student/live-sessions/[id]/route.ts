@@ -125,6 +125,32 @@ export async function GET(
       };
     }
 
+    // Question-by-question breakdown of the student's own results, shown once
+    // the session has ended
+    let myBreakdown:
+      | { title: string; answered: boolean; isCorrect: boolean; points: number }[]
+      | null = null;
+    if (session.status === "ENDED") {
+      const myAnswers = await db
+        .select({
+          questionId: liveAnswers.questionId,
+          isCorrect: liveAnswers.isCorrect,
+          points: liveAnswers.points,
+        })
+        .from(liveAnswers)
+        .where(and(eq(liveAnswers.sessionId, id), eq(liveAnswers.studentId, studentId)));
+      const byQuestion = new Map(myAnswers.map((a) => [a.questionId, a]));
+      myBreakdown = sessionQuestions.map((q) => {
+        const a = byQuestion.get(q.id);
+        return {
+          title: q.title,
+          answered: Boolean(a),
+          isCorrect: a?.isCorrect ?? false,
+          points: a?.points ?? 0,
+        };
+      });
+    }
+
     return NextResponse.json({
       status: "SUCCESS",
       session: {
@@ -140,6 +166,7 @@ export async function GET(
       },
       finished,
       correctOptionIds,
+      myBreakdown,
       currentQuestion,
       myAnswer,
       myScore: me.score,

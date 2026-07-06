@@ -30,6 +30,9 @@ interface PlayState {
   myAnswer: AnswerResult | null;
   finished: boolean;
   correctOptionIds: string[] | null;
+  myBreakdown:
+    | { title: string; answered: boolean; isCorrect: boolean; points: number }[]
+    | null;
   myScore: number;
   myRank: number;
   leaderboard: { studentId: string; fullName: string; score: number }[];
@@ -105,7 +108,7 @@ export default function LivePlayPage({ params }: { params: Promise<{ id: string 
   if (error) return <div className="p-10 text-rose-400">{error}</div>;
   if (!state) return <div className="p-10 text-text-secondary">Connecting…</div>;
 
-  const { session, currentQuestion, myAnswer, finished, myScore, myRank, leaderboard } = state;
+  const { session, currentQuestion, myAnswer, finished, myBreakdown, myScore, myRank, leaderboard } = state;
   const answered = !!myAnswer || !!feedback;
   const result = feedback ?? myAnswer;
   const selfPaced = session.mode === "STUDENT";
@@ -274,6 +277,34 @@ export default function LivePlayPage({ params }: { params: Promise<{ id: string 
               </div>
             ))}
           </div>
+          {myBreakdown && myBreakdown.length > 0 && (
+            <div className="mt-8 text-left max-w-md mx-auto">
+              <h3 className="text-white font-semibold text-sm mb-3">Your answers</h3>
+              <div className="divide-y divide-border-strong">
+                {myBreakdown.map((q, i) => (
+                  <div key={i} className="flex items-center gap-3 py-2">
+                    <span
+                      className={`w-6 h-6 rounded flex items-center justify-center text-[11px] font-mono border shrink-0 ${
+                        !q.answered
+                          ? "border-border-strong text-text-tertiary"
+                          : q.isCorrect
+                            ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
+                            : "bg-rose-500/20 text-rose-400 border-rose-500/40"
+                      }`}
+                    >
+                      {!q.answered ? "–" : q.isCorrect ? "✓" : "✗"}
+                    </span>
+                    <span className="text-text-secondary text-sm flex-grow truncate">
+                      {i + 1}. {q.title}
+                    </span>
+                    <span className="text-brand-400 font-mono text-xs shrink-0">
+                      {q.answered ? `+${q.points}` : "no answer"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <button
             onClick={() => router.push("/student/exams")}
             className="mt-8 px-6 py-2.5 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-semibold text-sm transition-all"
