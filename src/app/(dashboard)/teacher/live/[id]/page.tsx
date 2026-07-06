@@ -224,70 +224,121 @@ export default function LiveHostPage({ params }: { params: Promise<{ id: string 
           <p className="text-text-secondary text-sm py-8 text-center">
             Waiting for students to join with the code above…
           </p>
-        ) : (
+        ) : session.status === "LOBBY" ? (
           <div className="divide-y divide-border-strong">
-            {participants.map((p, i) => (
-              <div key={p.studentId} className="py-2.5">
-                <div className="flex items-center gap-4">
-                <span
-                  className={`w-8 h-8 rounded-full flex items-center justify-center font-mono text-sm shrink-0 ${
-                    session.status !== "LOBBY" && i === 0
-                      ? "bg-amber-500/20 text-amber-400 border border-amber-500/40"
-                      : session.status !== "LOBBY" && i === 1
-                        ? "bg-slate-400/20 text-slate-300 border border-slate-400/40"
-                        : session.status !== "LOBBY" && i === 2
-                          ? "bg-orange-700/20 text-orange-400 border border-orange-700/40"
-                          : "bg-bg-surface-elevated text-text-tertiary border border-border-strong"
-                  }`}
-                >
-                  {session.status === "LOBBY" ? "•" : i + 1}
+            {participants.map((p) => (
+              <div key={p.studentId} className="flex items-center gap-4 py-2.5">
+                <span className="w-8 h-8 rounded-full flex items-center justify-center font-mono text-sm shrink-0 bg-bg-surface-elevated text-text-tertiary border border-border-strong">
+                  •
                 </span>
                 <div className="flex-grow">
                   <p className="text-white text-sm">{p.fullName}</p>
                   <p className="text-text-tertiary text-xs font-mono">{p.username}</p>
                 </div>
-                {session.mode === "STUDENT" && session.status !== "LOBBY" && (
-                  <span
-                    className={`px-2 py-0.5 rounded-full border text-[11px] font-mono ${
-                      p.finished
-                        ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
-                        : "bg-bg-surface-elevated text-text-secondary border-border-strong"
-                    }`}
-                  >
-                    {p.finished ? "Finished" : `Q ${Math.min(p.progress + 1, session.totalQuestions)}/${session.totalQuestions}`}
-                  </span>
-                )}
-                {session.status !== "LOBBY" && (
-                  <span className="text-brand-400 font-mono font-bold">{p.score}</span>
-                )}
-                </div>
-                {/* Per-question detail: one cell per question */}
-                {session.status !== "LOBBY" && questions?.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-2 ml-12">
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="border-b border-border-strong">
+                  <th className="text-left text-text-secondary text-xs font-semibold py-2.5 pr-4 sticky left-0 bg-bg-surface">
+                    Student
+                  </th>
+                  {questions.map((q, qi) => (
+                    <th
+                      key={q.id}
+                      title={q.title}
+                      className="text-center text-text-tertiary text-xs font-mono font-semibold py-2.5 px-1.5"
+                    >
+                      Q{qi + 1}
+                    </th>
+                  ))}
+                  {session.mode === "STUDENT" && (
+                    <th className="text-center text-text-tertiary text-xs font-semibold py-2.5 px-3">
+                      Progress
+                    </th>
+                  )}
+                  <th className="text-right text-text-tertiary text-xs font-semibold py-2.5 pl-3">
+                    Score
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border-strong">
+                {participants.map((p, i) => (
+                  <tr key={p.studentId}>
+                    <td className="py-2.5 pr-4 sticky left-0 bg-bg-surface">
+                      <div className="flex items-center gap-3">
+                        <span
+                          className={`w-8 h-8 rounded-full flex items-center justify-center font-mono text-sm shrink-0 ${
+                            i === 0
+                              ? "bg-amber-500/20 text-amber-400 border border-amber-500/40"
+                              : i === 1
+                                ? "bg-slate-400/20 text-slate-300 border border-slate-400/40"
+                                : i === 2
+                                  ? "bg-orange-700/20 text-orange-400 border border-orange-700/40"
+                                  : "bg-bg-surface-elevated text-text-tertiary border border-border-strong"
+                          }`}
+                        >
+                          {i + 1}
+                        </span>
+                        <div className="min-w-[8rem]">
+                          <p className="text-white text-sm whitespace-nowrap">{p.fullName}</p>
+                          <p className="text-text-tertiary text-xs font-mono">{p.username}</p>
+                        </div>
+                      </div>
+                    </td>
                     {questions.map((q, qi) => {
                       const a = answersByStudent.get(p.studentId)?.get(q.id);
                       return (
-                        <span
-                          key={q.id}
-                          title={`Q${qi + 1}: ${q.title} — ${
-                            !a ? "no answer" : a.isCorrect ? `correct, +${a.points}` : "wrong"
-                          }`}
-                          className={`w-6 h-6 rounded flex items-center justify-center text-[10px] font-mono border ${
-                            !a
-                              ? "border-border-strong text-text-tertiary"
-                              : a.isCorrect
-                                ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
-                                : "bg-rose-500/20 text-rose-400 border-rose-500/40"
-                          }`}
-                        >
-                          {!a ? qi + 1 : a.isCorrect ? "✓" : "✗"}
-                        </span>
+                        <td key={q.id} className="text-center py-2.5 px-1.5">
+                          {a ? (
+                            <span
+                              title={`Q${qi + 1}: ${q.title} — ${
+                                a.isCorrect ? `correct, +${a.points}` : "wrong"
+                              }`}
+                              className={`inline-flex w-7 h-7 rounded-md items-center justify-center text-[11px] font-mono border ${
+                                a.isCorrect
+                                  ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/40"
+                                  : "bg-rose-500/15 text-rose-400 border-rose-500/40"
+                              }`}
+                            >
+                              {a.isCorrect ? "✓" : "✗"}
+                            </span>
+                          ) : (
+                            <span
+                              title={`Q${qi + 1}: ${q.title} — no answer`}
+                              className="text-text-tertiary text-xs"
+                            >
+                              ·
+                            </span>
+                          )}
+                        </td>
                       );
                     })}
-                  </div>
-                )}
-              </div>
-            ))}
+                    {session.mode === "STUDENT" && (
+                      <td className="text-center py-2.5 px-3">
+                        <span
+                          className={`px-2 py-0.5 rounded-full border text-[11px] font-mono whitespace-nowrap ${
+                            p.finished
+                              ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                              : "bg-bg-surface-elevated text-text-secondary border-border-strong"
+                          }`}
+                        >
+                          {p.finished
+                            ? "Finished"
+                            : `Q ${Math.min(p.progress + 1, session.totalQuestions)}/${session.totalQuestions}`}
+                        </span>
+                      </td>
+                    )}
+                    <td className="text-right py-2.5 pl-3">
+                      <span className="text-brand-400 font-mono font-bold">{p.score}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
