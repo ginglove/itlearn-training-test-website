@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { liveSessions, liveParticipants, liveAnswers, questions, quizOptions, users, exams } from "@/db/schema";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { getUserId, isAdminRequest } from "@/lib/get-user-id";
 import { orderByQuestionOrder } from "@/lib/live-quiz";
 
@@ -68,6 +68,31 @@ export async function GET(
       .innerJoin(users, eq(users.id, liveParticipants.studentId))
       .where(eq(liveParticipants.sessionId, id))
       .orderBy(sql`${liveParticipants.score} DESC`, users.fullName);
+
+    // Correct answer text per question, for the leaderboard answer key
+    const allOptions = sessionQuestions.length
+      ? await db
+          .select({
+            questionId: quizOptions.questionId,
+            text: quizOptions.optionText,
+            isCorrect: quizOptions.isCorrect,
+          })
+          .from(quizOptions)
+          .where(
+            inArray(
+              quizOptions.questionId,
+              sessionQuestions.map((q) => q.id)
+            )
+          )
+          .orderBy(quizOptions.id)
+      : [];
+    const correctByQuestion = new Map<string, string[]>();
+    for (const opt of allOptions) {
+      if (!opt.isCorrect) continue;
+      const list = correctByQuestion.get(opt.questionId) ?? [];
+      list.push(opt.text);
+      correctByQuestion.set(opt.questionId, list);
+    }
 
     // Per-question detail for the leaderboard: every answer in the session
     const allAnswers = await db
@@ -138,7 +163,11 @@ export async function GET(
         finished: Boolean(p.finishedAt),
         progress: Math.min(p.currentQuestionIndex, sessionQuestions.length),
       })),
-      questions: sessionQuestions.map((q) => ({ id: q.id, title: q.title })),
+      questions: sessionQuestions.map((q) => ({
+        id: q.id,
+        title: q.title,
+        correctAnswer: (correctByQuestion.get(q.id) ?? []).join(" · "),
+      })),
       answers: allAnswers,
       currentQuestion,
       answerDistribution,

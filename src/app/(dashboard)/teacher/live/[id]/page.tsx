@@ -32,7 +32,7 @@ interface HostState {
   } | null;
   answerDistribution: Record<string, number>;
   answeredCount: number;
-  questions: { id: string; title: string }[];
+  questions: { id: string; title: string; correctAnswer: string }[];
   answers: { studentId: string; questionId: string; isCorrect: boolean; points: number }[];
 }
 
@@ -249,7 +249,7 @@ export default function LiveHostPage({ params }: { params: Promise<{ id: string 
                   {questions.map((q, qi) => (
                     <th
                       key={q.id}
-                      title={q.title}
+                      title={`${q.title} — answer: ${q.correctAnswer}`}
                       className="text-center text-text-tertiary text-xs font-mono font-semibold py-2.5 px-1.5"
                     >
                       Q{qi + 1}
@@ -339,6 +339,26 @@ export default function LiveHostPage({ params }: { params: Promise<{ id: string 
                 ))}
               </tbody>
             </table>
+
+            {/* Answer key */}
+            <div className="mt-5 pt-4 border-t border-border-strong">
+              <p className="text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">
+                Answer Key
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1.5">
+                {questions.map((q, qi) => (
+                  <div key={q.id} className="flex items-baseline gap-2 text-xs">
+                    <span className="text-text-tertiary font-mono shrink-0">Q{qi + 1}</span>
+                    <span className="text-text-secondary truncate" title={q.title}>
+                      {q.title}
+                    </span>
+                    <span className="text-emerald-400 font-semibold shrink-0 ml-auto text-right" title={q.correctAnswer}>
+                      {q.correctAnswer}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
       </div>
