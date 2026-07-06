@@ -1,13 +1,34 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+
+interface HistoryRow {
+  id: string;
+  status: "LOBBY" | "QUESTION" | "ENDED";
+  createdAt: string;
+  examTitle: string;
+  score: number;
+  rank: number;
+  participantCount: number;
+}
 
 export default function JoinLivePage() {
   const router = useRouter();
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isJoining, setIsJoining] = useState(false);
+  const [history, setHistory] = useState<HistoryRow[]>([]);
+
+  useEffect(() => {
+    (async () => {
+      const res = await fetch("/api/v1/student/live-sessions");
+      if (res.ok) {
+        const data = await res.json();
+        setHistory(data.sessions ?? []);
+      }
+    })();
+  }, []);
 
   const join = async () => {
     setIsJoining(true);
@@ -55,6 +76,35 @@ export default function JoinLivePage() {
         >
           {isJoining ? "Joining…" : "Join"}
         </button>
+
+        {history.length > 0 && (
+          <div className="mt-12 text-left">
+            <h2 className="text-sm font-semibold text-white mb-3">Your Live Quiz Results</h2>
+            <div className="bg-bg-surface border border-border-strong rounded-2xl divide-y divide-border-strong overflow-hidden">
+              {history.map((h) => (
+                <button
+                  key={h.id}
+                  onClick={() => router.push(`/student/live/${h.id}`)}
+                  className="w-full text-left p-4 hover:bg-bg-surface-elevated transition-all flex items-center gap-3"
+                >
+                  <div className="flex-grow min-w-0">
+                    <p className="text-white text-sm font-semibold truncate">{h.examTitle}</p>
+                    <p className="text-text-tertiary text-xs mt-0.5 font-mono">
+                      {new Date(h.createdAt).toLocaleString()}
+                      {h.status !== "ENDED" && " · still running"}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-brand-400 font-mono font-bold text-sm">{h.score} pts</p>
+                    <p className="text-text-tertiary text-xs font-mono">
+                      #{h.rank} of {h.participantCount}
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

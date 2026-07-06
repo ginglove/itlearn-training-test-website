@@ -9,6 +9,24 @@ interface ExamOption {
   description: string | null;
 }
 
+interface SessionRow {
+  id: string;
+  joinCode: string;
+  status: "LOBBY" | "QUESTION" | "ENDED";
+  questionSeconds: number;
+  createdAt: string;
+  examTitle: string;
+  hostName: string;
+  hostUsername: string;
+  participantCount: number;
+}
+
+const STATUS_STYLES: Record<SessionRow["status"], { label: string; className: string }> = {
+  LOBBY: { label: "Lobby", className: "bg-sky-500/15 text-sky-400 border-sky-500/30" },
+  QUESTION: { label: "In Progress", className: "bg-amber-500/15 text-amber-400 border-amber-500/30" },
+  ENDED: { label: "Ended", className: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" },
+};
+
 export default function LiveLaunchPage() {
   const router = useRouter();
   const [exams, setExams] = useState<ExamOption[]>([]);
@@ -66,6 +84,52 @@ export default function LiveLaunchPage() {
 
   const exportExam = (examId: string) => {
     window.open(`/api/v1/teacher/exams/${examId}/export-questions`, "_blank");
+  };
+
+  const [sessions, setSessions] = useState<SessionRow[]>([]);
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editSeconds, setEditSeconds] = useState(30);
+
+  const loadSessions = async () => {
+    const res = await fetch("/api/v1/teacher/live-sessions");
+    if (res.ok) {
+      const data = await res.json();
+      setSessions(data.sessions ?? []);
+    }
+  };
+
+  useEffect(() => {
+    loadSessions();
+  }, []);
+
+  const saveSeconds = async (sessionId: string) => {
+    const res = await fetch(`/api/v1/teacher/live-sessions/${sessionId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ questionSeconds: editSeconds }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      setError(data?.message || "Could not update the session.");
+    }
+    setEditingSessionId(null);
+    loadSessions();
+  };
+
+  const deleteSession = async (session: SessionRow) => {
+    if (
+      !window.confirm(
+        `Delete the live session for "${session.examTitle}" (code ${session.joinCode})? Scores and answers will be removed.`
+      )
+    ) {
+      return;
+    }
+    const res = await fetch(`/api/v1/teacher/live-sessions/${session.id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      setError(data?.message || "Could not delete the session.");
+    }
+    loadSessions();
   };
 
   const launch = async () => {
@@ -216,6 +280,94 @@ export default function LiveLaunchPage() {
           </button>
         </>
       )}
+
+      {/* Session management */}
+      <div className="mt-10">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-display font-bold text-white">Live Sessions</h2>
+          <span className="text-text-tertiary text-xs font-mono">
+            {sessions.length} total · {sessions.filter((s) => s.status !== "ENDED").length} active
+          </span>
+        </div>
+        {sessions.length === 0 ? (
+          <div className="bg-bg-surface border border-border-strong rounded-2xl p-8 text-center">
+            <p className="text-text-secondary text-sm">No live sessions yet.</p>
+          </div>
+        ) : (
+          <div className="bg-bg-surface border border-border-strong rounded-2xl divide-y divide-border-strong overflow-hidden">
+            {sessions.map((s) => (
+              <div key={s.id} className="p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                <div className="flex-grow min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-white text-sm font-semibold truncate">{s.examTitle}</p>
+                    <span
+                      className={`px-2 py-0.5 rounded-full border text-[11px] font-semibold ${STATUS_STYLES[s.status].className}`}
+                    >
+                      {STATUS_STYLES[s.status].label}
+                    </span>
+                  </div>
+                  <p className="text-text-tertiary text-xs mt-1 font-mono">
+                    Code {s.joinCode} · {s.participantCount} players · {s.questionSeconds}s/question ·{" "}
+                    {new Date(s.createdAt).toLocaleString()} · {s.hostName}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {editingSessionId === s.id ? (
+                    <>
+                      <input
+                        type="number"
+                        min={10}
+                        max={300}
+                        value={editSeconds}
+                        onChange={(e) => setEditSeconds(parseInt(e.target.value, 10) || 30)}
+                        className="w-20 bg-bg-surface-elevated border border-border-strong rounded-lg px-2 py-1.5 text-white text-sm font-mono focus:border-brand-500 focus:outline-none"
+                      />
+                      <button
+                        onClick={() => saveSeconds(s.id)}
+                        className="px-3 py-1.5 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-xs font-semibold transition-all"
+                      >
+                        Save
+                      </button>
+                      <button
+                        onClick={() => setEditingSessionId(null)}
+                        className="px-3 py-1.5 rounded-lg border border-border-strong text-text-secondary hover:text-white text-xs transition-all"
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => router.push(`/teacher/live/${s.id}`)}
+                        className="px-3 py-1.5 rounded-lg border border-brand-500/40 text-brand-400 hover:bg-brand-500/10 text-xs font-semibold transition-all"
+                      >
+                        {s.status === "ENDED" ? "Results" : "Open"}
+                      </button>
+                      {s.status !== "ENDED" && (
+                        <button
+                          onClick={() => {
+                            setEditingSessionId(s.id);
+                            setEditSeconds(s.questionSeconds);
+                          }}
+                          className="px-3 py-1.5 rounded-lg border border-border-strong text-text-secondary hover:text-white text-xs transition-all"
+                        >
+                          Edit
+                        </button>
+                      )}
+                      <button
+                        onClick={() => deleteSession(s)}
+                        className="px-3 py-1.5 rounded-lg border border-rose-500/30 text-rose-400 hover:bg-rose-500/10 text-xs transition-all"
+                      >
+                        Delete
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

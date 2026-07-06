@@ -1,8 +1,49 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { liveSessions, exams, questions } from "@/db/schema";
-import { and, eq, sql } from "drizzle-orm";
+import { liveSessions, liveParticipants, exams, questions, users } from "@/db/schema";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { getUserId, isAdminRequest } from "@/lib/get-user-id";
+
+// GET — list live sessions: admins see every session in the system,
+// teachers only the sessions they host
+export async function GET(request: NextRequest) {
+  try {
+    const teacherId = getUserId(request, "teacher");
+    if (!teacherId) {
+      return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+    }
+
+    const sessions = await db
+      .select({
+        id: liveSessions.id,
+        joinCode: liveSessions.joinCode,
+        status: liveSessions.status,
+        currentQuestionIndex: liveSessions.currentQuestionIndex,
+        questionSeconds: liveSessions.questionSeconds,
+        createdAt: liveSessions.createdAt,
+        examTitle: exams.title,
+        hostName: users.fullName,
+        hostUsername: users.username,
+        participantCount: sql<number>`(
+          SELECT COUNT(*)::int FROM ${liveParticipants}
+          WHERE ${liveParticipants.sessionId} = ${liveSessions.id}
+        )`,
+      })
+      .from(liveSessions)
+      .innerJoin(exams, eq(exams.id, liveSessions.examId))
+      .innerJoin(users, eq(users.id, liveSessions.hostId))
+      .where(isAdminRequest(request) ? sql`TRUE` : eq(liveSessions.hostId, teacherId))
+      .orderBy(desc(liveSessions.createdAt));
+
+    return NextResponse.json({ status: "SUCCESS", sessions, total: sessions.length });
+  } catch (error) {
+    console.error("List live sessions error:", error);
+    return NextResponse.json(
+      { error: "INTERNAL_ERROR", message: "Failed to list live sessions" },
+      { status: 500 }
+    );
+  }
+}
 
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O/1/I
 

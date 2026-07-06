@@ -195,3 +195,77 @@ export async function POST(
     );
   }
 }
+
+// PATCH — edit session settings: { questionSeconds } (applies from the next question)
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const teacherId = getUserId(request, "teacher");
+    if (!teacherId) {
+      return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+    }
+    const { id } = await params;
+
+    const session = await getHostedSession(request, teacherId, id);
+    if (!session) {
+      return NextResponse.json({ error: "NOT_FOUND", message: "Live session not found" }, { status: 404 });
+    }
+    if (session.status === "ENDED") {
+      return NextResponse.json(
+        { error: "VALIDATION_ERROR", message: "Cannot edit an ended session" },
+        { status: 409 }
+      );
+    }
+
+    const { questionSeconds } = await request.json();
+    if (!Number.isInteger(questionSeconds) || questionSeconds < 10 || questionSeconds > 300) {
+      return NextResponse.json(
+        { error: "VALIDATION_ERROR", message: "questionSeconds must be an integer between 10 and 300" },
+        { status: 400 }
+      );
+    }
+
+    const [updated] = await db
+      .update(liveSessions)
+      .set({ questionSeconds })
+      .where(eq(liveSessions.id, id))
+      .returning();
+    return NextResponse.json({ status: "SUCCESS", session: updated });
+  } catch (error) {
+    console.error("Live session edit error:", error);
+    return NextResponse.json(
+      { error: "INTERNAL_ERROR", message: "Failed to edit live session" },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE — remove a live session and its participants/answers (cascade)
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const teacherId = getUserId(request, "teacher");
+    if (!teacherId) {
+      return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+    }
+    const { id } = await params;
+
+    const session = await getHostedSession(request, teacherId, id);
+    if (!session) {
+      return NextResponse.json({ error: "NOT_FOUND", message: "Live session not found" }, { status: 404 });
+    }
+
+    await db.delete(liveSessions).where(eq(liveSessions.id, id));
+    return NextResponse.json({ status: "SUCCESS" });
+  } catch (error) {
+    console.error("Live session delete error:", error);
+    return NextResponse.json(
+      { error: "INTERNAL_ERROR", message: "Failed to delete live session" },
+      { status: 500 }
+    );
+  }
+}
