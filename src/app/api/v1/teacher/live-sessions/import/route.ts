@@ -4,6 +4,86 @@ import { exams, questions, quizOptions } from "@/db/schema";
 import { getUserId } from "@/lib/get-user-id";
 import * as xlsx from "xlsx";
 
+// GET — download an .xlsx template with the expected columns and sample
+// questions, ready to fill in and import
+export async function GET(request: NextRequest) {
+  const teacherId = getUserId(request, "teacher");
+  if (!teacherId) {
+    return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  }
+
+  const sampleRows = [
+    {
+      type: "QUIZ",
+      title: "Capital cities",
+      question_text: "What is the capital of France?",
+      points: 1,
+      option_a: "Paris",
+      option_b: "London",
+      option_c: "Berlin",
+      option_d: "Madrid",
+      correct_identifier: "A",
+    },
+    {
+      type: "QUIZ",
+      title: "Even numbers",
+      question_text: "Which of these numbers are even? (multiple answers)",
+      points: 2,
+      option_a: "3",
+      option_b: "4",
+      option_c: "7",
+      option_d: "10",
+      correct_identifier: "B,D",
+    },
+    {
+      type: "QUIZ",
+      title: "True or false",
+      question_text: "The sun rises in the east. (only two options needed)",
+      points: 1,
+      option_a: "True",
+      option_b: "False",
+      option_c: "",
+      option_d: "",
+      correct_identifier: "A",
+    },
+  ];
+
+  const worksheet = xlsx.utils.json_to_sheet(sampleRows, {
+    header: [
+      "type",
+      "title",
+      "question_text",
+      "points",
+      "option_a",
+      "option_b",
+      "option_c",
+      "option_d",
+      "correct_identifier",
+    ],
+  });
+  worksheet["!cols"] = [
+    { wch: 6 },
+    { wch: 20 },
+    { wch: 50 },
+    { wch: 7 },
+    { wch: 18 },
+    { wch: 18 },
+    { wch: 18 },
+    { wch: 18 },
+    { wch: 18 },
+  ];
+  const workbook = xlsx.utils.book_new();
+  xlsx.utils.book_append_sheet(workbook, worksheet, "Questions");
+  const buffer = xlsx.write(workbook, { type: "buffer", bookType: "xlsx" });
+
+  return new NextResponse(buffer, {
+    headers: {
+      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "Content-Disposition": `attachment; filename="live-quiz-template.xlsx"`,
+    },
+  });
+}
+
 // POST — import QUIZ questions from an .xlsx file into a new exam so it can
 // be hosted as a live quiz right away. Accepts the same columns as the exam
 // question import: type, title, question_text, points, option_a..option_d,

@@ -7,6 +7,7 @@ interface ExamOption {
   id: string;
   title: string;
   description: string | null;
+  quizQuestionCount: number;
 }
 
 interface SessionRow {
@@ -41,7 +42,7 @@ export default function LiveLaunchPage() {
 
   const loadExams = async () => {
     try {
-      const res = await fetch("/api/v1/teacher/exams");
+      const res = await fetch("/api/v1/teacher/live-sessions/exams");
       if (res.ok) {
         const data = await res.json();
         setExams(data.exams ?? []);
@@ -190,6 +191,15 @@ export default function LiveLaunchPage() {
           </svg>
           {isImporting ? "Importing…" : "Import Questions (.xlsx)"}
         </button>
+        <button
+          onClick={() => window.open("/api/v1/teacher/live-sessions/import", "_blank")}
+          className="px-4 py-2 rounded-xl border border-border-strong text-text-secondary hover:text-white hover:border-brand-500/40 text-sm font-semibold transition-all flex items-center gap-2"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 4v12m0-12l-4 4m4-4l4 4" />
+          </svg>
+          Download Template
+        </button>
         <span className="text-text-tertiary text-xs">
           Columns: type, title, question_text, points, option_a–d, correct_identifier
         </span>
@@ -201,7 +211,8 @@ export default function LiveLaunchPage() {
       ) : exams.length === 0 ? (
         <div className="bg-bg-surface border border-border-strong rounded-2xl p-8 text-center">
           <p className="text-text-secondary text-sm">
-            You have no exams yet. Create an exam with quiz questions first.
+            No hostable quizzes yet. Import questions above, or create an exam with quiz
+            questions first.
           </p>
           <button
             onClick={() => router.push("/teacher")}
@@ -224,7 +235,12 @@ export default function LiveLaunchPage() {
                 }`}
               >
                 <div className="flex-grow min-w-0">
-                  <p className="text-white text-sm font-semibold">{exam.title}</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-white text-sm font-semibold">{exam.title}</p>
+                    <span className="px-2 py-0.5 rounded-full bg-brand-500/10 border border-brand-500/30 text-brand-400 text-[11px] font-mono">
+                      {exam.quizQuestionCount} questions
+                    </span>
+                  </div>
                   {exam.description && (
                     <p className="text-text-tertiary text-xs mt-1 line-clamp-2">{exam.description}</p>
                   )}
