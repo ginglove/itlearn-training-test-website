@@ -447,3 +447,73 @@ export const platformSettings = pgTable("platform_settings", {
     .defaultNow(),
 });
 
+
+
+// ── Live Quiz Sessions (Wayground-style realtime quiz) ────────────────────────
+export const liveSessions = pgTable(
+  "live_sessions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    examId: uuid("exam_id")
+      .notNull()
+      .references(() => exams.id, { onDelete: "cascade" }),
+    hostId: uuid("host_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id").references(() => workspaces.id, { onDelete: "set null" }),
+    joinCode: varchar("join_code", { length: 8 }).notNull(),
+    // LOBBY → QUESTION (repeated) → ENDED
+    status: varchar("status", { length: 12 }).notNull().default("LOBBY"),
+    currentQuestionIndex: integer("current_question_index").notNull().default(-1),
+    questionStartedAt: timestamp("question_started_at", { withTimezone: true }),
+    questionSeconds: integer("question_seconds").notNull().default(30),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("unique_live_join_code").on(table.joinCode),
+    index("idx_live_sessions_host").on(table.hostId),
+  ]
+);
+
+export const liveParticipants = pgTable(
+  "live_participants",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => liveSessions.id, { onDelete: "cascade" }),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    score: integer("score").notNull().default(0),
+    joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("unique_live_participant").on(table.sessionId, table.studentId),
+    index("idx_live_participants_session").on(table.sessionId),
+  ]
+);
+
+export const liveAnswers = pgTable(
+  "live_answers",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => liveSessions.id, { onDelete: "cascade" }),
+    questionId: uuid("question_id")
+      .notNull()
+      .references(() => questions.id, { onDelete: "cascade" }),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    selectedOptions: text("selected_options").array().default([]),
+    isCorrect: boolean("is_correct").notNull().default(false),
+    points: integer("points").notNull().default(0),
+    answeredAt: timestamp("answered_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("unique_live_answer").on(table.sessionId, table.questionId, table.studentId),
+    index("idx_live_answers_session_question").on(table.sessionId, table.questionId),
+  ]
+);

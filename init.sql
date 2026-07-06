@@ -1,4 +1,7 @@
 -- Clean up existing tables and types
+DROP TABLE IF EXISTS "live_answers" CASCADE;
+DROP TABLE IF EXISTS "live_participants" CASCADE;
+DROP TABLE IF EXISTS "live_sessions" CASCADE;
 DROP TABLE IF EXISTS "workspace_class_reports" CASCADE;
 DROP TABLE IF EXISTS "workspace_activity_attempts" CASCADE;
 DROP TABLE IF EXISTS "workspace_activities" CASCADE;
@@ -312,6 +315,52 @@ CREATE INDEX "idx_workspace_activities_exam" ON "workspace_activities" USING btr
 CREATE UNIQUE INDEX "unique_activity_student_attempt" ON "workspace_activity_attempts" USING btree ("activity_id","student_id");
 CREATE INDEX "idx_activity_attempts_student" ON "workspace_activity_attempts" USING btree ("student_id");
 CREATE INDEX "idx_reports_workspace" ON "workspace_class_reports" USING btree ("workspace_id");
+
+-- ── Live Quiz Sessions ─────────────────────────────────────────────────────────
+
+CREATE TABLE "live_sessions" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"exam_id" uuid NOT NULL,
+	"host_id" uuid NOT NULL,
+	"workspace_id" uuid,
+	"join_code" varchar(8) NOT NULL,
+	"status" varchar(12) DEFAULT 'LOBBY' NOT NULL,
+	"current_question_index" integer DEFAULT -1 NOT NULL,
+	"question_started_at" timestamp with time zone,
+	"question_seconds" integer DEFAULT 30 NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+CREATE TABLE "live_participants" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"session_id" uuid NOT NULL,
+	"student_id" uuid NOT NULL,
+	"score" integer DEFAULT 0 NOT NULL,
+	"joined_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+CREATE TABLE "live_answers" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"session_id" uuid NOT NULL,
+	"question_id" uuid NOT NULL,
+	"student_id" uuid NOT NULL,
+	"selected_options" text[] DEFAULT '{}',
+	"is_correct" boolean DEFAULT false NOT NULL,
+	"points" integer DEFAULT 0 NOT NULL,
+	"answered_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+ALTER TABLE "live_sessions" ADD CONSTRAINT "live_sessions_exam_id_fk" FOREIGN KEY ("exam_id") REFERENCES "public"."exams"("id") ON DELETE cascade ON UPDATE no action;
+ALTER TABLE "live_sessions" ADD CONSTRAINT "live_sessions_host_id_fk" FOREIGN KEY ("host_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ALTER TABLE "live_sessions" ADD CONSTRAINT "live_sessions_workspace_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspaces"("id") ON DELETE set null ON UPDATE no action;
+ALTER TABLE "live_participants" ADD CONSTRAINT "live_participants_session_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."live_sessions"("id") ON DELETE cascade ON UPDATE no action;
+ALTER TABLE "live_participants" ADD CONSTRAINT "live_participants_student_id_fk" FOREIGN KEY ("student_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+ALTER TABLE "live_answers" ADD CONSTRAINT "live_answers_session_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."live_sessions"("id") ON DELETE cascade ON UPDATE no action;
+ALTER TABLE "live_answers" ADD CONSTRAINT "live_answers_question_id_fk" FOREIGN KEY ("question_id") REFERENCES "public"."questions"("id") ON DELETE cascade ON UPDATE no action;
+ALTER TABLE "live_answers" ADD CONSTRAINT "live_answers_student_id_fk" FOREIGN KEY ("student_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+CREATE UNIQUE INDEX "unique_live_join_code" ON "live_sessions" USING btree ("join_code");
+CREATE INDEX "idx_live_sessions_host" ON "live_sessions" USING btree ("host_id");
+CREATE UNIQUE INDEX "unique_live_participant" ON "live_participants" USING btree ("session_id","student_id");
+CREATE INDEX "idx_live_participants_session" ON "live_participants" USING btree ("session_id");
+CREATE UNIQUE INDEX "unique_live_answer" ON "live_answers" USING btree ("session_id","question_id","student_id");
+CREATE INDEX "idx_live_answers_session_question" ON "live_answers" USING btree ("session_id","question_id");
 
 -- ── Seed: platform admin account ───────────────────────────────────────────────
 -- Login: platform_admin / Admin@123!  (change the password after first login)

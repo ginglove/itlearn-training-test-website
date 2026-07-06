@@ -1,0 +1,226 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState, use } from "react";
+import { useRouter } from "next/navigation";
+
+interface PlayState {
+  session: {
+    status: "LOBBY" | "QUESTION" | "ENDED";
+    currentQuestionIndex: number;
+    totalQuestions: number;
+    remainingSeconds: number;
+    questionSeconds: number;
+    examTitle: string;
+    participantCount: number;
+  };
+  currentQuestion: {
+    id: string;
+    title: string;
+    content: string;
+    options: { id: string; text: string }[];
+  } | null;
+  myAnswer: { isCorrect: boolean; points: number } | null;
+  myScore: number;
+  myRank: number;
+  leaderboard: { studentId: string; fullName: string; score: number }[];
+}
+
+const OPTION_COLORS = [
+  "bg-rose-500 hover:bg-rose-400",
+  "bg-sky-500 hover:bg-sky-400",
+  "bg-amber-500 hover:bg-amber-400",
+  "bg-emerald-500 hover:bg-emerald-400",
+  "bg-purple-500 hover:bg-purple-400",
+  "bg-teal-500 hover:bg-teal-400",
+];
+
+export default function LivePlayPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  const router = useRouter();
+  const [state, setState] = useState<PlayState | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [feedback, setFeedback] = useState<{ isCorrect: boolean; points: number } | null>(null);
+  const lastQuestionId = useRef<string | null>(null);
+
+  const fetchState = useCallback(async () => {
+    const res = await fetch(`/api/v1/student/live-sessions/${id}`);
+    if (res.ok) {
+      const data: PlayState = await res.json();
+      // Reset local selection when a new question opens
+      if (data.currentQuestion && data.currentQuestion.id !== lastQuestionId.current) {
+        lastQuestionId.current = data.currentQuestion.id;
+        setSelected([]);
+        setFeedback(null);
+      }
+      setState(data);
+    } else if (res.status === 403) {
+      router.push("/student/live");
+    } else {
+      setError("Session not found.");
+    }
+  }, [id, router]);
+
+  useEffect(() => {
+    fetchState();
+    const interval = setInterval(fetchState, 2000);
+    return () => clearInterval(interval);
+  }, [fetchState]);
+
+  const submit = async (optionIds: string[]) => {
+    if (!state?.currentQuestion) return;
+    const res = await fetch(`/api/v1/student/live-sessions/${id}/answer`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ questionId: state.currentQuestion.id, selectedOptions: optionIds }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setFeedback({ isCorrect: data.isCorrect, points: data.points });
+      fetchState();
+    }
+  };
+
+  if (error) return <div className="p-10 text-rose-400">{error}</div>;
+  if (!state) return <div className="p-10 text-text-secondary">Connecting…</div>;
+
+  const { session, currentQuestion, myAnswer, myScore, myRank, leaderboard } = state;
+  const answered = !!myAnswer || !!feedback;
+  const result = feedback ?? myAnswer;
+
+  return (
+    <div className="p-6 md:p-10 max-w-3xl mx-auto">
+      {/* Header: score + rank */}
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+        <div>
+          <h1 className="text-xl font-display font-bold text-white">{session.examTitle}</h1>
+          <p className="text-text-tertiary text-xs font-mono mt-0.5">
+            {session.participantCount} players
+          </p>
+        </div>
+        <div className="flex gap-3">
+          <div className="bg-bg-surface border border-border-strong rounded-xl px-4 py-2 text-center">
+            <p className="text-brand-400 font-mono font-bold text-lg leading-none">{myScore}</p>
+            <p className="text-text-tertiary text-[10px] mt-1">POINTS</p>
+          </div>
+          <div className="bg-bg-surface border border-border-strong rounded-xl px-4 py-2 text-center">
+            <p className="text-white font-mono font-bold text-lg leading-none">#{myRank}</p>
+            <p className="text-text-tertiary text-[10px] mt-1">RANK</p>
+          </div>
+        </div>
+      </div>
+
+      {session.status === "LOBBY" && (
+        <div className="bg-bg-surface border border-border-strong rounded-2xl p-10 text-center">
+          <div className="animate-pulse text-4xl mb-4">🎮</div>
+          <h2 className="text-white font-bold text-lg mb-2">You&apos;re in!</h2>
+          <p className="text-text-secondary text-sm">
+            Waiting for your teacher to start the quiz…
+          </p>
+        </div>
+      )}
+
+      {session.status === "QUESTION" && currentQuestion && (
+        <div className="bg-bg-surface border border-border-strong rounded-2xl p-6">
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-text-tertiary text-xs font-mono">
+              Question {session.currentQuestionIndex + 1} / {session.totalQuestions}
+            </span>
+            <span
+              className={`text-2xl font-black font-mono ${
+                session.remainingSeconds <= 5 ? "text-rose-400 animate-pulse" : "text-white"
+              }`}
+            >
+              {session.remainingSeconds}s
+            </span>
+          </div>
+          <div className="w-full h-1.5 bg-bg-surface-elevated rounded-full overflow-hidden mb-5">
+            <div
+              className="h-full bg-brand-500 rounded-full transition-all duration-1000"
+              style={{ width: `${(session.remainingSeconds / session.questionSeconds) * 100}%` }}
+            />
+          </div>
+
+          <h2 className="text-lg font-bold text-white mb-1">{currentQuestion.title}</h2>
+          <p className="text-text-secondary text-sm mb-6 whitespace-pre-wrap">{currentQuestion.content}</p>
+
+          {answered ? (
+            <div
+              className={`rounded-2xl p-8 text-center border ${
+                result?.isCorrect
+                  ? "bg-emerald-500/10 border-emerald-500/30"
+                  : "bg-rose-500/10 border-rose-500/30"
+              }`}
+            >
+              <p className="text-4xl mb-2">{result?.isCorrect ? "🎉" : "😅"}</p>
+              <p className={`font-bold text-lg ${result?.isCorrect ? "text-emerald-400" : "text-rose-400"}`}>
+                {result?.isCorrect ? `Correct! +${result.points} points` : "Not quite…"}
+              </p>
+              <p className="text-text-secondary text-sm mt-1">Waiting for the next question…</p>
+            </div>
+          ) : session.remainingSeconds === 0 ? (
+            <div className="rounded-2xl p-8 text-center border border-border-strong">
+              <p className="text-text-secondary">⏰ Time&apos;s up! Waiting for the next question…</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {currentQuestion.options.map((o, i) => {
+                const isPicked = selected.includes(o.id);
+                return (
+                  <button
+                    key={o.id}
+                    onClick={() => {
+                      // Tap once = answer immediately; long-press style multi-select
+                      // via second tap on another option before confirming
+                      if (isPicked) {
+                        submit(selected);
+                      } else {
+                        const next = [...selected, o.id];
+                        setSelected(next);
+                        // Single-choice fast path: if nothing else selected, submit at once
+                        if (selected.length === 0) submit([o.id]);
+                      }
+                    }}
+                    className={`${OPTION_COLORS[i % OPTION_COLORS.length]} ${
+                      isPicked ? "ring-4 ring-white/60" : ""
+                    } text-white rounded-2xl p-5 font-semibold text-left text-sm transition-all shadow-lg`}
+                  >
+                    {o.text}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {session.status === "ENDED" && (
+        <div className="bg-bg-surface border border-border-strong rounded-2xl p-6 text-center">
+          <p className="text-5xl mb-3">🏆</p>
+          <h2 className="text-white font-bold text-xl mb-1">Quiz Finished!</h2>
+          <p className="text-text-secondary text-sm mb-6">
+            You finished <span className="text-brand-400 font-bold">#{myRank}</span> with{" "}
+            <span className="text-brand-400 font-bold">{myScore}</span> points.
+          </p>
+          <div className="divide-y divide-border-strong text-left max-w-md mx-auto">
+            {leaderboard.map((p, i) => (
+              <div key={p.studentId} className="flex items-center gap-3 py-2.5">
+                <span className="w-7 text-center font-mono text-sm text-text-tertiary">
+                  {i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1}
+                </span>
+                <span className="text-white text-sm flex-grow">{p.fullName}</span>
+                <span className="text-brand-400 font-mono font-bold text-sm">{p.score}</span>
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={() => router.push("/student/exams")}
+            className="mt-8 px-6 py-2.5 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-semibold text-sm transition-all"
+          >
+            Back to Exams
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
