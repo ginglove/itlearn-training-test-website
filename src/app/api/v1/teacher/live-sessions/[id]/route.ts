@@ -73,6 +73,7 @@ export async function GET(
     const allOptions = sessionQuestions.length
       ? await db
           .select({
+            optionId: quizOptions.id,
             questionId: quizOptions.questionId,
             text: quizOptions.optionText,
             isCorrect: quizOptions.isCorrect,
@@ -87,7 +88,9 @@ export async function GET(
           .orderBy(quizOptions.id)
       : [];
     const correctByQuestion = new Map<string, string[]>();
+    const optionTextById = new Map<string, string>();
     for (const opt of allOptions) {
+      optionTextById.set(opt.optionId, opt.text);
       if (!opt.isCorrect) continue;
       const list = correctByQuestion.get(opt.questionId) ?? [];
       list.push(opt.text);
@@ -95,15 +98,26 @@ export async function GET(
     }
 
     // Per-question detail for the leaderboard: every answer in the session
-    const allAnswers = await db
-      .select({
-        studentId: liveAnswers.studentId,
-        questionId: liveAnswers.questionId,
-        isCorrect: liveAnswers.isCorrect,
-        points: liveAnswers.points,
-      })
-      .from(liveAnswers)
-      .where(eq(liveAnswers.sessionId, id));
+    const allAnswers = (
+      await db
+        .select({
+          studentId: liveAnswers.studentId,
+          questionId: liveAnswers.questionId,
+          selectedOptions: liveAnswers.selectedOptions,
+          isCorrect: liveAnswers.isCorrect,
+          points: liveAnswers.points,
+        })
+        .from(liveAnswers)
+        .where(eq(liveAnswers.sessionId, id))
+    ).map((a) => ({
+      studentId: a.studentId,
+      questionId: a.questionId,
+      isCorrect: a.isCorrect,
+      points: a.points,
+      answerText: (a.selectedOptions ?? [])
+        .map((optId) => optionTextById.get(optId) ?? "?")
+        .join(" · "),
+    }));
 
     let currentQuestion = null;
     let answerDistribution: Record<string, number> = {};

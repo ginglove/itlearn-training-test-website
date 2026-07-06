@@ -33,7 +33,13 @@ interface HostState {
   answerDistribution: Record<string, number>;
   answeredCount: number;
   questions: { id: string; title: string; correctAnswer: string }[];
-  answers: { studentId: string; questionId: string; isCorrect: boolean; points: number }[];
+  answers: {
+    studentId: string;
+    questionId: string;
+    isCorrect: boolean;
+    points: number;
+    answerText: string;
+  }[];
 }
 
 const OPTION_COLORS = ["bg-rose-500", "bg-sky-500", "bg-amber-500", "bg-emerald-500", "bg-purple-500", "bg-teal-500"];
@@ -78,10 +84,15 @@ export default function LiveHostPage({ params }: { params: Promise<{ id: string 
   const isLast = session.currentQuestionIndex >= session.totalQuestions - 1;
 
   // studentId → questionId → answer, for the per-question leaderboard detail
-  const answersByStudent = new Map<string, Map<string, { isCorrect: boolean; points: number }>>();
+  const answersByStudent = new Map<
+    string,
+    Map<string, { isCorrect: boolean; points: number; answerText: string }>
+  >();
   for (const a of answers ?? []) {
     if (!answersByStudent.has(a.studentId)) answersByStudent.set(a.studentId, new Map());
-    answersByStudent.get(a.studentId)!.set(a.questionId, { isCorrect: a.isCorrect, points: a.points });
+    answersByStudent
+      .get(a.studentId)!
+      .set(a.questionId, { isCorrect: a.isCorrect, points: a.points, answerText: a.answerText });
   }
 
   return (
@@ -295,20 +306,21 @@ export default function LiveHostPage({ params }: { params: Promise<{ id: string 
                         <td key={q.id} className="text-center py-2.5 px-1.5">
                           {a ? (
                             <span
-                              title={`Q${qi + 1}: ${q.title} — ${
-                                a.isCorrect ? `correct, +${a.points}` : "wrong"
+                              title={`Q${qi + 1}: ${q.title}\nAnswered: ${a.answerText}\nCorrect answer: ${q.correctAnswer}\n${
+                                a.isCorrect ? `Correct, +${a.points}` : "Wrong"
                               }`}
-                              className={`inline-flex w-7 h-7 rounded-md items-center justify-center text-[11px] font-mono border ${
+                              className={`inline-flex max-w-[7rem] h-7 rounded-md items-center justify-center gap-1 px-2 text-[11px] font-mono border ${
                                 a.isCorrect
                                   ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/40"
                                   : "bg-rose-500/15 text-rose-400 border-rose-500/40"
                               }`}
                             >
-                              {a.isCorrect ? "✓" : "✗"}
+                              <span className="shrink-0">{a.isCorrect ? "✓" : "✗"}</span>
+                              <span className="truncate">{a.answerText}</span>
                             </span>
                           ) : (
                             <span
-                              title={`Q${qi + 1}: ${q.title} — no answer`}
+                              title={`Q${qi + 1}: ${q.title}\nNo answer\nCorrect answer: ${q.correctAnswer}`}
                               className="text-text-tertiary text-xs"
                             >
                               ·
