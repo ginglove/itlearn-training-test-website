@@ -328,6 +328,11 @@ CREATE TABLE "live_sessions" (
 	"current_question_index" integer DEFAULT -1 NOT NULL,
 	"question_started_at" timestamp with time zone,
 	"question_seconds" integer DEFAULT 30 NOT NULL,
+	"mode" varchar(10) DEFAULT 'TEACHER' NOT NULL,
+	"show_correct_answer" boolean DEFAULT true NOT NULL,
+	"shuffle_questions" boolean DEFAULT false NOT NULL,
+	"shuffle_options" boolean DEFAULT false NOT NULL,
+	"question_order" text[] DEFAULT '{}' NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 CREATE TABLE "live_participants" (
@@ -335,6 +340,8 @@ CREATE TABLE "live_participants" (
 	"session_id" uuid NOT NULL,
 	"student_id" uuid NOT NULL,
 	"score" integer DEFAULT 0 NOT NULL,
+	"current_question_index" integer DEFAULT 0 NOT NULL,
+	"finished_at" timestamp with time zone,
 	"joined_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 CREATE TABLE "live_answers" (

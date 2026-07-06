@@ -8,13 +8,22 @@ interface HostState {
     id: string;
     joinCode: string;
     status: "LOBBY" | "QUESTION" | "ENDED";
+    mode: "TEACHER" | "STUDENT";
+    showCorrectAnswer: boolean;
     currentQuestionIndex: number;
     questionSeconds: number;
     remainingSeconds: number;
     totalQuestions: number;
     examTitle: string;
   };
-  participants: { studentId: string; fullName: string; username: string; score: number }[];
+  participants: {
+    studentId: string;
+    fullName: string;
+    username: string;
+    score: number;
+    progress: number;
+    finished: boolean;
+  }[];
   currentQuestion: {
     id: string;
     title: string;
@@ -77,7 +86,10 @@ export default function LiveHostPage({ params }: { params: Promise<{ id: string 
               <span className="relative inline-flex rounded-full h-3 w-3 bg-brand-500" />
             </span>
           </div>
-          <p className="text-text-secondary text-sm mt-1">{session.examTitle}</p>
+          <p className="text-text-secondary text-sm mt-1">
+            {session.examTitle} ·{" "}
+            {session.mode === "STUDENT" ? "student-paced" : "teacher-led"}
+          </p>
         </div>
         <div className="flex items-center gap-3">
           {session.status === "LOBBY" && (
@@ -89,7 +101,7 @@ export default function LiveHostPage({ params }: { params: Promise<{ id: string 
               Start Quiz
             </button>
           )}
-          {session.status === "QUESTION" && (
+          {session.status === "QUESTION" && session.mode === "TEACHER" && (
             <button
               onClick={() => control("next")}
               disabled={isActing}
@@ -224,6 +236,17 @@ export default function LiveHostPage({ params }: { params: Promise<{ id: string 
                   <p className="text-white text-sm">{p.fullName}</p>
                   <p className="text-text-tertiary text-xs font-mono">{p.username}</p>
                 </div>
+                {session.mode === "STUDENT" && session.status !== "LOBBY" && (
+                  <span
+                    className={`px-2 py-0.5 rounded-full border text-[11px] font-mono ${
+                      p.finished
+                        ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                        : "bg-bg-surface-elevated text-text-secondary border-border-strong"
+                    }`}
+                  >
+                    {p.finished ? "Finished" : `Q ${Math.min(p.progress + 1, session.totalQuestions)}/${session.totalQuestions}`}
+                  </span>
+                )}
                 {session.status !== "LOBBY" && (
                   <span className="text-brand-400 font-mono font-bold">{p.score}</span>
                 )}

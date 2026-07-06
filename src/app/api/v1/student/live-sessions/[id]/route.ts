@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { liveSessions, liveParticipants, liveAnswers, questions, quizOptions, users, exams } from "@/db/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { getUserId } from "@/lib/get-user-id";
+import { orderByQuestionOrder, shuffleOptionsForStudent } from "@/lib/live-quiz";
 
 // GET — participant view of the live session: lobby/question/result state,
 // own answer status, score, rank and (when ended) the final leaderboard
@@ -44,11 +45,14 @@ export async function GET(
       .where(eq(exams.id, session.examId))
       .limit(1);
 
-    const sessionQuestions = await db
-      .select({ id: questions.id, title: questions.title, content: questions.content })
-      .from(questions)
-      .where(and(eq(questions.examId, session.examId), eq(questions.type, "QUIZ")))
-      .orderBy(questions.sortOrder, questions.id);
+    const sessionQuestions = orderByQuestionOrder(
+      await db
+        .select({ id: questions.id, title: questions.title, content: questions.content })
+        .from(questions)
+        .where(and(eq(questions.examId, session.examId), eq(questions.type, "QUIZ")))
+        .orderBy(questions.sortOrder, questions.id),
+      session.questionOrder
+    );
 
     const leaderboard = await db
       .select({
@@ -63,23 +67,36 @@ export async function GET(
     const rank = leaderboard.findIndex((p) => p.studentId === studentId) + 1;
 
     const startedAtMs = session.questionStartedAt ? new Date(session.questionStartedAt).getTime() : null;
+    // Student-paced sessions have no per-question countdown
     const remainingSeconds =
-      session.status === "QUESTION" && startedAtMs !== null
+      session.mode === "TEACHER" && session.status === "QUESTION" && startedAtMs !== null
         ? Math.max(0, session.questionSeconds - Math.floor((Date.now() - startedAtMs) / 1000))
         : 0;
 
+    // Which question this student is on: shared index in teacher-paced mode,
+    // their own pointer in student-paced mode
+    const myIndex =
+      session.mode === "STUDENT" ? me.currentQuestionIndex : session.currentQuestionIndex;
+    const finished = session.mode === "STUDENT" && (Boolean(me.finishedAt) || myIndex >= sessionQuestions.length);
+
     let currentQuestion = null;
-    let myAnswer: { isCorrect: boolean; points: number } | null = null;
+    let myAnswer: { isCorrect: boolean | null; points: number | null } | null = null;
+    let correctOptionIds: string[] | null = null;
     if (
       session.status === "QUESTION" &&
-      session.currentQuestionIndex >= 0 &&
-      session.currentQuestionIndex < sessionQuestions.length
+      !finished &&
+      myIndex >= 0 &&
+      myIndex < sessionQuestions.length
     ) {
-      const q = sessionQuestions[session.currentQuestionIndex];
-      const options = await db
-        .select({ id: quizOptions.id, text: quizOptions.optionText })
+      const q = sessionQuestions[myIndex];
+      let options = await db
+        .select({ id: quizOptions.id, text: quizOptions.optionText, isCorrect: quizOptions.isCorrect })
         .from(quizOptions)
-        .where(eq(quizOptions.questionId, q.id));
+        .where(eq(quizOptions.questionId, q.id))
+        .orderBy(quizOptions.id);
+      if (session.shuffleOptions) {
+        options = shuffleOptionsForStudent(options, studentId, q.id);
+      }
       const [answer] = await db
         .select({ isCorrect: liveAnswers.isCorrect, points: liveAnswers.points })
         .from(liveAnswers)
@@ -91,21 +108,38 @@ export async function GET(
           )
         )
         .limit(1);
-      myAnswer = answer ?? null;
-      currentQuestion = { id: q.id, title: q.title, content: q.content, options };
+      // Correctness is only revealed when the session allows it
+      if (answer) {
+        myAnswer = session.showCorrectAnswer
+          ? answer
+          : { isCorrect: null, points: null };
+        if (session.showCorrectAnswer) {
+          correctOptionIds = options.filter((o) => o.isCorrect).map((o) => o.id);
+        }
+      }
+      currentQuestion = {
+        id: q.id,
+        title: q.title,
+        content: q.content,
+        options: options.map((o) => ({ id: o.id, text: o.text })),
+      };
     }
 
     return NextResponse.json({
       status: "SUCCESS",
       session: {
         status: session.status,
-        currentQuestionIndex: session.currentQuestionIndex,
+        mode: session.mode,
+        showCorrectAnswer: session.showCorrectAnswer,
+        currentQuestionIndex: myIndex,
         totalQuestions: sessionQuestions.length,
         remainingSeconds,
         questionSeconds: session.questionSeconds,
         examTitle: exam?.title ?? "",
         participantCount: leaderboard.length,
       },
+      finished,
+      correctOptionIds,
       currentQuestion,
       myAnswer,
       myScore: me.score,

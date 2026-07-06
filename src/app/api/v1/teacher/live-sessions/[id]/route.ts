@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { liveSessions, liveParticipants, liveAnswers, questions, quizOptions, users, exams } from "@/db/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { getUserId, isAdminRequest } from "@/lib/get-user-id";
+import { orderByQuestionOrder } from "@/lib/live-quiz";
 
 async function getHostedSession(request: NextRequest, teacherId: string, sessionId: string) {
   const [session] = await db
@@ -18,12 +19,13 @@ async function getHostedSession(request: NextRequest, teacherId: string, session
   return session ?? null;
 }
 
-async function getSessionQuestions(examId: string) {
-  return db
+async function getSessionQuestions(session: { examId: string; questionOrder: string[] | null }) {
+  const rows = await db
     .select()
     .from(questions)
-    .where(and(eq(questions.examId, examId), eq(questions.type, "QUIZ")))
+    .where(and(eq(questions.examId, session.examId), eq(questions.type, "QUIZ")))
     .orderBy(questions.sortOrder, questions.id);
+  return orderByQuestionOrder(rows, session.questionOrder);
 }
 
 // GET — host view: session state, participants/leaderboard, current question
@@ -50,7 +52,7 @@ export async function GET(
       .where(eq(exams.id, session.examId))
       .limit(1);
 
-    const sessionQuestions = await getSessionQuestions(session.examId);
+    const sessionQuestions = await getSessionQuestions(session);
 
     const participants = await db
       .select({
@@ -58,6 +60,8 @@ export async function GET(
         fullName: users.fullName,
         username: users.username,
         score: liveParticipants.score,
+        currentQuestionIndex: liveParticipants.currentQuestionIndex,
+        finishedAt: liveParticipants.finishedAt,
         joinedAt: liveParticipants.joinedAt,
       })
       .from(liveParticipants)
@@ -68,7 +72,11 @@ export async function GET(
     let currentQuestion = null;
     let answerDistribution: Record<string, number> = {};
     let answeredCount = 0;
-    if (session.currentQuestionIndex >= 0 && session.currentQuestionIndex < sessionQuestions.length) {
+    if (
+      session.mode === "TEACHER" &&
+      session.currentQuestionIndex >= 0 &&
+      session.currentQuestionIndex < sessionQuestions.length
+    ) {
       const q = sessionQuestions[session.currentQuestionIndex];
       const options = await db
         .select()
@@ -104,13 +112,21 @@ export async function GET(
         id: session.id,
         joinCode: session.joinCode,
         status: session.status,
+        mode: session.mode,
+        showCorrectAnswer: session.showCorrectAnswer,
+        shuffleQuestions: session.shuffleQuestions,
+        shuffleOptions: session.shuffleOptions,
         currentQuestionIndex: session.currentQuestionIndex,
         questionSeconds: session.questionSeconds,
         remainingSeconds,
         totalQuestions: sessionQuestions.length,
         examTitle: exam?.title ?? "",
       },
-      participants,
+      participants: participants.map((p) => ({
+        ...p,
+        finished: Boolean(p.finishedAt),
+        progress: Math.min(p.currentQuestionIndex, sessionQuestions.length),
+      })),
       currentQuestion,
       answerDistribution,
       answeredCount,
@@ -148,7 +164,30 @@ export async function POST(
     }
 
     const { action } = await request.json();
-    const sessionQuestions = await getSessionQuestions(session.examId);
+    const sessionQuestions = await getSessionQuestions(session);
+
+    // Student-paced sessions: the host only opens and closes the quiz;
+    // each student advances on their own
+    if (session.mode === "STUDENT" && action !== "end") {
+      if (action !== "start") {
+        return NextResponse.json(
+          { error: "VALIDATION_ERROR", message: "Students advance on their own in this mode" },
+          { status: 400 }
+        );
+      }
+      if (session.status !== "LOBBY") {
+        return NextResponse.json(
+          { error: "VALIDATION_ERROR", message: "Session already started" },
+          { status: 409 }
+        );
+      }
+      const [updated] = await db
+        .update(liveSessions)
+        .set({ status: "QUESTION", currentQuestionIndex: 0, questionStartedAt: new Date() })
+        .where(eq(liveSessions.id, id))
+        .returning();
+      return NextResponse.json({ status: "SUCCESS", session: updated });
+    }
 
     if (action === "start" || action === "next") {
       const nextIndex = action === "start" ? 0 : session.currentQuestionIndex + 1;

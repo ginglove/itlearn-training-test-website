@@ -34,6 +34,10 @@ export default function LiveLaunchPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedExamId, setSelectedExamId] = useState<string | null>(null);
   const [questionSeconds, setQuestionSeconds] = useState(30);
+  const [mode, setMode] = useState<"TEACHER" | "STUDENT">("TEACHER");
+  const [showCorrectAnswer, setShowCorrectAnswer] = useState(true);
+  const [shuffleQuestions, setShuffleQuestions] = useState(false);
+  const [shuffleOptions, setShuffleOptions] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLaunching, setIsLaunching] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
@@ -141,7 +145,14 @@ export default function LiveLaunchPage() {
       const res = await fetch("/api/v1/teacher/live-sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ examId: selectedExamId, questionSeconds }),
+        body: JSON.stringify({
+          examId: selectedExamId,
+          questionSeconds,
+          mode,
+          showCorrectAnswer,
+          shuffleQuestions,
+          shuffleOptions,
+        }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -261,28 +272,106 @@ export default function LiveLaunchPage() {
             ))}
           </div>
 
-          <div className="bg-bg-surface border border-border-strong rounded-2xl p-5 mb-6 flex flex-col sm:flex-row sm:items-center gap-4">
-            <div className="flex-grow">
-              <p className="text-white text-sm font-semibold">Time per question</p>
-              <p className="text-text-tertiary text-xs mt-0.5">
-                How long students have to answer each question.
+          {/* Pacing mode */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+            <button
+              onClick={() => setMode("TEACHER")}
+              className={`text-left rounded-2xl border p-4 transition-all ${
+                mode === "TEACHER"
+                  ? "border-brand-500 bg-brand-500/10"
+                  : "border-border-strong bg-bg-surface hover:border-brand-500/40"
+              }`}
+            >
+              <p className="text-white text-sm font-semibold">👩‍🏫 Teacher-led</p>
+              <p className="text-text-tertiary text-xs mt-1">
+                You control the pace: everyone answers the same question, and you move the class
+                to the next one.
               </p>
-            </div>
-            <div className="flex items-center gap-2">
-              {[15, 30, 60, 120].map((s) => (
+            </button>
+            <button
+              onClick={() => setMode("STUDENT")}
+              className={`text-left rounded-2xl border p-4 transition-all ${
+                mode === "STUDENT"
+                  ? "border-brand-500 bg-brand-500/10"
+                  : "border-border-strong bg-bg-surface hover:border-brand-500/40"
+              }`}
+            >
+              <p className="text-white text-sm font-semibold">🏃 Student-paced</p>
+              <p className="text-text-tertiary text-xs mt-1">
+                Students move through the questions on their own: answer, press next, finish at
+                their own speed.
+              </p>
+            </button>
+          </div>
+
+          {/* Options */}
+          <div className="bg-bg-surface border border-border-strong rounded-2xl p-5 mb-4 space-y-4">
+            {mode === "TEACHER" && (
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                <div className="flex-grow">
+                  <p className="text-white text-sm font-semibold">Time per question</p>
+                  <p className="text-text-tertiary text-xs mt-0.5">
+                    How long students have to answer each question.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {[15, 30, 60, 120].map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => setQuestionSeconds(s)}
+                      className={`px-4 py-2 rounded-xl text-sm font-mono font-semibold border transition-all ${
+                        questionSeconds === s
+                          ? "border-brand-500 bg-brand-500/10 text-brand-400"
+                          : "border-border-strong text-text-secondary hover:text-white"
+                      }`}
+                    >
+                      {s}s
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {[
+              {
+                label: "Show correct answers",
+                hint: "Students see whether they were right after answering.",
+                value: showCorrectAnswer,
+                toggle: () => setShowCorrectAnswer((v) => !v),
+              },
+              {
+                label: "Shuffle questions",
+                hint: "Play the questions in a random order.",
+                value: shuffleQuestions,
+                toggle: () => setShuffleQuestions((v) => !v),
+              },
+              {
+                label: "Shuffle answers",
+                hint: "Each student sees the answer options in a different order.",
+                value: shuffleOptions,
+                toggle: () => setShuffleOptions((v) => !v),
+              },
+            ].map((opt) => (
+              <div key={opt.label} className="flex items-center gap-3">
+                <div className="flex-grow">
+                  <p className="text-white text-sm font-semibold">{opt.label}</p>
+                  <p className="text-text-tertiary text-xs mt-0.5">{opt.hint}</p>
+                </div>
                 <button
-                  key={s}
-                  onClick={() => setQuestionSeconds(s)}
-                  className={`px-4 py-2 rounded-xl text-sm font-mono font-semibold border transition-all ${
-                    questionSeconds === s
-                      ? "border-brand-500 bg-brand-500/10 text-brand-400"
-                      : "border-border-strong text-text-secondary hover:text-white"
+                  onClick={opt.toggle}
+                  role="switch"
+                  aria-checked={opt.value}
+                  className={`w-11 h-6 rounded-full transition-all relative shrink-0 ${
+                    opt.value ? "bg-brand-500" : "bg-bg-surface-elevated border border-border-strong"
                   }`}
                 >
-                  {s}s
+                  <span
+                    className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${
+                      opt.value ? "left-[22px]" : "left-0.5"
+                    }`}
+                  />
                 </button>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
 
           {error && <p className="text-rose-400 text-sm mb-4">{error}</p>}

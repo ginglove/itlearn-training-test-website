@@ -467,6 +467,14 @@ export const liveSessions = pgTable(
     currentQuestionIndex: integer("current_question_index").notNull().default(-1),
     questionStartedAt: timestamp("question_started_at", { withTimezone: true }),
     questionSeconds: integer("question_seconds").notNull().default(30),
+    // TEACHER: host advances questions for everyone; STUDENT: each student
+    // moves through the questions at their own pace
+    mode: varchar("mode", { length: 10 }).notNull().default("TEACHER"),
+    showCorrectAnswer: boolean("show_correct_answer").notNull().default(true),
+    shuffleQuestions: boolean("shuffle_questions").notNull().default(false),
+    shuffleOptions: boolean("shuffle_options").notNull().default(false),
+    // Question ids in play order, frozen at session creation
+    questionOrder: text("question_order").array().notNull().default([]),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
@@ -486,6 +494,9 @@ export const liveParticipants = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     score: integer("score").notNull().default(0),
+    // Progress pointer for student-paced sessions
+    currentQuestionIndex: integer("current_question_index").notNull().default(0),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
     joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [

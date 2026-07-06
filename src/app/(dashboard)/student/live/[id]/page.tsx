@@ -3,9 +3,17 @@
 import { useCallback, useEffect, useRef, useState, use } from "react";
 import { useRouter } from "next/navigation";
 
+interface AnswerResult {
+  // null when the session hides correct answers
+  isCorrect: boolean | null;
+  points: number | null;
+}
+
 interface PlayState {
   session: {
     status: "LOBBY" | "QUESTION" | "ENDED";
+    mode: "TEACHER" | "STUDENT";
+    showCorrectAnswer: boolean;
     currentQuestionIndex: number;
     totalQuestions: number;
     remainingSeconds: number;
@@ -19,7 +27,9 @@ interface PlayState {
     content: string;
     options: { id: string; text: string }[];
   } | null;
-  myAnswer: { isCorrect: boolean; points: number } | null;
+  myAnswer: AnswerResult | null;
+  finished: boolean;
+  correctOptionIds: string[] | null;
   myScore: number;
   myRank: number;
   leaderboard: { studentId: string; fullName: string; score: number }[];
@@ -40,7 +50,8 @@ export default function LivePlayPage({ params }: { params: Promise<{ id: string 
   const [state, setState] = useState<PlayState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
-  const [feedback, setFeedback] = useState<{ isCorrect: boolean; points: number } | null>(null);
+  const [feedback, setFeedback] = useState<AnswerResult | null>(null);
+  const [isAdvancing, setIsAdvancing] = useState(false);
   const lastQuestionId = useRef<string | null>(null);
 
   const fetchState = useCallback(async () => {
@@ -76,17 +87,29 @@ export default function LivePlayPage({ params }: { params: Promise<{ id: string 
     });
     const data = await res.json();
     if (res.ok) {
-      setFeedback({ isCorrect: data.isCorrect, points: data.points });
+      setFeedback({ isCorrect: data.isCorrect ?? null, points: data.points ?? null });
       fetchState();
+    }
+  };
+
+  const goNext = async () => {
+    setIsAdvancing(true);
+    try {
+      await fetch(`/api/v1/student/live-sessions/${id}/next`, { method: "POST" });
+      await fetchState();
+    } finally {
+      setIsAdvancing(false);
     }
   };
 
   if (error) return <div className="p-10 text-rose-400">{error}</div>;
   if (!state) return <div className="p-10 text-text-secondary">Connecting…</div>;
 
-  const { session, currentQuestion, myAnswer, myScore, myRank, leaderboard } = state;
+  const { session, currentQuestion, myAnswer, finished, myScore, myRank, leaderboard } = state;
   const answered = !!myAnswer || !!feedback;
   const result = feedback ?? myAnswer;
+  const selfPaced = session.mode === "STUDENT";
+  const revealed = session.showCorrectAnswer && result?.isCorrect !== null;
 
   return (
     <div className="p-6 md:p-10 max-w-3xl mx-auto">
@@ -120,26 +143,41 @@ export default function LivePlayPage({ params }: { params: Promise<{ id: string 
         </div>
       )}
 
-      {session.status === "QUESTION" && currentQuestion && (
+      {session.status === "QUESTION" && finished && (
+        <div className="bg-bg-surface border border-border-strong rounded-2xl p-10 text-center">
+          <p className="text-4xl mb-3">🏁</p>
+          <h2 className="text-white font-bold text-lg mb-2">You finished!</h2>
+          <p className="text-text-secondary text-sm">
+            You answered all {session.totalQuestions} questions. The final leaderboard appears
+            when your teacher ends the session.
+          </p>
+        </div>
+      )}
+
+      {session.status === "QUESTION" && !finished && currentQuestion && (
         <div className="bg-bg-surface border border-border-strong rounded-2xl p-6">
           <div className="flex items-center justify-between mb-4">
             <span className="text-text-tertiary text-xs font-mono">
               Question {session.currentQuestionIndex + 1} / {session.totalQuestions}
             </span>
-            <span
-              className={`text-2xl font-black font-mono ${
-                session.remainingSeconds <= 5 ? "text-rose-400 animate-pulse" : "text-white"
-              }`}
-            >
-              {session.remainingSeconds}s
-            </span>
+            {!selfPaced && (
+              <span
+                className={`text-2xl font-black font-mono ${
+                  session.remainingSeconds <= 5 ? "text-rose-400 animate-pulse" : "text-white"
+                }`}
+              >
+                {session.remainingSeconds}s
+              </span>
+            )}
           </div>
-          <div className="w-full h-1.5 bg-bg-surface-elevated rounded-full overflow-hidden mb-5">
-            <div
-              className="h-full bg-brand-500 rounded-full transition-all duration-1000"
-              style={{ width: `${(session.remainingSeconds / session.questionSeconds) * 100}%` }}
-            />
-          </div>
+          {!selfPaced && (
+            <div className="w-full h-1.5 bg-bg-surface-elevated rounded-full overflow-hidden mb-5">
+              <div
+                className="h-full bg-brand-500 rounded-full transition-all duration-1000"
+                style={{ width: `${(session.remainingSeconds / session.questionSeconds) * 100}%` }}
+              />
+            </div>
+          )}
 
           <h2 className="text-lg font-bold text-white mb-1">{currentQuestion.title}</h2>
           <p className="text-text-secondary text-sm mb-6 whitespace-pre-wrap">{currentQuestion.content}</p>
@@ -147,18 +185,41 @@ export default function LivePlayPage({ params }: { params: Promise<{ id: string 
           {answered ? (
             <div
               className={`rounded-2xl p-8 text-center border ${
-                result?.isCorrect
-                  ? "bg-emerald-500/10 border-emerald-500/30"
-                  : "bg-rose-500/10 border-rose-500/30"
+                !revealed
+                  ? "border-border-strong"
+                  : result?.isCorrect
+                    ? "bg-emerald-500/10 border-emerald-500/30"
+                    : "bg-rose-500/10 border-rose-500/30"
               }`}
             >
-              <p className="text-4xl mb-2">{result?.isCorrect ? "🎉" : "😅"}</p>
-              <p className={`font-bold text-lg ${result?.isCorrect ? "text-emerald-400" : "text-rose-400"}`}>
-                {result?.isCorrect ? `Correct! +${result.points} points` : "Not quite…"}
-              </p>
-              <p className="text-text-secondary text-sm mt-1">Waiting for the next question…</p>
+              {revealed ? (
+                <>
+                  <p className="text-4xl mb-2">{result?.isCorrect ? "🎉" : "😅"}</p>
+                  <p className={`font-bold text-lg ${result?.isCorrect ? "text-emerald-400" : "text-rose-400"}`}>
+                    {result?.isCorrect ? `Correct! +${result?.points} points` : "Not quite…"}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-4xl mb-2">✅</p>
+                  <p className="font-bold text-lg text-white">Answer recorded</p>
+                </>
+              )}
+              {selfPaced ? (
+                <button
+                  onClick={goNext}
+                  disabled={isAdvancing}
+                  className="mt-4 px-8 py-3 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white rounded-xl font-bold text-sm transition-all"
+                >
+                  {session.currentQuestionIndex >= session.totalQuestions - 1
+                    ? "Finish"
+                    : "Next Question →"}
+                </button>
+              ) : (
+                <p className="text-text-secondary text-sm mt-1">Waiting for the next question…</p>
+              )}
             </div>
-          ) : session.remainingSeconds === 0 ? (
+          ) : !selfPaced && session.remainingSeconds === 0 ? (
             <div className="rounded-2xl p-8 text-center border border-border-strong">
               <p className="text-text-secondary">⏰ Time&apos;s up! Waiting for the next question…</p>
             </div>

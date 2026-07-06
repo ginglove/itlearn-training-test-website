@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { liveSessions, liveParticipants, exams, questions, users } from "@/db/schema";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { getUserId, isAdminRequest } from "@/lib/get-user-id";
+import { shuffle } from "@/lib/live-quiz";
 
 // GET — list live sessions: admins see every session in the system,
 // teachers only the sessions they host
@@ -65,6 +66,10 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { examId, questionSeconds } = body;
+    const mode = body.mode === "STUDENT" ? "STUDENT" : "TEACHER";
+    const showCorrectAnswer = body.showCorrectAnswer !== false;
+    const shuffleQuestions = body.shuffleQuestions === true;
+    const shuffleOptions = body.shuffleOptions === true;
     if (!examId) {
       return NextResponse.json(
         { error: "VALIDATION_ERROR", message: "examId is required" },
@@ -86,7 +91,8 @@ export async function POST(request: NextRequest) {
     const quizQuestions = await db
       .select({ id: questions.id })
       .from(questions)
-      .where(and(eq(questions.examId, examId), eq(questions.type, "QUIZ")));
+      .where(and(eq(questions.examId, examId), eq(questions.type, "QUIZ")))
+      .orderBy(questions.sortOrder, questions.id);
     if (quizQuestions.length === 0) {
       return NextResponse.json(
         { error: "VALIDATION_ERROR", message: "The exam has no quiz questions to host live" },
@@ -107,6 +113,13 @@ export async function POST(request: NextRequest) {
               Number.isInteger(questionSeconds) && questionSeconds >= 10 && questionSeconds <= 300
                 ? questionSeconds
                 : 30,
+            mode,
+            showCorrectAnswer,
+            shuffleQuestions,
+            shuffleOptions,
+            questionOrder: (shuffleQuestions ? shuffle(quizQuestions) : quizQuestions).map(
+              (q) => q.id
+            ),
           })
           .returning();
         return NextResponse.json(
