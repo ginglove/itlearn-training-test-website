@@ -72,6 +72,10 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
           setQuestions(questionsData.questions);
           if (questionsData.examTitle) setExamTitle(questionsData.examTitle);
           if (questionsData.focusLossPolicy) { setFocusLossPolicy(questionsData.focusLossPolicy); focusLossPolicyRef.current = questionsData.focusLossPolicy; }
+          // Hydrate the server-synced counter — a page reload cannot reset offenses
+          if (typeof questionsData.focusLossCount === "number") {
+            setFocusLosses((prev) => Math.max(prev, questionsData.focusLossCount));
+          }
 
           // Build a map of saved draft answers keyed by questionId
           const draftMap: Record<string, any> = {};
@@ -167,6 +171,20 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
         }
         return next;
       });
+      // Persist the offense server-side immediately so a reload cannot reset
+      // the counter; re-sync local state with the authoritative value.
+      fetch(`/api/v1/student/exams/${examId}/focus-loss`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ submissionId }),
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data && typeof data.focusLossCount === "number") {
+            setFocusLosses((prev) => Math.max(prev, data.focusLossCount));
+          }
+        })
+        .catch(() => {});
     };
 
     window.addEventListener("blur", handleBlur);

@@ -8,7 +8,7 @@ import {
   testCases,
 } from "@/db/schema";
 import { eq, asc } from "drizzle-orm";
-import { getUserId } from "@/lib/get-user-id";
+import { getUserId, isAdminRequest } from "@/lib/get-user-id";
 
 export async function POST(
   request: NextRequest,
@@ -29,7 +29,7 @@ export async function POST(
       .where(eq(exams.id, sourceExamId))
       .limit(1);
 
-    if (!source || source.createdBy !== teacherId) {
+    if (!source || (source.createdBy !== teacherId && !isAdminRequest(request))) {
       return NextResponse.json(
         { error: "NOT_FOUND", message: "Exam not found" },
         { status: 404 }

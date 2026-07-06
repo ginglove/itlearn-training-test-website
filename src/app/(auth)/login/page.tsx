@@ -49,7 +49,9 @@ export default function LoginPage() {
       } else {
         document.cookie = `session=${data.token}; path=/; max-age=28800; secure; samesite=strict`;
         localStorage.setItem("user", JSON.stringify(data.user));
-        if (data.user.role === "TEACHER") {
+        if (data.user.role === "ADMIN") {
+          router.push("/admin");
+        } else if (data.user.role === "TEACHER") {
           router.push("/teacher");
         } else {
           router.push("/student/exams");

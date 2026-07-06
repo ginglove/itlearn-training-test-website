@@ -3,6 +3,7 @@
 import { useRouter, usePathname } from "next/navigation";
 import { useState } from "react";
 import { ToastProvider } from "@/components/toast";
+import WorkspaceSwitcher from "@/app/components/WorkspaceSwitcher";
 
 export default function StudentLayout({
   children,
@@ -13,8 +14,9 @@ export default function StudentLayout({
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // If inside exam workspace, skip sidebar layout but keep toast context
-  const isWorkspace = pathname.includes("/workspace");
+  // Only the fullscreen exam-taking workspace (/student/exams/:id/workspace)
+  // skips the sidebar; the class workspace pages keep the normal layout
+  const isWorkspace = /\/exams\/[^/]+\/workspace/.test(pathname);
   if (isWorkspace) {
     return <ToastProvider>{children}</ToastProvider>;
   }
@@ -32,6 +34,24 @@ export default function StudentLayout({
       icon: (
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+        </svg>
+      ),
+    },
+    {
+      name: "My Workspaces",
+      href: "/student/workspaces",
+      icon: (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+        </svg>
+      ),
+    },
+    {
+      name: "Join Live Quiz",
+      href: "/student/live",
+      icon: (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
         </svg>
       ),
     },
@@ -56,8 +76,19 @@ export default function StudentLayout({
   ];
 
   const isActive = (href: string) => {
-    return pathname === href;
+    return pathname === href || pathname.startsWith(href + "/");
   };
+
+  const currentWorkspaceId = pathname.match(/^\/student\/workspaces\/([^/]+)/)?.[1];
+
+  const workspaceMenu = (
+    <WorkspaceSwitcher
+      variant="menu"
+      currentId={currentWorkspaceId}
+      listUrl="/api/v1/student/workspaces"
+      basePath="/student/workspaces"
+    />
+  );
 
   return (
     <div className="min-h-screen bg-bg-base flex flex-col md:flex-row">
@@ -90,6 +121,7 @@ export default function StudentLayout({
       {isMobileMenuOpen && (
         <div className="md:hidden fixed inset-0 top-[57px] bg-bg-base/95 backdrop-blur-md z-30 flex flex-col p-6 animate-fade-in border-t border-border-strong">
           <nav className="flex flex-col gap-2">
+            {workspaceMenu}
             {navItems.map((item) => (
               <button
                 key={item.name}
@@ -137,6 +169,7 @@ export default function StudentLayout({
         </div>
 
         <nav className="flex flex-col gap-1.5 flex-grow">
+          {workspaceMenu}
           {navItems.map((item) => (
             <button
               key={item.name}

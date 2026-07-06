@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
+import { isAdminRequest } from "@/lib/get-user-id";
 import {
   examSubmissions,
   submissionDetails,
@@ -11,7 +12,7 @@ import {
   xpathTestCases,
   exams,
 } from "@/db/schema";
-import { eq, inArray, and, isNull } from "drizzle-orm";
+import { eq, inArray, and, isNull, sql } from "drizzle-orm";
 import { gradeQuizQuestion } from "@/lib/grading/quiz-grader";
 import { executeCode } from "@/lib/grading/code-executor";
 import { gradeXPathQuestion } from "@/lib/grading/xpath-evaluator";
@@ -36,7 +37,7 @@ export async function POST(
     const [activeSubmission] = await db
       .select({ submission: examSubmissions })
       .from(examSubmissions)
-      .innerJoin(exams, and(eq(examSubmissions.examId, exams.id), eq(exams.createdBy, teacherId)))
+      .innerJoin(exams, and(eq(examSubmissions.examId, exams.id), (isAdminRequest(request) ? sql`TRUE` : eq(exams.createdBy, teacherId))))
       .where(
         and(
           submissionId ? eq(examSubmissions.id, submissionId) : eq(examSubmissions.studentId, studentId),

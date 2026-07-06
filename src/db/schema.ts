@@ -11,11 +11,26 @@ import {
   pgEnum,
   uniqueIndex,
   index,
+  date,
 } from "drizzle-orm/pg-core";
 
 // ── Enums ──────────────────────────────────────────────────────────────────────
-export const userRoleEnum = pgEnum("user_role", ["TEACHER", "STUDENT"]);
+export const userRoleEnum = pgEnum("user_role", ["ADMIN", "TEACHER", "STUDENT"]);
 export const questionTypeEnum = pgEnum("question_type", ["QUIZ", "CODE", "XPATH"]);
+export const workspaceStatusEnum = pgEnum("workspace_status", ["ACTIVE", "ARCHIVED"]);
+export const membershipStatusEnum = pgEnum("membership_status", ["ACTIVE", "REMOVED"]);
+export const attendanceStatusEnum = pgEnum("attendance_status", [
+  "PRESENT",
+  "ABSENT",
+  "LATE",
+  "EXCUSED",
+]);
+export const activityTypeEnum = pgEnum("activity_type", [
+  "EXERCISE",
+  "HOMEWORK",
+  "ASSESSMENT",
+  "QUIZ",
+]);
 export const executionStatusEnum = pgEnum("execution_status", [
   "AC",
   "WA",
@@ -34,6 +49,7 @@ export const users = pgTable("users", {
   email: varchar("email", { length: 100 }).unique().notNull(),
   role: userRoleEnum("role").notNull().default("STUDENT"),
   isFirstLogin: boolean("is_first_login").notNull().default(true),
+  isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -173,6 +189,8 @@ export const examSubmissions = pgTable(
     focusLossCount: integer("focus_loss_count").notNull().default(0),
     closeReason: varchar("close_reason", { length: 50 }),
     activeSeconds: integer("active_seconds").notNull().default(0),
+    // Heartbeat for server-side activeSeconds verification (anti-tamper clamp)
+    activeSecondsUpdatedAt: timestamp("active_seconds_updated_at", { withTimezone: true }),
     attempt: integer("attempt").default(1).notNull(),
   },
   (table) => [
@@ -233,6 +251,186 @@ export const examAssignments = pgTable(
   ]
 );
 
+// ── Workspaces ─────────────────────────────────────────────────────────────────
+export const workspaces = pgTable(
+  "workspaces",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: varchar("name", { length: 150 }).notNull(),
+    description: text("description"),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    status: workspaceStatusEnum("status").notNull().default("ACTIVE"),
+    totalDays: integer("total_days").notNull().default(0),
+    // Weekdays the class meets (0=Sunday .. 6=Saturday); drives timetable generation
+    scheduleDays: integer("schedule_days").array(),
+    startDate: date("start_date"),
+    endDate: date("end_date"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index("idx_workspaces_created_by").on(table.createdBy)]
+);
+
+// ── Workspace Teachers (admin-managed assignments, RSD v9 §3.1) ───────────────
+export const workspaceTeachers = pgTable(
+  "workspace_teachers",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    teacherId: uuid("teacher_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    assignedAt: timestamp("assigned_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("unique_workspace_teacher").on(table.workspaceId, table.teacherId),
+    index("idx_workspace_teachers_teacher").on(table.teacherId),
+  ]
+);
+
+// ── Workspace Memberships ──────────────────────────────────────────────────────
+export const workspaceMemberships = pgTable(
+  "workspace_memberships",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    status: membershipStatusEnum("status").notNull().default("ACTIVE"),
+    joinedAt: timestamp("joined_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("unique_workspace_student").on(table.workspaceId, table.studentId),
+    index("idx_memberships_workspace").on(table.workspaceId),
+  ]
+);
+
+// ── Teaching Days ──────────────────────────────────────────────────────────────
+export const teachingDays = pgTable(
+  "teaching_days",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    dayNumber: integer("day_number").notNull(),
+    scheduledDate: date("scheduled_date").notNull(),
+    topic: varchar("topic", { length: 200 }),
+    notes: text("notes"),
+    // Teacher absence: the day is not conducted and a makeup day is appended
+    teacherAbsent: boolean("teacher_absent").notNull().default(false),
+  },
+  (table) => [
+    uniqueIndex("unique_workspace_day_number").on(table.workspaceId, table.dayNumber),
+    uniqueIndex("unique_workspace_day_date").on(table.workspaceId, table.scheduledDate),
+  ]
+);
+
+// ── Attendance Records ─────────────────────────────────────────────────────────
+export const attendanceRecords = pgTable(
+  "attendance_records",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    teachingDayId: uuid("teaching_day_id")
+      .notNull()
+      .references(() => teachingDays.id, { onDelete: "cascade" }),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    status: attendanceStatusEnum("status").notNull(),
+    note: text("note"),
+    recordedAt: timestamp("recorded_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("unique_day_student_attendance").on(table.teachingDayId, table.studentId),
+    index("idx_attendance_student").on(table.studentId),
+  ]
+);
+
+// ── Workspace Activities ───────────────────────────────────────────────────────
+export const workspaceActivities = pgTable(
+  "workspace_activities",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    examId: uuid("exam_id").references(() => exams.id, { onDelete: "cascade" }),
+    teachingDayId: uuid("teaching_day_id").references(() => teachingDays.id, {
+      onDelete: "set null",
+    }),
+    activityType: activityTypeEnum("activity_type").notNull(),
+    title: varchar("title", { length: 150 }).notNull(),
+    description: text("description"),
+    dueDate: timestamp("due_date", { withTimezone: true }),
+    assignedAt: timestamp("assigned_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("unique_workspace_exam").on(table.workspaceId, table.examId),
+    index("idx_activities_workspace").on(table.workspaceId),
+  ]
+);
+
+// ── Workspace Activity Attempts (standalone EXERCISE/HOMEWORK submissions) ────
+export const workspaceActivityAttempts = pgTable(
+  "workspace_activity_attempts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    activityId: uuid("activity_id")
+      .notNull()
+      .references(() => workspaceActivities.id, { onDelete: "cascade" }),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    textResponse: text("text_response").notNull(),
+    submittedAt: timestamp("submitted_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    scorePercentage: decimal("score_percentage", { precision: 5, scale: 2 }),
+  },
+  (table) => [
+    uniqueIndex("unique_activity_student_attempt").on(table.activityId, table.studentId),
+    index("idx_activity_attempts_student").on(table.studentId),
+  ]
+);
+
+// ── Workspace Class Reports ────────────────────────────────────────────────────
+export const workspaceClassReports = pgTable(
+  "workspace_class_reports",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    generatedBy: uuid("generated_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    generatedAt: timestamp("generated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    totalScheduledDays: integer("total_scheduled_days").notNull().default(0),
+    totalConductedDays: integer("total_conducted_days").notNull().default(0),
+    reportData: json("report_data"),
+  },
+  (table) => [index("idx_reports_workspace").on(table.workspaceId)]
+);
+
 // ── Platform Settings ──────────────────────────────────────────────────────────
 export const platformSettings = pgTable("platform_settings", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -248,3 +446,85 @@ export const platformSettings = pgTable("platform_settings", {
     .notNull()
     .defaultNow(),
 });
+
+
+
+// ── Live Quiz Sessions (Wayground-style realtime quiz) ────────────────────────
+export const liveSessions = pgTable(
+  "live_sessions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    examId: uuid("exam_id")
+      .notNull()
+      .references(() => exams.id, { onDelete: "cascade" }),
+    hostId: uuid("host_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id").references(() => workspaces.id, { onDelete: "set null" }),
+    joinCode: varchar("join_code", { length: 8 }).notNull(),
+    // LOBBY → QUESTION (repeated) → ENDED
+    status: varchar("status", { length: 12 }).notNull().default("LOBBY"),
+    currentQuestionIndex: integer("current_question_index").notNull().default(-1),
+    questionStartedAt: timestamp("question_started_at", { withTimezone: true }),
+    questionSeconds: integer("question_seconds").notNull().default(30),
+    // TEACHER: host advances questions for everyone; STUDENT: each student
+    // moves through the questions at their own pace
+    mode: varchar("mode", { length: 10 }).notNull().default("TEACHER"),
+    showCorrectAnswer: boolean("show_correct_answer").notNull().default(true),
+    shuffleQuestions: boolean("shuffle_questions").notNull().default(false),
+    shuffleOptions: boolean("shuffle_options").notNull().default(false),
+    // Question ids in play order, frozen at session creation
+    questionOrder: text("question_order").array().notNull().default([]),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("unique_live_join_code").on(table.joinCode),
+    index("idx_live_sessions_host").on(table.hostId),
+  ]
+);
+
+export const liveParticipants = pgTable(
+  "live_participants",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => liveSessions.id, { onDelete: "cascade" }),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    score: integer("score").notNull().default(0),
+    // Progress pointer for student-paced sessions
+    currentQuestionIndex: integer("current_question_index").notNull().default(0),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("unique_live_participant").on(table.sessionId, table.studentId),
+    index("idx_live_participants_session").on(table.sessionId),
+  ]
+);
+
+export const liveAnswers = pgTable(
+  "live_answers",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => liveSessions.id, { onDelete: "cascade" }),
+    questionId: uuid("question_id")
+      .notNull()
+      .references(() => questions.id, { onDelete: "cascade" }),
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    selectedOptions: text("selected_options").array().default([]),
+    isCorrect: boolean("is_correct").notNull().default(false),
+    points: integer("points").notNull().default(0),
+    answeredAt: timestamp("answered_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("unique_live_answer").on(table.sessionId, table.questionId, table.studentId),
+    index("idx_live_answers_session_question").on(table.sessionId, table.questionId),
+  ]
+);

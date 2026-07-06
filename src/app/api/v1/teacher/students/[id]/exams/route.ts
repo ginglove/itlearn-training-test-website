@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
+import { isAdminRequest } from "@/lib/get-user-id";
 import { exams, examSubmissions, questions } from "@/db/schema";
-import { eq, and, isNotNull, isNull, sum, count } from "drizzle-orm";
+import { eq, and, isNotNull, isNull, sum, count, sql } from "drizzle-orm";
 
 export async function GET(
   request: NextRequest,
@@ -34,7 +35,7 @@ export async function GET(
       .where(
         and(
           eq(examSubmissions.studentId, studentId),
-          eq(exams.createdBy, teacherId)
+          (isAdminRequest(request) ? sql`TRUE` : eq(exams.createdBy, teacherId))
         )
       )
       .orderBy(examSubmissions.startAt);

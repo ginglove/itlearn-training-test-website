@@ -44,7 +44,7 @@ export default function StudentSettingsPage() {
       if (stored) {
         const parsed = JSON.parse(stored);
         if (parsed.role !== "STUDENT") {
-          // Stale data from a previous teacher session â€” clear and redirect
+          // Stale data from a previous teacher session — clear and redirect
           localStorage.removeItem("user");
           router.push("/login");
           return;
@@ -170,8 +170,8 @@ export default function StudentSettingsPage() {
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {[
-              { label: "Full Name", value: user?.full_name || "â€”" },
-              { label: "Student ID (Username)", value: user?.username || "â€”" },
+              { label: "Full Name", value: user?.full_name || "—" },
+              { label: "Student ID (Username)", value: user?.username || "—" },
               { label: "Account Role", value: user?.role || "STUDENT" },
               { label: "Session Status", value: "Active" },
             ].map(({ label, value }) => (
@@ -217,7 +217,7 @@ export default function StudentSettingsPage() {
                 className="premium-input"
                 placeholder="Enter your full name"
               />
-              <p className="text-text-tertiary text-xs mt-1.5">Must be 2â€“100 characters.</p>
+              <p className="text-text-tertiary text-xs mt-1.5">Must be 2–100 characters.</p>
             </div>
             <div className="pt-1">
               <button
@@ -289,7 +289,7 @@ export default function StudentSettingsPage() {
             {/* Complexity */}
             {newPassword.length > 0 && (
               <div className="bg-bg-surface border border-border-strong rounded-xl p-4 text-xs space-y-2">
-                <Req met={reqLength} label="8â€“128 characters" />
+                <Req met={reqLength} label="8–128 characters" />
                 <Req met={reqUpper} label="One uppercase letter" />
                 <Req met={reqLower} label="One lowercase letter" />
                 <Req met={reqNumber} label="One digit" />

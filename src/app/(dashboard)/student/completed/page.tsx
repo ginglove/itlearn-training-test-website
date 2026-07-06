@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useActiveWorkspace, withWorkspaceParam } from "@/app/components/useActiveWorkspace";
 import { useRouter } from "next/navigation";
 
 /* ── Types ──────────────────────────────────────────────────────────────── */
@@ -253,17 +254,18 @@ export default function CompletedExamsPage() {
   const [selectedGroup, setSelectedGroup] = useState<ExamGroup | null>(null);
   const [submissions, setSubmissions] = useState<ExamSubmission[]>([]);
   const [submissionsLoading, setSubmissionsLoading] = useState(false);
+  const [activeWorkspaceId] = useActiveWorkspace();
 
   // Question detail drawer (per-question results for one submission)
   const [questionDetail, setQuestionDetail] = useState<DetailData | null>(null);
   const [questionDetailLoading, setQuestionDetailLoading] = useState(false);
   const [questionDetailOpen, setQuestionDetailOpen] = useState(false);
 
-  useEffect(() => { fetchGroups(); }, []);
+  useEffect(() => { fetchGroups(); }, [activeWorkspaceId]);
 
   const fetchGroups = async () => {
     try {
-      const res = await fetch("/api/v1/student/exam-groups");
+      const res = await fetch(withWorkspaceParam("/api/v1/student/exam-groups", activeWorkspaceId));
       if (res.ok) setGroups((await res.json()).groups || []);
     } catch (e) { console.error(e); }
     finally { setIsLoading(false); }

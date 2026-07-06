@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import DateTimePicker from "@/app/components/DateTimePicker";
+import { useActiveWorkspace, withWorkspaceParam } from "@/app/components/useActiveWorkspace";
 
 /* ─────────────────────────── helpers ─────────────────────────────────────── */
 function todayISO() {
@@ -114,6 +116,7 @@ function StatPill({ label, value, color }: { label: string; value: string | numb
 /* ─────────────────────────── main page ───────────────────────────────────── */
 export default function SessionsPage() {
   const router = useRouter();
+  const [activeWorkspaceId] = useActiveWorkspace();
   const [date, setDate] = useState(todayISO());
   const [sessions, setSessions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -124,7 +127,7 @@ export default function SessionsPage() {
   const fetchSessions = useCallback(async (d: string) => {
     try {
       setFetchError(null);
-      const res = await fetch(`/api/v1/teacher/sessions?date=${d}&tz=${tzOffsetMinutes()}`);
+      const res = await fetch(withWorkspaceParam(`/api/v1/teacher/sessions?date=${d}&tz=${tzOffsetMinutes()}`, activeWorkspaceId));
       const data = await res.json();
       if (res.ok) {
         setSessions(data.sessions ?? []);
@@ -136,7 +139,7 @@ export default function SessionsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [activeWorkspaceId]);
 
   // Initial + manual refresh
   useEffect(() => {
@@ -211,13 +214,15 @@ export default function SessionsPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
             </button>
-            <input
-              type="date"
-              value={date}
-              max={todayISO()}
-              onChange={e => e.target.value && setDate(e.target.value)}
-              className="bg-bg-surface border border-border-strong text-white text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:border-brand-500 cursor-pointer"
-            />
+            <div className="w-48">
+              <DateTimePicker
+                mode="date"
+                compact
+                value={date}
+                maxDate={todayISO()}
+                onChange={(val) => val && setDate(val)}
+              />
+            </div>
             <button
               onClick={() => {
                 if (date >= todayISO()) return;
@@ -297,7 +302,7 @@ export default function SessionsPage() {
                 {/* Exam header row */}
                 <button
                   onClick={() => toggle(session.examId)}
-                  className="w-full text-left px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-4 hover:bg-bg-surface-elevated/30 transition-colors"
+                  className="w-full text-left px-4 sm:px-5 py-4 flex flex-col lg:flex-row lg:items-center gap-4 hover:bg-bg-surface-elevated/30 transition-colors"
                 >
                   {/* Left: exam info */}
                   <div className="flex-1 min-w-0">
@@ -328,7 +333,7 @@ export default function SessionsPage() {
                   </div>
 
                   {/* Stats pills */}
-                  <div className="flex items-center gap-2 flex-wrap shrink-0">
+                  <div className="flex items-center gap-2 flex-wrap lg:shrink-0">
                     <StatPill label="Started" value={session.totalStarted} color="bg-bg-surface border-border-strong text-text-secondary" />
                     <StatPill label="Done" value={session.totalCompleted} color="bg-brand-500/8 border-brand-500/20 text-brand-400" />
                     <StatPill label="Pass" value={passCount} color="bg-emerald-500/8 border-emerald-500/20 text-emerald-400" />
@@ -345,7 +350,7 @@ export default function SessionsPage() {
                   </div>
 
                   {/* Chevron + Live monitor link */}
-                  <div className="flex items-center gap-3 shrink-0">
+                  <div className="flex items-center justify-between lg:justify-start gap-3 lg:shrink-0">
                     <button
                       onClick={e => { e.stopPropagation(); router.push(`/teacher/exams/${session.examId}/monitor`); }}
                       className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-brand-500/30 text-brand-400 hover:bg-brand-500/10 transition-colors whitespace-nowrap"

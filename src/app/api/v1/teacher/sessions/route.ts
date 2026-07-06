@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { exams, examSubmissions, users, questions } from "@/db/schema";
-import { eq, and, gte, lt, inArray, sum } from "drizzle-orm";
+import { isAdminRequest } from "@/lib/get-user-id";
+import { exams, examSubmissions, users, questions, workspaceMemberships } from "@/db/schema";
+import { eq, and, gte, lt, inArray, sum, sql } from "drizzle-orm";
+import { getTeacherScopedStudentIds } from "@/lib/workspace";
 
 export async function GET(request: NextRequest) {
   try {
@@ -24,6 +26,36 @@ export async function GET(request: NextRequest) {
     // day start in UTC = midnight local time shifted back by tz offset
     const dayStart = new Date(localMidnight.getTime() - offsetMs);
     const dayEnd   = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000); // exactly +24h
+
+    // Teachers only see sessions of students enrolled in their assigned
+    // workspaces; admins monitor everything
+    const isAdminUser = isAdminRequest(request);
+    let scopedStudentIds = isAdminUser ? [] : await getTeacherScopedStudentIds(teacherId);
+
+    // Global class filter: restrict to the selected workspace's ACTIVE members
+    const workspaceFilter = searchParams.get("workspaceId");
+    if (workspaceFilter) {
+      const members = await db
+        .select({ studentId: workspaceMemberships.studentId })
+        .from(workspaceMemberships)
+        .where(
+          and(
+            eq(workspaceMemberships.workspaceId, workspaceFilter),
+            eq(workspaceMemberships.status, "ACTIVE")
+          )
+        );
+      const memberIds = new Set(members.map((m) => m.studentId));
+      scopedStudentIds = isAdminUser
+        ? [...memberIds]
+        : scopedStudentIds.filter((sid) => memberIds.has(sid));
+      if (scopedStudentIds.length === 0) {
+        return NextResponse.json({ status: "SUCCESS", date: resolvedDate, sessions: [] });
+      }
+    }
+
+    if (!isAdminUser && !workspaceFilter && scopedStudentIds.length === 0) {
+      return NextResponse.json({ status: "SUCCESS", date: resolvedDate, sessions: [] });
+    }
 
     // All exams owned by this teacher with submissions starting on the selected date
     const rows = await db
@@ -50,7 +82,8 @@ export async function GET(request: NextRequest) {
       .innerJoin(users, eq(users.id, examSubmissions.studentId))
       .where(
         and(
-          eq(exams.createdBy, teacherId),
+          (isAdminRequest(request) ? sql`TRUE` : eq(exams.createdBy, teacherId)),
+          isAdminUser && scopedStudentIds.length === 0 ? sql`TRUE` : inArray(examSubmissions.studentId, scopedStudentIds),
           gte(examSubmissions.startAt, dayStart),
           lt(examSubmissions.startAt, dayEnd)
         )

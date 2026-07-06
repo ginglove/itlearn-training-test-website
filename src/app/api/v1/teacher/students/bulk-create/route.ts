@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
+import { isAdminRequest } from "@/lib/get-user-id";
 import { users } from "@/db/schema";
 import * as xlsx from "xlsx";
 import { generateTemporaryPassword, hashPassword } from "@/lib/auth";
@@ -9,6 +10,13 @@ export async function POST(request: NextRequest) {
     const teacherId = request.headers.get("x-user-id");
     if (!teacherId) {
       return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+    }
+    // Student account creation is Admin-only (v9.2 governance)
+    if (!isAdminRequest(request)) {
+      return NextResponse.json(
+        { error: "FORBIDDEN", message: "Only admins can create student accounts" },
+        { status: 403 }
+      );
     }
 
     const formData = await request.formData();

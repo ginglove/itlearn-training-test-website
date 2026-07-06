@@ -9,11 +9,14 @@ import {
   xpathConfigs,
   exams,
 } from "@/db/schema";
-import { eq, sql, inArray } from "drizzle-orm";
+import { and, eq, sql, inArray } from "drizzle-orm";
+import { getTeacherScopedStudentIds } from "@/lib/workspace";
+import { isAdminRequest } from "@/lib/get-user-id";
 
 export const dynamic = "force-dynamic";
 
-async function buildSnapshot(examId: string) {
+// scopedStudentIds === null means unrestricted (admin)
+async function buildSnapshot(examId: string, scopedStudentIds: string[] | null) {
   // Total possible score, question count, and exam close date
   const [totalPossibleRow] = await db
     .select({
@@ -55,7 +58,18 @@ async function buildSnapshot(examId: string) {
     })
     .from(examSubmissions)
     .innerJoin(users, eq(examSubmissions.studentId, users.id))
-    .where(eq(examSubmissions.examId, examId));
+    .where(
+      and(
+        eq(examSubmissions.examId, examId),
+        // Teachers only monitor students enrolled in their assigned workspaces;
+        // admins (null) monitor everyone
+        scopedStudentIds === null
+          ? sql`TRUE`
+          : scopedStudentIds.length > 0
+            ? inArray(examSubmissions.studentId, scopedStudentIds)
+            : sql`FALSE`
+      )
+    );
 
   if (submissions.length === 0) {
     return { totalPossibleScore, roster: [] };
@@ -210,6 +224,9 @@ export async function GET(
 ) {
   const teacherId = request.headers.get("x-user-id");
   if (!teacherId) return new Response("Unauthorized", { status: 401 });
+  const scopedStudentIds = isAdminRequest(request)
+    ? null
+    : await getTeacherScopedStudentIds(teacherId);
 
   const { id: examId } = await params;
 
@@ -224,7 +241,7 @@ export async function GET(
 
       // Send first snapshot immediately
       try {
-        const snap = await buildSnapshot(examId);
+        const snap = await buildSnapshot(examId, scopedStudentIds);
         controller.enqueue(
           encoder.encode(
             `event: update\ndata: ${JSON.stringify({ timestamp: new Date().toISOString(), ...snap })}\n\n`
@@ -235,7 +252,7 @@ export async function GET(
       // Poll every 5s
       const intervalId = setInterval(async () => {
         try {
-          const snap = await buildSnapshot(examId);
+          const snap = await buildSnapshot(examId, scopedStudentIds);
           controller.enqueue(
             encoder.encode(
               `event: update\ndata: ${JSON.stringify({ timestamp: new Date().toISOString(), ...snap })}\n\n`

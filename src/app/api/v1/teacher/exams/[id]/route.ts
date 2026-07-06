@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
+import { isAdminRequest } from "@/lib/get-user-id";
 import { exams, examAssignments } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 
 export async function GET(
   request: NextRequest,
@@ -18,7 +19,7 @@ export async function GET(
     const [exam] = await db
       .select()
       .from(exams)
-      .where(and(eq(exams.id, examId), eq(exams.createdBy, teacherId)))
+      .where(and(eq(exams.id, examId), (isAdminRequest(request) ? sql`TRUE` : eq(exams.createdBy, teacherId))))
       .limit(1);
 
     if (!exam) {
@@ -63,7 +64,7 @@ export async function PUT(
     const [exam] = await db
       .select()
       .from(exams)
-      .where(and(eq(exams.id, examId), eq(exams.createdBy, teacherId)))
+      .where(and(eq(exams.id, examId), (isAdminRequest(request) ? sql`TRUE` : eq(exams.createdBy, teacherId))))
       .limit(1);
 
     if (!exam) {
@@ -149,7 +150,7 @@ export async function DELETE(
     const [exam] = await db
       .select()
       .from(exams)
-      .where(and(eq(exams.id, examId), eq(exams.createdBy, teacherId)))
+      .where(and(eq(exams.id, examId), (isAdminRequest(request) ? sql`TRUE` : eq(exams.createdBy, teacherId))))
       .limit(1);
 
     if (!exam) {

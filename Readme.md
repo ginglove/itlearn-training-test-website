@@ -8,8 +8,10 @@ A secure, high-performance web platform for hosting software testing exams, quiz
 
 - **Interactive Student Exam Workspace:** Real-time countdown timer, side-by-side multiple choice selections, and a full-featured code editor.
 - **Asynchronous Code Execution Queue:** Student code submissions are pushed to a Redis queue and graded asynchronously against test cases via sandboxed environments.
-- **Teacher / Admin Dashboard:** Manage questions (add, edit, delete), assign exams, review focus loss analytics, monitor live student exam progress, and grade history.
-- **Anti-Cheat Monitoring:** Captures browser tab focus switches and triggers alerts in the monitor screen.
+- **Three-Tier Governance (Admin / Teacher / Student):** Platform admins manage teacher and student accounts, create workspaces, assign teachers to classrooms, view global dashboard metrics, and un-archive workspaces.
+- **Workspace (Class) Management:** Persistent virtual classrooms with student rosters, timetables, daily roll call (with Quick Roll Call), activity assignment (Quiz / Assessment / Homework / Exercise), and end-of-class reports exportable to `.xlsx`.
+- **Teacher Dashboard:** Manage questions (add, edit, delete), assign exams, review focus loss analytics, monitor live student exam progress, and grade history — scoped to workspaces assigned by an Admin.
+- **Anti-Cheat Monitoring:** Server-synced focus-loss tracking (reload-proof), active-time tamper verification, and live alerts in the monitor screen.
 - **Bespoke UI styling:** Premium dark glassmorphic components, Bricolage Grotesque display headers, Plus Jakarta Sans text, and custom background radial glows matching the ITLearn brand design.
 
 ---
@@ -86,13 +88,14 @@ npm run db:setup
 
 ### 4. Seed Database
 
-Inserts default teacher, student accounts, settings, exam configurations, and test cases:
+Inserts default admin, teacher, and student accounts, settings, exam configurations, and test cases:
 
 ```bash
 npm run seed
 ```
 
 > Only run the seed once. Re-running on a populated database will cause duplicate key errors.
+> `npm run db:setup` (init.sql) already creates the `platform_admin` account, so the seed step is optional if you only need the admin login.
 
 ### 5. Start Development Server
 
@@ -106,12 +109,13 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ## Default Seed Credentials
 
-| Role | Username | Password |
-|---|---|---|
-| Student | `20261102` | `password123` |
-| Teacher / Admin | `teacher1` | `password123` |
+| Role | Username | Password | Panel |
+|---|---|---|---|
+| Admin | `platform_admin` | `Admin@123!` | `/admin` |
+| Teacher | `teacher_admin` | `Teacher@123!` | `/teacher` |
+| Student | `student_01` | `Student@123!` | `/student/exams` |
 
-> All seeded accounts require a password change on first login (enforced by platform settings).
+> The admin account is created by both `init.sql` (`npm run db:setup`) and the seed script. **Change the admin password after the first login in production.** Accounts created later through the Admin panel receive a temporary password and must change it on first login.
 
 ---
 
@@ -119,8 +123,22 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 | Script | Command | Description |
 |---|---|---|
-| Apply schema | `npm run db:setup` | Reads `init.sql` and applies it to `DATABASE_URL` |
-| Seed data | `npm run seed` | Inserts default users, exams, and questions |
+| Apply schema | `npm run db:setup` | Reads `init.sql` and applies the **full current schema** (incl. workspace module, admin tier, and admin account) to `DATABASE_URL`. **Destructive:** drops and recreates all tables. |
+| Run one migration | `npm run db:migrate <file.sql>` | Applies a single migration from `src/db/migrations/` to an existing database |
+| Seed data | `npm run seed` | Inserts default admin/teacher/student users, exams, and questions |
+
+### Upgrading an Existing Database (no data loss)
+
+`init.sql` is only for fresh databases. To upgrade a database that already has data, apply the incremental migrations in order (skip any already applied):
+
+```bash
+npm run db:migrate src/db/migrations/0008_workspace_module.sql       # workspace/class tables
+npm run db:migrate src/db/migrations/0009_admin_governance.sql       # ADMIN role + workspace_teachers
+npm run db:migrate src/db/migrations/0010_technical_improvements.sql # heartbeat column + standalone attempts
+npm run db:migrate src/db/migrations/0011_seed_admin_account.sql     # platform_admin account
+```
+
+All migrations are idempotent (`IF NOT EXISTS` / `ON CONFLICT`), so re-running one is safe.
 
 ---
 
@@ -219,8 +237,8 @@ Watch the deploy log for errors. A successful deploy ends with **"Site is live"*
 
 Local child-process code execution is disabled on Netlify. After the first successful deploy:
 
-1. Log in to your site as the teacher admin.
-2. Go to **Settings → Platform Settings**.
+1. Log in to your site as the platform admin (`platform_admin`).
+2. Go to **Admin Settings → Platform Settings** (`/admin/settings`).
 3. Set **Execution Mode** to `API_ONLY`.
 4. Save. All student code submissions will now route exclusively through the Piston API.
 

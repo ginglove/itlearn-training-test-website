@@ -29,6 +29,21 @@ async function seed() {
       isFirstLogin: false, // Don't force reset for the seeded teacher
     }).onConflictDoNothing();
 
+    // 1b. Create a platform Admin (RSD v9 three-tier governance)
+    console.log("Creating Admin account...");
+    const adminId = "00000000-0000-0000-0000-000000000003";
+    const adminPassword = await bcrypt.hash("Admin@123!", 10);
+
+    await db.insert(schema.users).values({
+      id: adminId,
+      username: "platform_admin",
+      fullName: "Platform Admin",
+      email: "admin@example.com",
+      passwordHash: adminPassword,
+      role: "ADMIN",
+      isFirstLogin: false,
+    }).onConflictDoNothing();
+
     // 2. Create a Student
     console.log("Creating Student account...");
     const studentId = "00000000-0000-0000-0000-000000000002";
@@ -128,6 +143,7 @@ console.log(add(5, 7));
 
     console.log("✅ Seed completed successfully!");
     console.log("------------------------------------------");
+    console.log(`Admin Login   -> Username: platform_admin | Password: Admin@123!`);
     console.log(`Teacher Login -> Username: teacher_admin | Password: Teacher@123!`);
     console.log(`Student Login -> Username: student_01    | Password: Student@123!`);
     console.log("------------------------------------------");

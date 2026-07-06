@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
+import { isAdminRequest } from "@/lib/get-user-id";
 import {
   examSubmissions,
   submissionDetails,
@@ -11,7 +12,7 @@ import {
   xpathTestCases,
   exams,
 } from "@/db/schema";
-import { eq, inArray, and } from "drizzle-orm";
+import { eq, inArray, and, sql } from "drizzle-orm";
 import { gradeQuizQuestion } from "@/lib/grading/quiz-grader";
 import { executeCode } from "@/lib/grading/code-executor";
 import { gradeXPathQuestion } from "@/lib/grading/xpath-evaluator";
@@ -37,7 +38,7 @@ export async function POST(
     const [exam] = await db
       .select()
       .from(exams)
-      .where(and(eq(exams.id, examId), eq(exams.createdBy, teacherId)))
+      .where(and(eq(exams.id, examId), (isAdminRequest(request) ? sql`TRUE` : eq(exams.createdBy, teacherId))))
       .limit(1);
     if (!exam) return NextResponse.json({ error: "NOT_FOUND", message: "Exam not found." }, { status: 404 });
 

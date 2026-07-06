@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { exams } from "@/db/schema";
-import { eq, desc } from "drizzle-orm";
-import { getUserId } from "@/lib/get-user-id";
+import { eq, desc, sql } from "drizzle-orm";
+import { getUserId, isAdminRequest } from "@/lib/get-user-id";
+import { getWorkspaceExamIds } from "@/lib/workspace";
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,11 +12,45 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
     }
 
-    const teacherExams = await db
+    // Admins see every exam; teachers see their own exams plus any exam
+    // assigned as an activity in one of their assigned workspaces
+    let teacherExams = await db
       .select()
       .from(exams)
-      .where(eq(exams.createdBy, teacherId))
       .orderBy(desc(exams.createdAt));
+
+    if (!isAdminRequest(request)) {
+      const { workspaceActivities, workspaceTeachers } = await import("@/db/schema");
+      const { inArray, isNotNull, and: andOp } = await import("drizzle-orm");
+      const assignedWs = await db
+        .select({ workspaceId: workspaceTeachers.workspaceId })
+        .from(workspaceTeachers)
+        .where(eq(workspaceTeachers.teacherId, teacherId));
+      const wsIds = assignedWs.map((w) => w.workspaceId);
+      const wsExamRows = wsIds.length
+        ? await db
+            .select({ examId: workspaceActivities.examId })
+            .from(workspaceActivities)
+            .where(
+              andOp(
+                inArray(workspaceActivities.workspaceId, wsIds),
+                isNotNull(workspaceActivities.examId)
+              )
+            )
+        : [];
+      const visibleExamIds = new Set(wsExamRows.map((r) => r.examId!));
+      teacherExams = teacherExams.filter(
+        (e) => e.createdBy === teacherId || visibleExamIds.has(e.id)
+      );
+    }
+
+    // Global class filter: only exams assigned to the selected workspace
+    const { searchParams } = new URL(request.url);
+    const workspaceId = searchParams.get("workspaceId");
+    if (workspaceId) {
+      const wsExamIds = await getWorkspaceExamIds(workspaceId);
+      teacherExams = teacherExams.filter((e) => wsExamIds.has(e.id));
+    }
 
     return NextResponse.json({ status: "SUCCESS", exams: teacherExams });
   } catch (error) {

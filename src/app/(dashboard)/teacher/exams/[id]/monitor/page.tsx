@@ -192,7 +192,7 @@ export default function CodingMonitorPage({ params }: { params: Promise<{ id: st
       <div className="max-w-7xl mx-auto">
 
         {/* ── Header ── */}
-        <div className="mb-8 flex justify-between items-end border-b border-border-strong pb-6">
+        <div className="mb-8 flex flex-col md:flex-row md:justify-between md:items-end gap-6 border-b border-border-strong pb-6">
           <div>
             <div className="flex items-center gap-2 text-text-tertiary text-sm mb-2">
               <button
@@ -209,7 +209,7 @@ export default function CodingMonitorPage({ params }: { params: Promise<{ id: st
               <span>›</span>
               <span className="text-text-secondary">Live Monitor</span>
             </div>
-            <h1 className="text-3xl font-bold text-white flex items-center gap-3">
+            <h1 className="text-2xl md:text-3xl font-bold text-white flex items-center gap-3">
               Live Exam Monitor
               <span className="flex h-3 w-3 relative">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
@@ -218,7 +218,7 @@ export default function CodingMonitorPage({ params }: { params: Promise<{ id: st
             </h1>
             <p className="text-text-secondary mt-1 text-sm">Real-time surveillance · Updates every 5 seconds.</p>
           </div>
-          <div className="flex gap-6 text-right">
+          <div className="flex flex-wrap gap-x-6 gap-y-3 text-left md:text-right md:justify-end">
             <div>
               <div className="text-2xl font-mono text-white">{students.length}</div>
               <div className="text-xs text-text-tertiary uppercase tracking-wider">Total</div>
@@ -244,7 +244,8 @@ export default function CodingMonitorPage({ params }: { params: Promise<{ id: st
 
         {/* ── Roster table ── */}
         <div className="glass-card overflow-hidden">
-          <table className="w-full text-left border-collapse">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[860px] text-left border-collapse">
             <thead>
               <tr className="bg-bg-surface-elevated/50 border-b border-border-strong">
                 {["Student", "IP", "Focus Losses", "Time Elapsed", "Progress", "Status", "Score", ""].map((h) => (
@@ -403,7 +404,8 @@ export default function CodingMonitorPage({ params }: { params: Promise<{ id: st
                                 </span>
                               </div>
 
-                              <table className="w-full text-sm">
+                              <div className="overflow-x-auto">
+                              <table className="w-full min-w-[720px] text-sm">
                                 <thead>
                                   <tr className="bg-bg-surface-elevated/30 border-b border-border-strong">
                                     <th className="px-4 py-2.5 text-left text-xs font-semibold text-text-tertiary uppercase tracking-wider w-8">#</th>
@@ -515,6 +517,7 @@ export default function CodingMonitorPage({ params }: { params: Promise<{ id: st
                                   })}
                                 </tbody>
                               </table>
+                              </div>
                             </div>
                           </td>
                         </tr>
@@ -525,6 +528,7 @@ export default function CodingMonitorPage({ params }: { params: Promise<{ id: st
               )}
             </tbody>
           </table>
+          </div>
         </div>
       </div>
     </div>
