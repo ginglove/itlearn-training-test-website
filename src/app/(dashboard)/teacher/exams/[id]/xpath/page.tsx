@@ -249,7 +249,7 @@ export default function XPathConfigPage({ params }: { params: Promise<{ id: stri
               </p>
             </div>
             <button onClick={() => router.back()} className="premium-btn-secondary py-2 text-sm self-start">
-              ← Back
+              {"\u2190"} Back
             </button>
           </div>
           {/* Context-aware tip banner */}

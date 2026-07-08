@@ -328,7 +328,7 @@ export default function CompletedExamsPage() {
           </div>
           <button onClick={() => router.push("/student/exams")}
             className="premium-btn-secondary py-2 px-4 text-sm shrink-0">
-            Active Exams →
+            Active Exams {"\u2192"}
           </button>
         </div>
 
@@ -445,7 +445,7 @@ export default function CompletedExamsPage() {
                         </td>
                         <td className="py-4 px-4 text-right">
                           <span className={`text-xs font-semibold transition-all ${isSelected ? "text-brand-400" : "text-text-tertiary opacity-0 group-hover:opacity-100"}`}>
-                            {isSelected ? "▲ Hide" : "Details →"}
+                            {isSelected ? "▲ Hide" : "Details \u2192"}
                           </span>
                         </td>
                       </tr>
@@ -566,7 +566,7 @@ export default function CompletedExamsPage() {
                               {submitted && (
                                 <button onClick={() => openQuestionDetail(s.id)}
                                   className="text-xs text-brand-400 hover:text-brand-300 font-semibold transition-colors whitespace-nowrap">
-                                  Details →
+                                  Details {"\u2192"}
                                 </button>
                               )}
                             </td>

@@ -163,7 +163,7 @@ export default function StudentWorkspaceDetailPage({
         onClick={() => router.push("/student/workspaces")}
         className="text-text-secondary hover:text-white text-sm mb-4 transition-colors"
       >
-        ← My Workspaces
+        {"\u2190"} My Workspaces
       </button>
 
       <div className="flex items-center gap-3 mb-1 flex-wrap">

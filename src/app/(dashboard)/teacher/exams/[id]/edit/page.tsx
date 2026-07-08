@@ -152,7 +152,7 @@ export default function EditExamPage({ params }: { params: Promise<{ id: string 
               onClick={() => router.back()}
               className="text-text-secondary hover:text-white transition-colors"
             >
-              ← Back
+              {"\u2190"} Back
             </button>
             <h1 className="text-3xl font-bold text-white">Edit Exam Settings</h1>
           </div>

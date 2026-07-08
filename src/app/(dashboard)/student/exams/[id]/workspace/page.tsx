@@ -477,7 +477,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                 </button>
                 <button onClick={() => { sessionStorage.removeItem(`exam_${examId}_submission_id`); router.push("/student/completed"); }}
                   className="flex-1 premium-btn-primary py-2.5 text-sm">
-                  View Results →
+                  View Results {"\u2192"}
                 </button>
               </div>
             </>
@@ -500,7 +500,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                 </button>
                 <button onClick={() => { sessionStorage.removeItem(`exam_${examId}_submission_id`); router.push("/student/completed"); }}
                   className="flex-1 premium-btn-primary py-2.5 text-sm">
-                  View Results →
+                  View Results {"\u2192"}
                 </button>
               </div>
             </>
@@ -1536,7 +1536,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                 sessionStorage.removeItem(`exam_${examId}_submission_id`);
                 router.push("/student/completed");
               }} className="flex-1 premium-btn-primary py-2.5 text-sm">
-                View My Results →
+                View My Results {"\u2192"}
               </button>
             </div>
           </div>

@@ -271,7 +271,7 @@ export default function LivePlayPage({ params }: { params: Promise<{ id: string 
                 >
                   {session.currentQuestionIndex >= session.totalQuestions - 1
                     ? "Finish"
-                    : "Next Question →"}
+                    : "Next Question \u2192"}
                 </button>
               ) : (
                 <p className="text-text-secondary text-sm mt-1">Waiting for the next question…</p>

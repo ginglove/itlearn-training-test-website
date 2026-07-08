@@ -672,7 +672,7 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
         onClick={() => router.push("/teacher/workspaces")}
         className="text-text-secondary hover:text-white text-sm mb-4 transition-colors"
       >
-        ← Back to Workspaces
+        {"\u2190"} Back to Workspaces
       </button>
 
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
@@ -706,7 +706,7 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
                   .map((d) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d])
                   .join(", ")})`
               : ""}
-            {workspace.startDate ? ` · ${workspace.startDate} → ${workspace.endDate || "?"}` : ""}
+            {workspace.startDate ? ` · ${workspace.startDate} \u2192 ${workspace.endDate || "?"}` : ""}
           </p>
         </div>
         {!archived && (
@@ -1813,8 +1813,8 @@ export default function WorkspaceDetailPage({ params }: { params: Promise<{ id: 
               ) : (
                 <p className="text-text-tertiary text-xs">
                   {activityForm.examIds.length} activit(ies) will be created, titled after each exam.
-                  The activity type follows each exam&apos;s session type (Quiz Session → Quiz,
-                  Final Exam → Assessment, Practice → Exercise, Homework → Homework).
+                  The activity type follows each exam&apos;s session type (Quiz Session \u2192 Quiz,
+                  Final Exam \u2192 Assessment, Practice \u2192 Exercise, Homework \u2192 Homework).
                 </p>
               )}
               <div>
