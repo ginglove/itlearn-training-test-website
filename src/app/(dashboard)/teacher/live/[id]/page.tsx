@@ -220,7 +220,11 @@ export default function LiveHostPage({ params }: { params: Promise<{ id: string 
               </span>
               {currentQuestion.type !== "QUIZ" && (
                 <span className="px-2 py-0.5 rounded-full bg-violet-500/15 border border-violet-500/30 text-violet-400 text-[10px] font-semibold uppercase">
-                  {currentQuestion.type === "TEXT" ? "Open-ended" : currentQuestion.type}
+                  {currentQuestion.type === "TEXT"
+                    ? "Open-ended"
+                    : currentQuestion.type === "XPATH"
+                      ? "XPath / CSS"
+                      : currentQuestion.type}
                 </span>
               )}
             </div>
@@ -278,7 +282,9 @@ export default function LiveHostPage({ params }: { params: Promise<{ id: string 
               <p className="text-text-tertiary text-xs mt-1">
                 {currentQuestion.type === "TEXT"
                   ? "Students are writing their answers. Review after the session ends."
-                  : "Students are working on this question."}
+                  : currentQuestion.type === "XPATH"
+                    ? "Students are writing selectors — answers are auto-graded against the test cases."
+                    : "Students are working on this question."}
               </p>
             </div>
           )}
