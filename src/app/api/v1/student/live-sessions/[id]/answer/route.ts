@@ -135,30 +135,34 @@ export async function POST(
     }
 
     try {
-      await db.insert(liveAnswers).values({
-        sessionId: id,
-        questionId,
-        studentId,
-        selectedOptions,
-        textAnswer,
-        isCorrect,
-        points,
-        timeTakenMs,
+      await db.transaction(async (tx) => {
+        await tx.insert(liveAnswers).values({
+          sessionId: id,
+          questionId,
+          studentId,
+          selectedOptions,
+          textAnswer,
+          isCorrect,
+          points,
+          timeTakenMs,
+        });
+        await tx
+          .update(liveParticipants)
+          .set({
+            ...(points > 0 ? { score: sql`${liveParticipants.score} + ${points}` } : {}),
+            totalTimeMs: sql`${liveParticipants.totalTimeMs} + ${timeTakenMs}`,
+          })
+          .where(and(eq(liveParticipants.sessionId, id), eq(liveParticipants.studentId, studentId)));
       });
-    } catch {
-      return NextResponse.json(
-        { error: "VALIDATION_ERROR", message: "You already answered this question" },
-        { status: 409 }
-      );
+    } catch (err: any) {
+      if (err?.code === "23505") {
+        return NextResponse.json(
+          { error: "VALIDATION_ERROR", message: "You already answered this question" },
+          { status: 409 }
+        );
+      }
+      throw err;
     }
-
-    await db
-      .update(liveParticipants)
-      .set({
-        ...(points > 0 ? { score: sql`${liveParticipants.score} + ${points}` } : {}),
-        totalTimeMs: sql`${liveParticipants.totalTimeMs} + ${timeTakenMs}`,
-      })
-      .where(and(eq(liveParticipants.sessionId, id), eq(liveParticipants.studentId, studentId)));
 
     return NextResponse.json(
       session.showCorrectAnswer

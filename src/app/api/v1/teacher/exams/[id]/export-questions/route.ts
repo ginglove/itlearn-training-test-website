@@ -5,7 +5,7 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { getUserId, isAdminRequest } from "@/lib/get-user-id";
 import * as xlsx from "xlsx";
 
-// GET — export an exam's QUIZ questions as an .xlsx file in the same
+// GET — export an exam's QUIZ and TEXT questions as an .xlsx file in the same
 // column format accepted by the import endpoints
 export async function GET(
   request: NextRequest,
@@ -29,17 +29,18 @@ export async function GET(
       return NextResponse.json({ error: "EXAM_NOT_FOUND" }, { status: 404 });
     }
 
-    const quizQuestions = await db
+    const exportableQuestions = await db
       .select()
       .from(questions)
-      .where(and(eq(questions.examId, examId), eq(questions.type, "QUIZ")))
+      .where(and(eq(questions.examId, examId), inArray(questions.type, ["QUIZ", "TEXT"])))
       .orderBy(asc(questions.sortOrder));
 
-    const options = quizQuestions.length
+    const quizQIds = exportableQuestions.filter((q) => q.type === "QUIZ").map((q) => q.id);
+    const options = quizQIds.length
       ? await db
           .select()
           .from(quizOptions)
-          .where(inArray(quizOptions.questionId, quizQuestions.map((q) => q.id)))
+          .where(inArray(quizOptions.questionId, quizQIds))
           .orderBy(asc(quizOptions.id))
       : [];
     const optionsByQuestion = new Map<string, typeof options>();
@@ -50,10 +51,9 @@ export async function GET(
     }
 
     const KEYS = ["A", "B", "C", "D"];
-    const rows = quizQuestions.map((q) => {
-      const opts = (optionsByQuestion.get(q.id) ?? []).slice(0, 4);
+    const rows = exportableQuestions.map((q) => {
       const row: Record<string, string | number> = {
-        type: "QUIZ",
+        type: q.type,
         title: q.title,
         question_text: q.content,
         points: Number(q.points),
@@ -63,12 +63,15 @@ export async function GET(
         option_d: "",
         correct_identifier: "",
       };
-      const correctKeys: string[] = [];
-      opts.forEach((opt, i) => {
-        row[`option_${KEYS[i].toLowerCase()}`] = opt.optionText;
-        if (opt.isCorrect) correctKeys.push(KEYS[i]);
-      });
-      row.correct_identifier = correctKeys.join(",");
+      if (q.type === "QUIZ") {
+        const opts = (optionsByQuestion.get(q.id) ?? []).slice(0, 4);
+        const correctKeys: string[] = [];
+        opts.forEach((opt, i) => {
+          row[`option_${KEYS[i].toLowerCase()}`] = opt.optionText;
+          if (opt.isCorrect) correctKeys.push(KEYS[i]);
+        });
+        row.correct_identifier = correctKeys.join(",");
+      }
       return row;
     });
 
