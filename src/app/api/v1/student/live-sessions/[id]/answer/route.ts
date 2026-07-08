@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { liveSessions, liveParticipants, liveAnswers, questions, quizOptions } from "@/db/schema";
+import { liveSessions, liveParticipants, liveAnswers, questions, quizOptions, xpathConfigs, xpathTestCases } from "@/db/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { getUserId } from "@/lib/get-user-id";
 import { orderByQuestionOrder } from "@/lib/live-quiz";
+import { gradeXPathQuestion, type SelectorType } from "@/lib/grading/xpath-evaluator";
 
-// POST — answer the current question. QUIZ: speed-scored. TEXT/CODE/XPATH: recorded, scored 0.
+// POST — answer the current question. QUIZ: speed-scored. XPATH: graded against
+// the question's test cases, speed-scored by pass percentage. TEXT/CODE: recorded, scored 0.
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -117,6 +119,52 @@ export async function POST(
         : session.mode === "STUDENT"
           ? 1000
           : Math.round(500 + 500 * remainingRatio);
+    } else if (current.type === "XPATH") {
+      const selector = typeof body.textAnswer === "string" ? body.textAnswer.trim() : "";
+      if (!selector) {
+        return NextResponse.json(
+          { error: "VALIDATION_ERROR", message: "textAnswer (your selector) is required for XPATH questions" },
+          { status: 400 }
+        );
+      }
+      textAnswer = selector;
+
+      const [config] = await db
+        .select({ selectorType: xpathConfigs.selectorType })
+        .from(xpathConfigs)
+        .where(eq(xpathConfigs.questionId, questionId))
+        .limit(1);
+      const testCases = await db
+        .select({
+          targetType: xpathTestCases.targetType,
+          targetPayload: xpathTestCases.targetPayload,
+          referenceSelector: xpathTestCases.referenceSelector,
+          selectorType: xpathTestCases.selectorType,
+        })
+        .from(xpathTestCases)
+        .where(eq(xpathTestCases.questionId, questionId));
+
+      if (testCases.length === 0) {
+        // No test cases configured — record the answer ungraded, like TEXT
+        isCorrect = false;
+        points = 0;
+      } else {
+        const grade = await gradeXPathQuestion({
+          selectorType: (config?.selectorType as SelectorType) ?? "XPATH",
+          testCases: testCases.map((tc) => ({
+            targetType: tc.targetType as "URL" | "HTML",
+            targetPayload: tc.targetPayload,
+            referenceSelector: tc.referenceSelector,
+            selectorType: tc.selectorType as SelectorType,
+          })),
+          studentSelector: selector,
+        });
+        isCorrect = grade.status === "AC";
+        const remainingRatio = Math.max(0, Math.min(1, 1 - elapsedMs / totalMs));
+        const basePoints =
+          session.mode === "STUDENT" ? 1000 : Math.round(500 + 500 * remainingRatio);
+        points = Math.round((basePoints * grade.scorePercentage) / 100);
+      }
     } else if (current.type === "TEXT") {
       const text = typeof body.textAnswer === "string" ? body.textAnswer : "";
       if (!text.trim()) {

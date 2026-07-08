@@ -234,7 +234,11 @@ export default function LivePlayPage({ params }: { params: Promise<{ id: string 
             <h2 className="text-lg font-bold text-white">{currentQuestion.title}</h2>
             {currentQuestion.type !== "QUIZ" && (
               <span className="px-2 py-0.5 rounded-full bg-violet-500/15 border border-violet-500/30 text-violet-400 text-[10px] font-semibold uppercase">
-                {currentQuestion.type === "TEXT" ? "Open-ended" : currentQuestion.type}
+                {currentQuestion.type === "TEXT"
+                  ? "Open-ended"
+                  : currentQuestion.type === "XPATH"
+                    ? "XPath / CSS"
+                    : currentQuestion.type}
               </span>
             )}
           </div>
@@ -252,9 +256,13 @@ export default function LivePlayPage({ params }: { params: Promise<{ id: string 
             >
               {revealed ? (
                 <>
-                  <p className="text-4xl mb-2">{result?.isCorrect ? "🎉" : "😅"}</p>
-                  <p className={`font-bold text-lg ${result?.isCorrect ? "text-emerald-400" : "text-rose-400"}`}>
-                    {result?.isCorrect ? `Correct! +${result?.points} points` : "Not quite…"}
+                  <p className="text-4xl mb-2">{result?.isCorrect ? "🎉" : (result?.points ?? 0) > 0 ? "🙂" : "😅"}</p>
+                  <p className={`font-bold text-lg ${result?.isCorrect ? "text-emerald-400" : (result?.points ?? 0) > 0 ? "text-amber-400" : "text-rose-400"}`}>
+                    {result?.isCorrect
+                      ? `Correct! +${result?.points} points`
+                      : (result?.points ?? 0) > 0
+                        ? `Partially correct! +${result?.points} points`
+                        : "Not quite…"}
                   </p>
                 </>
               ) : (
@@ -296,6 +304,32 @@ export default function LivePlayPage({ params }: { params: Promise<{ id: string 
                 className="w-full py-3 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white rounded-xl font-bold text-sm transition-all"
               >
                 {isSubmittingText ? "Submitting…" : "Submit Answer"}
+              </button>
+            </div>
+          ) : currentQuestion.type === "XPATH" ? (
+            <div className="space-y-3">
+              <input
+                type="text"
+                value={textAnswer}
+                onChange={(e) => setTextAnswer(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && textAnswer.trim() && !isSubmittingText) submitText();
+                }}
+                placeholder="Enter your XPath or CSS selector…"
+                spellCheck={false}
+                className="w-full bg-bg-surface-elevated border border-border-strong rounded-xl p-4 text-white text-sm font-mono placeholder:text-text-tertiary focus:border-brand-500 focus:outline-none"
+              />
+              <p className="text-text-tertiary text-xs">
+                Prefix with <span className="font-mono text-text-secondary">css:</span> or{" "}
+                <span className="font-mono text-text-secondary">xpath:</span> to override the
+                default selector type.
+              </p>
+              <button
+                onClick={submitText}
+                disabled={isSubmittingText || !textAnswer.trim()}
+                className="w-full py-3 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white rounded-xl font-bold text-sm transition-all"
+              >
+                {isSubmittingText ? "Grading…" : "Submit Selector"}
               </button>
             </div>
           ) : currentQuestion.type !== "QUIZ" ? (
@@ -357,34 +391,37 @@ export default function LivePlayPage({ params }: { params: Promise<{ id: string 
             <div className="mt-8 text-left max-w-md mx-auto">
               <h3 className="text-white font-semibold text-sm mb-3">Your answers</h3>
               <div className="divide-y divide-border-strong">
-                {myBreakdown.map((q, i) => (
-                  <div key={i} className="flex items-center gap-3 py-2">
-                    <span
-                      className={`w-6 h-6 rounded flex items-center justify-center text-[11px] font-mono border shrink-0 ${
-                        !q.answered
-                          ? "border-border-strong text-text-tertiary"
-                          : q.type !== "QUIZ"
-                            ? "bg-violet-500/20 text-violet-400 border-violet-500/40"
-                            : q.isCorrect
-                              ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
-                              : "bg-rose-500/20 text-rose-400 border-rose-500/40"
-                      }`}
-                    >
-                      {!q.answered ? "–" : q.type !== "QUIZ" ? "✎" : q.isCorrect ? "✓" : "✗"}
-                    </span>
-                    <span className="text-text-secondary text-sm flex-grow truncate">
-                      {i + 1}. {q.title}
-                    </span>
-                    {q.type !== "QUIZ" && q.answered && (
-                      <span className="text-violet-400 text-[10px] font-semibold shrink-0">
-                        Submitted
+                {myBreakdown.map((q, i) => {
+                  const graded = q.type === "QUIZ" || q.type === "XPATH";
+                  return (
+                    <div key={i} className="flex items-center gap-3 py-2">
+                      <span
+                        className={`w-6 h-6 rounded flex items-center justify-center text-[11px] font-mono border shrink-0 ${
+                          !q.answered
+                            ? "border-border-strong text-text-tertiary"
+                            : !graded
+                              ? "bg-violet-500/20 text-violet-400 border-violet-500/40"
+                              : q.isCorrect
+                                ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
+                                : "bg-rose-500/20 text-rose-400 border-rose-500/40"
+                        }`}
+                      >
+                        {!q.answered ? "–" : !graded ? "✎" : q.isCorrect ? "✓" : "✗"}
                       </span>
-                    )}
-                    <span className="text-brand-400 font-mono text-xs shrink-0">
-                      {q.answered ? (q.type === "QUIZ" ? `+${q.points}` : "pending") : "no answer"}
-                    </span>
-                  </div>
-                ))}
+                      <span className="text-text-secondary text-sm flex-grow truncate">
+                        {i + 1}. {q.title}
+                      </span>
+                      {!graded && q.answered && (
+                        <span className="text-violet-400 text-[10px] font-semibold shrink-0">
+                          Submitted
+                        </span>
+                      )}
+                      <span className="text-brand-400 font-mono text-xs shrink-0">
+                        {q.answered ? (graded ? `+${q.points}` : "pending") : "no answer"}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
