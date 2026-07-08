@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { liveSessions, liveParticipants, liveAnswers, questions, quizOptions, users, exams } from "@/db/schema";
+import { liveSessions, liveParticipants, liveAnswers, questions, quizOptions, users, exams, xpathConfigs, xpathTestCases } from "@/db/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { getUserId } from "@/lib/get-user-id";
 import { orderByQuestionOrder, shuffleOptionsForStudent } from "@/lib/live-quiz";
@@ -125,6 +125,32 @@ export async function GET(
           title: q.title,
           content: q.content,
           options: options.map((o) => ({ id: o.id, text: o.text })),
+        };
+      } else if (q.type === "XPATH") {
+        // Selector type + first visible test case's target, for the workspace preview
+        const [config] = await db
+          .select({ selectorType: xpathConfigs.selectorType })
+          .from(xpathConfigs)
+          .where(eq(xpathConfigs.questionId, q.id))
+          .limit(1);
+        const [firstCase] = await db
+          .select({
+            targetType: xpathTestCases.targetType,
+            targetPayload: xpathTestCases.targetPayload,
+          })
+          .from(xpathTestCases)
+          .where(and(eq(xpathTestCases.questionId, q.id), eq(xpathTestCases.isHidden, false)))
+          .orderBy(xpathTestCases.id)
+          .limit(1);
+        currentQuestion = {
+          id: q.id,
+          type: q.type,
+          title: q.title,
+          content: q.content,
+          options: [],
+          selectorType: config?.selectorType ?? "XPATH",
+          targetType: firstCase?.targetType ?? null,
+          targetPayload: firstCase?.targetPayload ?? null,
         };
       } else {
         currentQuestion = {
