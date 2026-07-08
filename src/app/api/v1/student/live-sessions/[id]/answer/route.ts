@@ -101,6 +101,8 @@ export async function POST(
     const isCorrect =
       correctIds.size === selectedSet.size && [...correctIds].every((c) => selectedSet.has(c));
 
+    const timeTakenMs = Math.max(0, Math.round(elapsedMs));
+
     // Teacher-paced: speed-based scoring, full marks near-instant and halving
     // toward the deadline. Student-paced has no timer, so a flat reward.
     const remainingRatio = Math.max(0, Math.min(1, 1 - elapsedMs / totalMs));
@@ -118,6 +120,7 @@ export async function POST(
         selectedOptions,
         isCorrect,
         points,
+        timeTakenMs,
       });
     } catch {
       // Unique constraint: already answered this question
@@ -127,12 +130,13 @@ export async function POST(
       );
     }
 
-    if (points > 0) {
-      await db
-        .update(liveParticipants)
-        .set({ score: sql`${liveParticipants.score} + ${points}` })
-        .where(and(eq(liveParticipants.sessionId, id), eq(liveParticipants.studentId, studentId)));
-    }
+    await db
+      .update(liveParticipants)
+      .set({
+        ...(points > 0 ? { score: sql`${liveParticipants.score} + ${points}` } : {}),
+        totalTimeMs: sql`${liveParticipants.totalTimeMs} + ${timeTakenMs}`,
+      })
+      .where(and(eq(liveParticipants.sessionId, id), eq(liveParticipants.studentId, studentId)));
 
     // Only reveal correctness when the session allows it
     return NextResponse.json(

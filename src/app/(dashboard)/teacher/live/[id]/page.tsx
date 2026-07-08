@@ -21,6 +21,7 @@ interface HostState {
     fullName: string;
     username: string;
     score: number;
+    totalTimeMs: number;
     progress: number;
     finished: boolean;
   }[];
@@ -38,11 +39,22 @@ interface HostState {
     questionId: string;
     isCorrect: boolean;
     points: number;
+    timeTakenMs: number;
     answerText: string;
   }[];
 }
 
 const OPTION_COLORS = ["bg-rose-500", "bg-sky-500", "bg-amber-500", "bg-emerald-500", "bg-purple-500", "bg-teal-500"];
+
+function formatTime(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  const tenths = Math.floor((ms % 1000) / 100);
+  return minutes > 0
+    ? `${minutes}m ${seconds.toString().padStart(2, "0")}.${tenths}s`
+    : `${seconds}.${tenths}s`;
+}
 
 export default function LiveHostPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -86,13 +98,13 @@ export default function LiveHostPage({ params }: { params: Promise<{ id: string 
   // studentId → questionId → answer, for the per-question leaderboard detail
   const answersByStudent = new Map<
     string,
-    Map<string, { isCorrect: boolean; points: number; answerText: string }>
+    Map<string, { isCorrect: boolean; points: number; timeTakenMs: number; answerText: string }>
   >();
   for (const a of answers ?? []) {
     if (!answersByStudent.has(a.studentId)) answersByStudent.set(a.studentId, new Map());
     answersByStudent
       .get(a.studentId)!
-      .set(a.questionId, { isCorrect: a.isCorrect, points: a.points, answerText: a.answerText });
+      .set(a.questionId, { isCorrect: a.isCorrect, points: a.points, timeTakenMs: a.timeTakenMs, answerText: a.answerText });
   }
 
   return (
@@ -272,6 +284,9 @@ export default function LiveHostPage({ params }: { params: Promise<{ id: string 
                     </th>
                   )}
                   <th className="text-right text-text-tertiary text-xs font-semibold py-2.5 pl-3">
+                    Time
+                  </th>
+                  <th className="text-right text-text-tertiary text-xs font-semibold py-2.5 pl-3">
                     Score
                   </th>
                 </tr>
@@ -308,7 +323,7 @@ export default function LiveHostPage({ params }: { params: Promise<{ id: string 
                             <span
                               title={`Q${qi + 1}: ${q.title}\nAnswered: ${a.answerText}\nCorrect answer: ${q.correctAnswer}\n${
                                 a.isCorrect ? `Correct, +${a.points}` : "Wrong"
-                              }`}
+                              }\nTime: ${formatTime(a.timeTakenMs)}`}
                               className={`inline-flex max-w-[7rem] h-7 rounded-md items-center justify-center gap-1 px-2 text-[11px] font-mono border ${
                                 a.isCorrect
                                   ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/40"
@@ -344,6 +359,9 @@ export default function LiveHostPage({ params }: { params: Promise<{ id: string 
                         </span>
                       </td>
                     )}
+                    <td className="text-right py-2.5 pl-3">
+                      <span className="text-text-secondary font-mono text-xs">{formatTime(p.totalTimeMs)}</span>
+                    </td>
                     <td className="text-right py-2.5 pl-3">
                       <span className="text-brand-400 font-mono font-bold">{p.score}</span>
                     </td>

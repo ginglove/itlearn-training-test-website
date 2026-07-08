@@ -34,8 +34,9 @@ interface PlayState {
     | { title: string; answered: boolean; isCorrect: boolean; points: number }[]
     | null;
   myScore: number;
+  myTotalTimeMs: number;
   myRank: number;
-  leaderboard: { studentId: string; fullName: string; score: number }[];
+  leaderboard: { studentId: string; fullName: string; score: number; totalTimeMs: number }[];
 }
 
 const OPTION_COLORS = [
@@ -46,6 +47,16 @@ const OPTION_COLORS = [
   "bg-purple-500 hover:bg-purple-400",
   "bg-teal-500 hover:bg-teal-400",
 ];
+
+function formatTime(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  const tenths = Math.floor((ms % 1000) / 100);
+  return minutes > 0
+    ? `${minutes}m ${seconds.toString().padStart(2, "0")}.${tenths}s`
+    : `${seconds}.${tenths}s`;
+}
 
 export default function LivePlayPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -108,7 +119,7 @@ export default function LivePlayPage({ params }: { params: Promise<{ id: string 
   if (error) return <div className="p-10 text-rose-400">{error}</div>;
   if (!state) return <div className="p-10 text-text-secondary">Connecting…</div>;
 
-  const { session, currentQuestion, myAnswer, finished, myBreakdown, myScore, myRank, leaderboard } = state;
+  const { session, currentQuestion, myAnswer, finished, myBreakdown, myScore, myTotalTimeMs, myRank, leaderboard } = state;
   const answered = !!myAnswer || !!feedback;
   const result = feedback ?? myAnswer;
   const selfPaced = session.mode === "STUDENT";
@@ -128,6 +139,10 @@ export default function LivePlayPage({ params }: { params: Promise<{ id: string 
           <div className="bg-bg-surface border border-border-strong rounded-xl px-4 py-2 text-center">
             <p className="text-brand-400 font-mono font-bold text-lg leading-none">{myScore}</p>
             <p className="text-text-tertiary text-[10px] mt-1">POINTS</p>
+          </div>
+          <div className="bg-bg-surface border border-border-strong rounded-xl px-4 py-2 text-center">
+            <p className="text-text-secondary font-mono font-bold text-lg leading-none">{formatTime(myTotalTimeMs)}</p>
+            <p className="text-text-tertiary text-[10px] mt-1">TIME</p>
           </div>
           <div className="bg-bg-surface border border-border-strong rounded-xl px-4 py-2 text-center">
             <p className="text-white font-mono font-bold text-lg leading-none">#{myRank}</p>
@@ -273,6 +288,7 @@ export default function LivePlayPage({ params }: { params: Promise<{ id: string 
                   {i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1}
                 </span>
                 <span className="text-white text-sm flex-grow">{p.fullName}</span>
+                <span className="text-text-tertiary font-mono text-xs">{formatTime(p.totalTimeMs)}</span>
                 <span className="text-brand-400 font-mono font-bold text-sm">{p.score}</span>
               </div>
             ))}

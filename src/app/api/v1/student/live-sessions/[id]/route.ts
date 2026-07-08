@@ -59,11 +59,12 @@ export async function GET(
         studentId: users.id,
         fullName: users.fullName,
         score: liveParticipants.score,
+        totalTimeMs: liveParticipants.totalTimeMs,
       })
       .from(liveParticipants)
       .innerJoin(users, eq(users.id, liveParticipants.studentId))
       .where(eq(liveParticipants.sessionId, id))
-      .orderBy(sql`${liveParticipants.score} DESC`, users.fullName);
+      .orderBy(sql`${liveParticipants.score} DESC`, sql`${liveParticipants.totalTimeMs} ASC`, users.fullName);
     const rank = leaderboard.findIndex((p) => p.studentId === studentId) + 1;
 
     const startedAtMs = session.questionStartedAt ? new Date(session.questionStartedAt).getTime() : null;
@@ -170,6 +171,7 @@ export async function GET(
       currentQuestion,
       myAnswer,
       myScore: me.score,
+      myTotalTimeMs: me.totalTimeMs,
       myRank: rank,
       leaderboard: session.status === "ENDED" ? leaderboard.slice(0, 10) : leaderboard.slice(0, 5),
     });

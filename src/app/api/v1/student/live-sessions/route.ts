@@ -19,10 +19,13 @@ export async function GET(request: NextRequest) {
         createdAt: liveSessions.createdAt,
         examTitle: exams.title,
         score: liveParticipants.score,
+        totalTimeMs: liveParticipants.totalTimeMs,
         rank: sql<number>`(
           SELECT COUNT(*)::int + 1 FROM ${liveParticipants} lp2
           WHERE lp2.session_id = ${liveSessions.id}
-            AND lp2.score > ${liveParticipants.score}
+            AND (lp2.score > ${liveParticipants.score}
+              OR (lp2.score = ${liveParticipants.score}
+                AND lp2.total_time_ms < ${liveParticipants.totalTimeMs}))
         )`,
         participantCount: sql<number>`(
           SELECT COUNT(*)::int FROM ${liveParticipants} lp3

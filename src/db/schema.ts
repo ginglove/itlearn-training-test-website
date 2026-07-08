@@ -6,6 +6,7 @@ import {
   boolean,
   timestamp,
   integer,
+  bigint,
   decimal,
   json,
   pgEnum,
@@ -494,6 +495,7 @@ export const liveParticipants = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     score: integer("score").notNull().default(0),
+    totalTimeMs: bigint("total_time_ms", { mode: "number" }).notNull().default(0),
     // Progress pointer for student-paced sessions
     currentQuestionIndex: integer("current_question_index").notNull().default(0),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
@@ -521,6 +523,7 @@ export const liveAnswers = pgTable(
     selectedOptions: text("selected_options").array().default([]),
     isCorrect: boolean("is_correct").notNull().default(false),
     points: integer("points").notNull().default(0),
+    timeTakenMs: integer("time_taken_ms").notNull().default(0),
     answeredAt: timestamp("answered_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [

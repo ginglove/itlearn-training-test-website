@@ -60,6 +60,7 @@ export async function GET(
         fullName: users.fullName,
         username: users.username,
         score: liveParticipants.score,
+        totalTimeMs: liveParticipants.totalTimeMs,
         currentQuestionIndex: liveParticipants.currentQuestionIndex,
         finishedAt: liveParticipants.finishedAt,
         joinedAt: liveParticipants.joinedAt,
@@ -67,7 +68,7 @@ export async function GET(
       .from(liveParticipants)
       .innerJoin(users, eq(users.id, liveParticipants.studentId))
       .where(eq(liveParticipants.sessionId, id))
-      .orderBy(sql`${liveParticipants.score} DESC`, users.fullName);
+      .orderBy(sql`${liveParticipants.score} DESC`, sql`${liveParticipants.totalTimeMs} ASC`, users.fullName);
 
     // Correct answer text per question, for the leaderboard answer key
     const allOptions = sessionQuestions.length
@@ -106,6 +107,7 @@ export async function GET(
           selectedOptions: liveAnswers.selectedOptions,
           isCorrect: liveAnswers.isCorrect,
           points: liveAnswers.points,
+          timeTakenMs: liveAnswers.timeTakenMs,
         })
         .from(liveAnswers)
         .where(eq(liveAnswers.sessionId, id))
@@ -114,6 +116,7 @@ export async function GET(
       questionId: a.questionId,
       isCorrect: a.isCorrect,
       points: a.points,
+      timeTakenMs: a.timeTakenMs,
       answerText: (a.selectedOptions ?? [])
         .map((optId) => optionTextById.get(optId) ?? "?")
         .join(" · "),

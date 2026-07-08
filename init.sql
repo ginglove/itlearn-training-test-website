@@ -340,6 +340,7 @@ CREATE TABLE "live_participants" (
 	"session_id" uuid NOT NULL,
 	"student_id" uuid NOT NULL,
 	"score" integer DEFAULT 0 NOT NULL,
+	"total_time_ms" bigint DEFAULT 0 NOT NULL,
 	"current_question_index" integer DEFAULT 0 NOT NULL,
 	"finished_at" timestamp with time zone,
 	"joined_at" timestamp with time zone DEFAULT now() NOT NULL
@@ -352,6 +353,7 @@ CREATE TABLE "live_answers" (
 	"selected_options" text[] DEFAULT '{}',
 	"is_correct" boolean DEFAULT false NOT NULL,
 	"points" integer DEFAULT 0 NOT NULL,
+	"time_taken_ms" integer DEFAULT 0 NOT NULL,
 	"answered_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 ALTER TABLE "live_sessions" ADD CONSTRAINT "live_sessions_exam_id_fk" FOREIGN KEY ("exam_id") REFERENCES "public"."exams"("id") ON DELETE cascade ON UPDATE no action;
