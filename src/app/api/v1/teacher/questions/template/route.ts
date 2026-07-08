@@ -64,6 +64,24 @@ export async function GET(request: NextRequest) {
       reference_selector: "",
       is_hidden: "",
     },
+    // ── TEXT (open-ended) example ───────────────────────────────────────────
+    {
+      type: "TEXT",
+      title: "Explain Recursion",
+      question_text: "In your own words, explain what recursion is in programming and give one real-world example.",
+      points: 10,
+      correct_identifier: "",
+      option_a: "",
+      option_b: "",
+      option_c: "",
+      option_d: "",
+      language: "",
+      selector_type: "",
+      xpath_target_type: "",
+      xpath_target_payload: "",
+      reference_selector: "",
+      is_hidden: "",
+    },
     // ── XPATH examples (one row per test case) ────────────────────────────────
     // First test case for the XPATH question — title, question_text, points, selector_type set here
     {
@@ -147,7 +165,7 @@ export async function GET(request: NextRequest) {
   // ── Instructions sheet ────────────────────────────────────────────────────
   const instructions = [
     ["Column", "Required", "Used by", "Description"],
-    ["type", "Yes", "ALL", "QUIZ, CODE, or XPATH (uppercase)."],
+    ["type", "Yes", "ALL", "QUIZ, CODE, XPATH, or TEXT (uppercase)."],
     ["title", "No", "ALL", "Short question title (max 150 chars). Auto-generated if blank. For XPATH: rows sharing the same title are grouped as test cases of one question."],
     ["question_text", "Yes (first row)", "ALL", "Full question body shown to students. Leave blank on extra XPATH test-case rows."],
     ["points", "Yes (first row)", "ALL", "Numeric score (e.g. 10, 20). Leave blank on extra XPATH test-case rows."],
@@ -171,6 +189,7 @@ export async function GET(request: NextRequest) {
     ["General notes", "", "", ""],
     ["• QUIZ: at least 2 options required, correct_identifier is mandatory.", "", "", ""],
     ["• CODE: leave option_a–d, correct_identifier, and all xpath_* columns blank. Add test cases from the question editor after import.", "", "", ""],
+    ["• TEXT: open-ended questions graded manually by the teacher. Leave option_a–d, correct_identifier, and all xpath_* columns blank.", "", "", ""],
     ["• Do not rename or reorder column headers.", "", "", ""],
   ];
   const wsInfo = xlsx.utils.aoa_to_sheet(instructions);

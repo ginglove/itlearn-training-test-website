@@ -54,6 +54,21 @@ export async function GET(
           SELECT COALESCE(SUM(q.points::numeric), 0)
           FROM questions q WHERE q.exam_id = ${exams.id} AND q.type = 'XPATH'
         )`,
+        textScore: sql<string>`(
+          SELECT COALESCE(SUM(sd.score::numeric), 0)
+          FROM submission_details sd JOIN questions q ON sd.question_id = q.id
+          WHERE sd.submission_id = ${examSubmissions.id} AND q.type = 'TEXT'
+        )`,
+        textTotal: sql<string>`(
+          SELECT COALESCE(SUM(q.points::numeric), 0)
+          FROM questions q WHERE q.exam_id = ${exams.id} AND q.type = 'TEXT'
+        )`,
+        hasUngradedText: sql<boolean>`EXISTS(
+          SELECT 1 FROM submission_details sd
+          JOIN questions q ON sd.question_id = q.id
+          WHERE sd.submission_id = ${examSubmissions.id}
+            AND q.type = 'TEXT' AND sd.graded_at IS NULL
+        )`,
       })
       .from(examSubmissions)
       .innerJoin(exams, eq(examSubmissions.examId, exams.id))

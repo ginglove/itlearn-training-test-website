@@ -56,7 +56,7 @@ function generateJoinCode(): string {
   return code;
 }
 
-// POST — start a live quiz session from an exam's QUIZ questions
+// POST — start a live quiz session from an exam's questions (all types)
 export async function POST(request: NextRequest) {
   try {
     const teacherId = getUserId(request, "teacher");
@@ -88,14 +88,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "EXAM_NOT_FOUND" }, { status: 404 });
     }
 
-    const quizQuestions = await db
+    const allQuestions = await db
       .select({ id: questions.id })
       .from(questions)
-      .where(and(eq(questions.examId, examId), eq(questions.type, "QUIZ")))
+      .where(eq(questions.examId, examId))
       .orderBy(questions.sortOrder, questions.id);
-    if (quizQuestions.length === 0) {
+    if (allQuestions.length === 0) {
       return NextResponse.json(
-        { error: "VALIDATION_ERROR", message: "The exam has no quiz questions to host live" },
+        { error: "VALIDATION_ERROR", message: "The exam has no questions to host live" },
         { status: 400 }
       );
     }
@@ -117,13 +117,13 @@ export async function POST(request: NextRequest) {
             showCorrectAnswer,
             shuffleQuestions,
             shuffleOptions,
-            questionOrder: (shuffleQuestions ? shuffle(quizQuestions) : quizQuestions).map(
+            questionOrder: (shuffleQuestions ? shuffle(allQuestions) : allQuestions).map(
               (q) => q.id
             ),
           })
           .returning();
         return NextResponse.json(
-          { status: "SUCCESS", session, questionCount: quizQuestions.length },
+          { status: "SUCCESS", session, questionCount: allQuestions.length },
           { status: 201 }
         );
       } catch (err: any) {

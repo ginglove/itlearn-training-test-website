@@ -103,6 +103,10 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                 student_xpath: cleanXpath,
                 selector_type: type,
               };
+            } else if (q.type === "TEXT") {
+              initialAnswers[q.id] = {
+                text_answer: saved?.textAnswer ?? "",
+              };
             } else {
               initialAnswers[q.id] = {
                 selected_options: saved?.selectedOptions ?? [],
@@ -204,6 +208,12 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
         return {
           question_id: qId,
           student_xpath: ans.student_xpath.trim() ? `${type.toLowerCase()}:${ans.student_xpath.trim()}` : "",
+        };
+      }
+      if (ans.text_answer !== undefined) {
+        return {
+          question_id: qId,
+          text_answer: ans.text_answer,
         };
       }
       return {
@@ -467,7 +477,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                 </button>
                 <button onClick={() => { sessionStorage.removeItem(`exam_${examId}_submission_id`); router.push("/student/completed"); }}
                   className="flex-1 premium-btn-primary py-2.5 text-sm">
-                  View Results →
+                  View Results {"\u2192"}
                 </button>
               </div>
             </>
@@ -490,7 +500,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                 </button>
                 <button onClick={() => { sessionStorage.removeItem(`exam_${examId}_submission_id`); router.push("/student/completed"); }}
                   className="flex-1 premium-btn-primary py-2.5 text-sm">
-                  View Results →
+                  View Results {"\u2192"}
                 </button>
               </div>
             </>
@@ -590,16 +600,22 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                       ? !!answers[q.id]?.source_code?.trim()
                       : q.type === "XPATH"
                       ? !!answers[q.id]?.student_xpath?.trim()
+                      : q.type === "TEXT"
+                      ? !!answers[q.id]?.text_answer?.trim()
                       : answers[q.id]?.selected_options?.length > 0;
                     const activeColor = q.type === "CODE"
                       ? "bg-amber-500 text-white ring-2 ring-amber-500/50 ring-offset-2 ring-offset-bg-base"
                       : q.type === "XPATH"
                       ? "bg-emerald-500 text-white ring-2 ring-emerald-500/50 ring-offset-2 ring-offset-bg-base"
+                      : q.type === "TEXT"
+                      ? "bg-violet-500 text-white ring-2 ring-violet-500/50 ring-offset-2 ring-offset-bg-base"
                       : "bg-brand-500 text-white ring-2 ring-brand-500/50 ring-offset-2 ring-offset-bg-base";
                     const answeredColor = q.type === "CODE"
                       ? "bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500/30"
                       : q.type === "XPATH"
                       ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30"
+                      : q.type === "TEXT"
+                      ? "bg-violet-500/20 text-violet-400 border border-violet-500/30 hover:bg-violet-500/30"
                       : "bg-brand-500/20 text-brand-400 border border-brand-500/30 hover:bg-brand-500/30";
                     return (
                       <button
@@ -632,18 +648,24 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                   ? !!answers[q.id]?.source_code?.trim()
                   : q.type === "XPATH"
                   ? !!answers[q.id]?.student_xpath?.trim()
+                  : q.type === "TEXT"
+                  ? !!answers[q.id]?.text_answer?.trim()
                   : answers[q.id]?.selected_options?.length > 0;
 
                 const activeColor = q.type === "CODE"
                   ? "bg-amber-500 text-white ring-2 ring-amber-500/50 ring-offset-2 ring-offset-bg-base"
                   : q.type === "XPATH"
                   ? "bg-emerald-500 text-white ring-2 ring-emerald-500/50 ring-offset-2 ring-offset-bg-base"
+                  : q.type === "TEXT"
+                  ? "bg-violet-500 text-white ring-2 ring-violet-500/50 ring-offset-2 ring-offset-bg-base"
                   : "bg-brand-500 text-white ring-2 ring-brand-500/50 ring-offset-2 ring-offset-bg-base";
 
                 const answeredColor = q.type === "CODE"
                   ? "bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500/30"
                   : q.type === "XPATH"
                   ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30"
+                  : q.type === "TEXT"
+                  ? "bg-violet-500/20 text-violet-400 border border-violet-500/30 hover:bg-violet-500/30"
                   : "bg-brand-500/20 text-brand-400 border border-brand-500/30 hover:bg-brand-500/30";
 
                 return (
@@ -734,6 +756,32 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                       * Select all that apply. Incorrect selections may result in point deductions.
                     </p>
                   )}
+                </div>
+              ) : currentQ.type === "TEXT" ? (
+                /* -- Mode: Open-ended Text Answer -- */
+                <div className="border border-violet-500/20 rounded-xl overflow-hidden">
+                  <div className="px-4 py-2 border-b border-violet-500/10 text-xs font-bold text-violet-400 uppercase tracking-wider flex items-center gap-2">
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    Your Answer
+                  </div>
+                  <div className="p-4">
+                    <textarea
+                      value={answers[currentQ.id]?.text_answer ?? ""}
+                      onChange={(e) =>
+                        setAnswers((prev) => ({
+                          ...prev,
+                          [currentQ.id]: { ...prev[currentQ.id], text_answer: e.target.value },
+                        }))
+                      }
+                      placeholder="Type your answer here..."
+                      className="premium-input font-normal text-sm min-h-[200px] resize-y w-full"
+                    />
+                    <p className="text-xs text-text-tertiary mt-2">
+                      This question will be reviewed and graded by your teacher after submission.
+                    </p>
+                  </div>
                 </div>
               ) : currentQ.type === "XPATH" ? (
                 /* ── Mode C: XPath Automation Workspace ── */
@@ -1285,6 +1333,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
         const unanswered = questions.filter(q => {
           if (q.type === "CODE") return !answers[q.id]?.source_code?.trim();
           if (q.type === "XPATH") return !answers[q.id]?.student_xpath?.trim();
+          if (q.type === "TEXT") return !answers[q.id]?.text_answer?.trim();
           return !(answers[q.id]?.selected_options?.length > 0);
         });
         const untested = questions.filter(q => q.type === "CODE" && !runResults[q.id]);
@@ -1436,13 +1485,20 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
               ) : submitResult?.details?.map((d: any, i: number) => {
                 const score = parseFloat(d.score);
                 const maxPts = parseFloat(d.questionPoints);
-                const isPass = d.result === "PASS";
+                const isPending = d.result === "PENDING_REVIEW";
+                const isPass = d.result === "PASS" || d.result === "GRADED";
                 return (
                   <div key={d.questionId} className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-sm ${
-                    isPass ? "bg-emerald-500/5 border-emerald-500/15" : "bg-rose-500/5 border-rose-500/15"
+                    isPending ? "bg-violet-500/5 border-violet-500/15"
+                    : isPass ? "bg-emerald-500/5 border-emerald-500/15" : "bg-rose-500/5 border-rose-500/15"
                   }`}>
-                    <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${isPass ? "bg-emerald-500/20" : "bg-rose-500/20"}`}>
-                      {isPass
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
+                      isPending ? "bg-violet-500/20"
+                      : isPass ? "bg-emerald-500/20" : "bg-rose-500/20"
+                    }`}>
+                      {isPending
+                        ? <svg className="w-3.5 h-3.5 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        : isPass
                         ? <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
                         : <svg className="w-3.5 h-3.5 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
                       }
@@ -1451,14 +1507,17 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                       <div className="font-medium text-white truncate">{d.questionTitle}</div>
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
-                          d.questionType === "CODE" ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                          d.questionType === "TEXT" ? "bg-violet-500/10 text-violet-400 border-violet-500/20"
+                          : d.questionType === "CODE" ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
                           : d.questionType === "XPATH" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                           : "bg-brand-500/10 text-brand-400 border-brand-500/20"
-                        }`}>{d.questionType}</span>
+                        }`}>{d.questionType === "TEXT" ? "OPEN-ENDED" : d.questionType}</span>
                       </div>
                     </div>
-                    <div className={`font-mono text-sm font-bold shrink-0 ${isPass ? "text-emerald-400" : "text-rose-400"}`}>
-                      {score.toFixed(1)}/{maxPts.toFixed(1)}
+                    <div className={`font-mono text-sm font-bold shrink-0 ${
+                      isPending ? "text-violet-400" : isPass ? "text-emerald-400" : "text-rose-400"
+                    }`}>
+                      {isPending ? "Pending review" : `${score.toFixed(1)}/${maxPts.toFixed(1)}`}
                     </div>
                   </div>
                 );
@@ -1477,7 +1536,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
                 sessionStorage.removeItem(`exam_${examId}_submission_id`);
                 router.push("/student/completed");
               }} className="flex-1 premium-btn-primary py-2.5 text-sm">
-                View My Results →
+                View My Results {"\u2192"}
               </button>
             </div>
           </div>

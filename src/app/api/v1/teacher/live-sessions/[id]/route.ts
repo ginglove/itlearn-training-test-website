@@ -23,7 +23,7 @@ async function getSessionQuestions(session: { examId: string; questionOrder: str
   const rows = await db
     .select()
     .from(questions)
-    .where(and(eq(questions.examId, session.examId), eq(questions.type, "QUIZ")))
+    .where(eq(questions.examId, session.examId))
     .orderBy(questions.sortOrder, questions.id);
   return orderByQuestionOrder(rows, session.questionOrder);
 }
@@ -60,6 +60,7 @@ export async function GET(
         fullName: users.fullName,
         username: users.username,
         score: liveParticipants.score,
+        totalTimeMs: liveParticipants.totalTimeMs,
         currentQuestionIndex: liveParticipants.currentQuestionIndex,
         finishedAt: liveParticipants.finishedAt,
         joinedAt: liveParticipants.joinedAt,
@@ -67,10 +68,11 @@ export async function GET(
       .from(liveParticipants)
       .innerJoin(users, eq(users.id, liveParticipants.studentId))
       .where(eq(liveParticipants.sessionId, id))
-      .orderBy(sql`${liveParticipants.score} DESC`, users.fullName);
+      .orderBy(sql`${liveParticipants.score} DESC`, sql`${liveParticipants.totalTimeMs} ASC`, users.fullName);
 
-    // Correct answer text per question, for the leaderboard answer key
-    const allOptions = sessionQuestions.length
+    // Correct answer text per question, for the leaderboard answer key (QUIZ only)
+    const quizQuestionIds = sessionQuestions.filter((q) => q.type === "QUIZ").map((q) => q.id);
+    const allOptions = quizQuestionIds.length
       ? await db
           .select({
             optionId: quizOptions.id,
@@ -79,12 +81,7 @@ export async function GET(
             isCorrect: quizOptions.isCorrect,
           })
           .from(quizOptions)
-          .where(
-            inArray(
-              quizOptions.questionId,
-              sessionQuestions.map((q) => q.id)
-            )
-          )
+          .where(inArray(quizOptions.questionId, quizQuestionIds))
           .orderBy(quizOptions.id)
       : [];
     const correctByQuestion = new Map<string, string[]>();
@@ -106,6 +103,8 @@ export async function GET(
           selectedOptions: liveAnswers.selectedOptions,
           isCorrect: liveAnswers.isCorrect,
           points: liveAnswers.points,
+          timeTakenMs: liveAnswers.timeTakenMs,
+          textAnswer: liveAnswers.textAnswer,
         })
         .from(liveAnswers)
         .where(eq(liveAnswers.sessionId, id))
@@ -114,12 +113,16 @@ export async function GET(
       questionId: a.questionId,
       isCorrect: a.isCorrect,
       points: a.points,
-      answerText: (a.selectedOptions ?? [])
-        .map((optId) => optionTextById.get(optId) ?? "?")
-        .join(" · "),
+      timeTakenMs: a.timeTakenMs,
+      textAnswer: a.textAnswer,
+      answerText: a.textAnswer
+        ? a.textAnswer.substring(0, 100)
+        : (a.selectedOptions ?? [])
+            .map((optId) => optionTextById.get(optId) ?? "?")
+            .join(" · "),
     }));
 
-    let currentQuestion = null;
+    let currentQuestion: any = null;
     let answerDistribution: Record<string, number> = {};
     let answeredCount = 0;
     if (
@@ -128,26 +131,38 @@ export async function GET(
       session.currentQuestionIndex < sessionQuestions.length
     ) {
       const q = sessionQuestions[session.currentQuestionIndex];
-      const options = await db
-        .select()
-        .from(quizOptions)
-        .where(eq(quizOptions.questionId, q.id));
       const answers = await db
         .select({ selectedOptions: liveAnswers.selectedOptions })
         .from(liveAnswers)
         .where(and(eq(liveAnswers.sessionId, id), eq(liveAnswers.questionId, q.id)));
       answeredCount = answers.length;
-      for (const a of answers) {
-        for (const optId of a.selectedOptions ?? []) {
-          answerDistribution[optId] = (answerDistribution[optId] ?? 0) + 1;
+
+      if (q.type === "QUIZ") {
+        const options = await db
+          .select()
+          .from(quizOptions)
+          .where(eq(quizOptions.questionId, q.id));
+        for (const a of answers) {
+          for (const optId of a.selectedOptions ?? []) {
+            answerDistribution[optId] = (answerDistribution[optId] ?? 0) + 1;
+          }
         }
+        currentQuestion = {
+          id: q.id,
+          type: q.type,
+          title: q.title,
+          content: q.content,
+          options: options.map((o) => ({ id: o.id, text: o.optionText, isCorrect: o.isCorrect })),
+        };
+      } else {
+        currentQuestion = {
+          id: q.id,
+          type: q.type,
+          title: q.title,
+          content: q.content,
+          options: [],
+        };
       }
-      currentQuestion = {
-        id: q.id,
-        title: q.title,
-        content: q.content,
-        options: options.map((o) => ({ id: o.id, text: o.optionText, isCorrect: o.isCorrect })),
-      };
     }
 
     const startedAtMs = session.questionStartedAt ? new Date(session.questionStartedAt).getTime() : null;
@@ -180,7 +195,10 @@ export async function GET(
       questions: sessionQuestions.map((q) => ({
         id: q.id,
         title: q.title,
-        correctAnswer: (correctByQuestion.get(q.id) ?? []).join(" · "),
+        type: q.type,
+        correctAnswer: q.type === "QUIZ"
+          ? (correctByQuestion.get(q.id) ?? []).join(" · ")
+          : q.type === "TEXT" ? "Manual review" : "Auto-graded",
       })),
       answers: allAnswers,
       currentQuestion,

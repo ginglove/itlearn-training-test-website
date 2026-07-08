@@ -305,7 +305,7 @@ export default function StudentExamsPage() {
                   disabled={page === 1}
                   className="px-3 py-1.5 rounded-lg text-sm border border-border-strong text-text-secondary hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
-                  ← Prev
+                  {"\u2190"} Prev
                 </button>
                 {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
                   <button
@@ -325,7 +325,7 @@ export default function StudentExamsPage() {
                   disabled={page === totalPages}
                   className="px-3 py-1.5 rounded-lg text-sm border border-border-strong text-text-secondary hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
-                  Next →
+                  Next {"\u2192"}
                 </button>
               </div>
             )}

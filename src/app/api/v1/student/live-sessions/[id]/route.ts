@@ -47,9 +47,9 @@ export async function GET(
 
     const sessionQuestions = orderByQuestionOrder(
       await db
-        .select({ id: questions.id, title: questions.title, content: questions.content })
+        .select({ id: questions.id, type: questions.type, title: questions.title, content: questions.content })
         .from(questions)
-        .where(and(eq(questions.examId, session.examId), eq(questions.type, "QUIZ")))
+        .where(eq(questions.examId, session.examId))
         .orderBy(questions.sortOrder, questions.id),
       session.questionOrder
     );
@@ -59,11 +59,12 @@ export async function GET(
         studentId: users.id,
         fullName: users.fullName,
         score: liveParticipants.score,
+        totalTimeMs: liveParticipants.totalTimeMs,
       })
       .from(liveParticipants)
       .innerJoin(users, eq(users.id, liveParticipants.studentId))
       .where(eq(liveParticipants.sessionId, id))
-      .orderBy(sql`${liveParticipants.score} DESC`, users.fullName);
+      .orderBy(sql`${liveParticipants.score} DESC`, sql`${liveParticipants.totalTimeMs} ASC`, users.fullName);
     const rank = leaderboard.findIndex((p) => p.studentId === studentId) + 1;
 
     const startedAtMs = session.questionStartedAt ? new Date(session.questionStartedAt).getTime() : null;
@@ -79,7 +80,7 @@ export async function GET(
       session.mode === "STUDENT" ? me.currentQuestionIndex : session.currentQuestionIndex;
     const finished = session.mode === "STUDENT" && (Boolean(me.finishedAt) || myIndex >= sessionQuestions.length);
 
-    let currentQuestion = null;
+    let currentQuestion: any = null;
     let myAnswer: { isCorrect: boolean | null; points: number | null } | null = null;
     let correctOptionIds: string[] | null = null;
     if (
@@ -89,14 +90,6 @@ export async function GET(
       myIndex < sessionQuestions.length
     ) {
       const q = sessionQuestions[myIndex];
-      let options = await db
-        .select({ id: quizOptions.id, text: quizOptions.optionText, isCorrect: quizOptions.isCorrect })
-        .from(quizOptions)
-        .where(eq(quizOptions.questionId, q.id))
-        .orderBy(quizOptions.id);
-      if (session.shuffleOptions) {
-        options = shuffleOptionsForStudent(options, studentId, q.id);
-      }
       const [answer] = await db
         .select({ isCorrect: liveAnswers.isCorrect, points: liveAnswers.points })
         .from(liveAnswers)
@@ -108,27 +101,46 @@ export async function GET(
           )
         )
         .limit(1);
-      // Correctness is only revealed when the session allows it
       if (answer) {
         myAnswer = session.showCorrectAnswer
           ? answer
           : { isCorrect: null, points: null };
-        if (session.showCorrectAnswer) {
+      }
+
+      if (q.type === "QUIZ") {
+        let options = await db
+          .select({ id: quizOptions.id, text: quizOptions.optionText, isCorrect: quizOptions.isCorrect })
+          .from(quizOptions)
+          .where(eq(quizOptions.questionId, q.id))
+          .orderBy(quizOptions.id);
+        if (session.shuffleOptions) {
+          options = shuffleOptionsForStudent(options, studentId, q.id);
+        }
+        if (answer && session.showCorrectAnswer) {
           correctOptionIds = options.filter((o) => o.isCorrect).map((o) => o.id);
         }
+        currentQuestion = {
+          id: q.id,
+          type: q.type,
+          title: q.title,
+          content: q.content,
+          options: options.map((o) => ({ id: o.id, text: o.text })),
+        };
+      } else {
+        currentQuestion = {
+          id: q.id,
+          type: q.type,
+          title: q.title,
+          content: q.content,
+          options: [],
+        };
       }
-      currentQuestion = {
-        id: q.id,
-        title: q.title,
-        content: q.content,
-        options: options.map((o) => ({ id: o.id, text: o.text })),
-      };
     }
 
     // Question-by-question breakdown of the student's own results, shown once
     // the session has ended
     let myBreakdown:
-      | { title: string; answered: boolean; isCorrect: boolean; points: number }[]
+      | { title: string; type: string; answered: boolean; isCorrect: boolean; points: number }[]
       | null = null;
     if (session.status === "ENDED") {
       const myAnswers = await db
@@ -144,6 +156,7 @@ export async function GET(
         const a = byQuestion.get(q.id);
         return {
           title: q.title,
+          type: q.type,
           answered: Boolean(a),
           isCorrect: a?.isCorrect ?? false,
           points: a?.points ?? 0,
@@ -170,6 +183,7 @@ export async function GET(
       currentQuestion,
       myAnswer,
       myScore: me.score,
+      myTotalTimeMs: me.totalTimeMs,
       myRank: rank,
       leaderboard: session.status === "ENDED" ? leaderboard.slice(0, 10) : leaderboard.slice(0, 5),
     });

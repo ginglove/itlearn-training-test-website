@@ -105,6 +105,8 @@ export async function POST(
         }
         totalScore += questionScore;
         detailInserts.push({ submissionId: activeSubmission.id, questionId: q.id, sourceCode: draft?.sourceCode ?? "", language: draft?.language ?? "python", status: overallStatus, score: questionScore.toFixed(2) });
+      } else if (q.type === "TEXT") {
+        detailInserts.push({ submissionId: activeSubmission.id, questionId: q.id, textAnswer: draft?.textAnswer ?? "", score: "0.00" });
       } else if (q.type === "XPATH") {
         const xConfig = xpathConfigMap.get(q.id);
         const cases = xpathTCMap.get(q.id) ?? [];

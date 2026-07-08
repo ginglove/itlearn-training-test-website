@@ -88,10 +88,10 @@ export async function POST(
 
       for (const item of orderedItems) {
 
-        // ── QUIZ / CODE ───────────────────────────────────────────────────────
+        // ── QUIZ / CODE / TEXT ────────────────────────────────────────────────
         if (item.kind === "ROW") {
           const { rowIndex, row } = item;
-          const type = row.type?.toString().toUpperCase() as "QUIZ" | "CODE";
+          const type = row.type?.toString().toUpperCase() as "QUIZ" | "CODE" | "TEXT";
           const pointsNum = parseFloat(row.points);
           const points = isNaN(pointsNum) ? "0.00" : pointsNum.toFixed(2);
           const content = row.question_text;
@@ -100,7 +100,7 @@ export async function POST(
           if (!type || isNaN(pointsNum) || !content) {
             throw new Error(`Validation Error: Missing required fields in row ${rowIndex + 2}`);
           }
-          if (type !== "QUIZ" && type !== "CODE") {
+          if (type !== "QUIZ" && type !== "CODE" && type !== "TEXT") {
             throw new Error(`Validation Error: Invalid question type '${type}' in row ${rowIndex + 2}`);
           }
 

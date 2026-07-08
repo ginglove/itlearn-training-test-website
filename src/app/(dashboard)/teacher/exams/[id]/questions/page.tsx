@@ -341,6 +341,13 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
               <span className="hidden sm:inline">Back</span>
             </button>
             <button
+              onClick={() => router.push(`/teacher/exams/${examId}/grading`)}
+              className="premium-btn-secondary py-2 text-sm flex items-center gap-1.5"
+            >
+              <span className="w-2 h-2 rounded-full bg-violet-500" />
+              Grading
+            </button>
+            <button
               onClick={() => router.push(`/teacher/exams/${examId}/coding`)}
               className="premium-btn-secondary py-2 text-sm"
             >
@@ -400,6 +407,7 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
                     className="premium-input bg-bg-surface-elevated text-white w-full border border-border-strong rounded-xl p-3 focus:outline-none focus:border-brand-500"
                   >
                     <option value="QUIZ">Quiz / Multiple Choice</option>
+                    <option value="TEXT">Open-ended / Text Answer</option>
                     <option value="CODE">Coding Assessment</option>
                     <option value="XPATH">XPath Automation</option>
                   </select>
@@ -606,6 +614,22 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
                 </div>
               )}
 
+              {/* Text Answer info section */}
+              {newQuestion.type === "TEXT" && (
+                <div className="pt-4 border-t border-border-strong">
+                  <div className="flex items-start gap-3 bg-violet-500/5 border border-violet-500/20 rounded-xl px-4 py-3">
+                    <span className="text-violet-400 mt-0.5">
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </span>
+                    <p className="text-sm text-violet-300">
+                      Students will type their answer in a text box. You will need to <strong>manually review and grade</strong> their responses after they submit the exam via the <strong>Grading</strong> page.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* XPath info section */}
               {newQuestion.type === "XPATH" && (
                 <div className="pt-4 border-t border-border-strong">
@@ -718,6 +742,12 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
                     <div className="text-xs text-text-tertiary mt-1">Quiz</div>
                   </div>
                   <div className="bg-bg-surface-elevated/50 p-4 rounded-xl">
+                    <div className="text-2xl font-extrabold text-violet-400">
+                      {questions.filter(q => q.type === "TEXT").length}
+                    </div>
+                    <div className="text-xs text-text-tertiary mt-1">Open-ended</div>
+                  </div>
+                  <div className="bg-bg-surface-elevated/50 p-4 rounded-xl">
                     <div className="text-2xl font-extrabold text-amber-400">
                       {questions.filter(q => q.type === "CODE").length}
                     </div>
@@ -790,11 +820,13 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
                           <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
                             q.type === 'QUIZ'
                               ? 'bg-brand-500/10 text-brand-400 border border-brand-500/20'
+                              : q.type === 'TEXT'
+                              ? 'bg-violet-500/10 text-violet-400 border border-violet-500/20'
                               : q.type === 'XPATH'
                               ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                               : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
                           }`}>
-                            {q.type}
+                            {q.type === 'TEXT' ? 'OPEN-ENDED' : q.type}
                           </span>
                           <span className="text-xs text-text-tertiary font-medium">{q.points} points</span>
                         </div>
@@ -824,6 +856,11 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
                             <span>Time limit: {q.config?.timeLimit || 2000}ms</span>
                             <span>•</span>
                             <span>Test cases: {q.testCases?.length || 0} ({q.testCases?.filter((c: any) => c.isHidden).length || 0} hidden)</span>
+                          </div>
+                        )}
+                        {q.type === 'TEXT' && (
+                          <div className="text-xs text-violet-400/70 mt-2">
+                            Open-ended question — teacher grades manually after submission
                           </div>
                         )}
                         {q.type === 'XPATH' && (

@@ -119,7 +119,7 @@ export default function WorkspaceSwitcher({
                 onClick={() => router.push(`${basePath}/${selected.id}`)}
                 className="text-xs text-brand-400 hover:text-brand-300 transition-colors whitespace-nowrap"
               >
-                Open workspace →
+                Open workspace {"\u2192"}
               </button>
             )}
           </div>

@@ -6,6 +6,7 @@ import {
   boolean,
   timestamp,
   integer,
+  bigint,
   decimal,
   json,
   pgEnum,
@@ -16,7 +17,7 @@ import {
 
 // ── Enums ──────────────────────────────────────────────────────────────────────
 export const userRoleEnum = pgEnum("user_role", ["ADMIN", "TEACHER", "STUDENT"]);
-export const questionTypeEnum = pgEnum("question_type", ["QUIZ", "CODE", "XPATH"]);
+export const questionTypeEnum = pgEnum("question_type", ["QUIZ", "CODE", "XPATH", "TEXT"]);
 export const workspaceStatusEnum = pgEnum("workspace_status", ["ACTIVE", "ARCHIVED"]);
 export const membershipStatusEnum = pgEnum("membership_status", ["ACTIVE", "REMOVED"]);
 export const attendanceStatusEnum = pgEnum("attendance_status", [
@@ -219,7 +220,10 @@ export const submissionDetails = pgTable(
     language: varchar("language", { length: 30 }),
     status: executionStatusEnum("status"),
     studentXpath: text("student_xpath"),
+    textAnswer: text("text_answer"),
     score: decimal("score", { precision: 5, scale: 2 }).notNull().default("0.00"),
+    gradedBy: uuid("graded_by").references(() => users.id, { onDelete: "set null" }),
+    gradedAt: timestamp("graded_at", { withTimezone: true }),
   },
   (table) => [
     uniqueIndex("unique_question_per_submission").on(
@@ -494,6 +498,7 @@ export const liveParticipants = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     score: integer("score").notNull().default(0),
+    totalTimeMs: bigint("total_time_ms", { mode: "number" }).notNull().default(0),
     // Progress pointer for student-paced sessions
     currentQuestionIndex: integer("current_question_index").notNull().default(0),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
@@ -519,8 +524,10 @@ export const liveAnswers = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     selectedOptions: text("selected_options").array().default([]),
+    textAnswer: text("text_answer"),
     isCorrect: boolean("is_correct").notNull().default(false),
     points: integer("points").notNull().default(0),
+    timeTakenMs: integer("time_taken_ms").notNull().default(0),
     answeredAt: timestamp("answered_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [

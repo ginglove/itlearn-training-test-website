@@ -129,6 +129,17 @@ export async function POST(
           status: overallStatus,
           score: questionScore.toFixed(2),
         });
+      } else if (q.type === "TEXT") {
+        const existingScore = parseFloat(draft?.score as string || "0");
+        totalScore += existingScore;
+        detailInserts.push({
+          submissionId,
+          questionId: q.id,
+          textAnswer: draft?.textAnswer ?? "",
+          score: existingScore.toFixed(2),
+          gradedBy: draft?.gradedBy ?? null,
+          gradedAt: draft?.gradedAt ?? null,
+        });
       } else if (q.type === "XPATH") {
         const xConfig = xpathConfigMap.get(q.id);
         const cases = xpathTCMap.get(q.id) ?? [];

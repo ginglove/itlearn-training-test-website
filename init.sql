@@ -33,7 +33,7 @@ DROP TYPE IF EXISTS "public"."activity_type" CASCADE;
 
 -- Enums
 CREATE TYPE "public"."execution_status" AS ENUM('AC', 'WA', 'CE', 'RE', 'TLE', 'OFE');
-CREATE TYPE "public"."question_type" AS ENUM('QUIZ', 'CODE', 'XPATH');
+CREATE TYPE "public"."question_type" AS ENUM('QUIZ', 'CODE', 'XPATH', 'TEXT');
 CREATE TYPE "public"."user_role" AS ENUM('ADMIN', 'TEACHER', 'STUDENT');
 CREATE TYPE "public"."workspace_status" AS ENUM('ACTIVE', 'ARCHIVED');
 CREATE TYPE "public"."membership_status" AS ENUM('ACTIVE', 'REMOVED');
@@ -131,7 +131,10 @@ CREATE TABLE "submission_details" (
 	"language" varchar(30),
 	"status" "execution_status",
 	"student_xpath" text,
-	"score" numeric(5, 2) DEFAULT '0.00' NOT NULL
+	"text_answer" text,
+	"score" numeric(5, 2) DEFAULT '0.00' NOT NULL,
+	"graded_by" uuid,
+	"graded_at" timestamp with time zone
 );
 
 CREATE TABLE "xpath_configs" (
@@ -340,6 +343,7 @@ CREATE TABLE "live_participants" (
 	"session_id" uuid NOT NULL,
 	"student_id" uuid NOT NULL,
 	"score" integer DEFAULT 0 NOT NULL,
+	"total_time_ms" bigint DEFAULT 0 NOT NULL,
 	"current_question_index" integer DEFAULT 0 NOT NULL,
 	"finished_at" timestamp with time zone,
 	"joined_at" timestamp with time zone DEFAULT now() NOT NULL
@@ -350,8 +354,10 @@ CREATE TABLE "live_answers" (
 	"question_id" uuid NOT NULL,
 	"student_id" uuid NOT NULL,
 	"selected_options" text[] DEFAULT '{}',
+	"text_answer" text,
 	"is_correct" boolean DEFAULT false NOT NULL,
 	"points" integer DEFAULT 0 NOT NULL,
+	"time_taken_ms" integer DEFAULT 0 NOT NULL,
 	"answered_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 ALTER TABLE "live_sessions" ADD CONSTRAINT "live_sessions_exam_id_fk" FOREIGN KEY ("exam_id") REFERENCES "public"."exams"("id") ON DELETE cascade ON UPDATE no action;
