@@ -220,7 +220,10 @@ export const submissionDetails = pgTable(
     language: varchar("language", { length: 30 }),
     status: executionStatusEnum("status"),
     studentXpath: text("student_xpath"),
+    textAnswer: text("text_answer"),
     score: decimal("score", { precision: 5, scale: 2 }).notNull().default("0.00"),
+    gradedBy: uuid("graded_by").references(() => users.id, { onDelete: "set null" }),
+    gradedAt: timestamp("graded_at", { withTimezone: true }),
   },
   (table) => [
     uniqueIndex("unique_question_per_submission").on(
@@ -521,6 +524,7 @@ export const liveAnswers = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     selectedOptions: text("selected_options").array().default([]),
+    textAnswer: text("text_answer"),
     isCorrect: boolean("is_correct").notNull().default(false),
     points: integer("points").notNull().default(0),
     timeTakenMs: integer("time_taken_ms").notNull().default(0),

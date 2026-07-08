@@ -55,7 +55,7 @@ export async function POST(
       await db
         .select({ id: questions.id })
         .from(questions)
-        .where(and(eq(questions.examId, session.examId), eq(questions.type, "QUIZ")))
+        .where(eq(questions.examId, session.examId))
         .orderBy(questions.sortOrder, questions.id),
       session.questionOrder
     );

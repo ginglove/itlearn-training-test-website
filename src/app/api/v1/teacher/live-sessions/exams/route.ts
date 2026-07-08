@@ -5,7 +5,7 @@ import { desc, eq, sql } from "drizzle-orm";
 import { getUserId, isAdminRequest } from "@/lib/get-user-id";
 
 // GET — exams that can be hosted as a live quiz: created by this teacher
-// (admins see all) and containing at least one QUIZ question
+// (admins see all) and containing at least one question
 export async function GET(request: NextRequest) {
   try {
     const teacherId = getUserId(request, "teacher");
@@ -19,12 +19,13 @@ export async function GET(request: NextRequest) {
         title: exams.title,
         description: exams.description,
         createdAt: exams.createdAt,
-        quizQuestionCount: sql<number>`COUNT(${questions.id})::int`,
+        quizQuestionCount: sql<number>`COUNT(CASE WHEN ${questions.type} = 'QUIZ' THEN 1 END)::int`,
+        totalQuestionCount: sql<number>`COUNT(${questions.id})::int`,
       })
       .from(exams)
       .innerJoin(
         questions,
-        sql`${questions.examId} = ${exams.id} AND ${questions.type} = 'QUIZ'`
+        sql`${questions.examId} = ${exams.id}`
       )
       .where(isAdminRequest(request) ? sql`TRUE` : eq(exams.createdBy, teacherId))
       .groupBy(exams.id)

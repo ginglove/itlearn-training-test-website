@@ -27,13 +27,14 @@ interface HostState {
   }[];
   currentQuestion: {
     id: string;
+    type: string;
     title: string;
     content: string;
     options: { id: string; text: string; isCorrect: boolean }[];
   } | null;
   answerDistribution: Record<string, number>;
   answeredCount: number;
-  questions: { id: string; title: string; correctAnswer: string }[];
+  questions: { id: string; type: string; title: string; correctAnswer: string }[];
   answers: {
     studentId: string;
     questionId: string;
@@ -41,6 +42,7 @@ interface HostState {
     points: number;
     timeTakenMs: number;
     answerText: string;
+    textAnswer: string | null;
   }[];
 }
 
@@ -62,6 +64,8 @@ export default function LiveHostPage({ params }: { params: Promise<{ id: string 
   const [state, setState] = useState<HostState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isActing, setIsActing] = useState(false);
+  const [revealAnswers, setRevealAnswers] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
 
   const fetchState = useCallback(async () => {
     const res = await fetch(`/api/v1/teacher/live-sessions/${id}`);
@@ -183,66 +187,127 @@ export default function LiveHostPage({ params }: { params: Promise<{ id: string 
       {/* Question view */}
       {session.status === "QUESTION" && currentQuestion && (
         <div className="bg-bg-surface border border-border-strong rounded-2xl p-6 mb-6">
-          <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-            <span className="text-text-tertiary text-xs font-mono">
-              Question {session.currentQuestionIndex + 1} / {session.totalQuestions}
-            </span>
-            <div className="flex items-center gap-4">
-              <span className="text-text-secondary text-xs font-mono">
-                {answeredCount}/{participants.length} answered
+          {/* Countdown timer — large and prominent */}
+          {session.mode === "TEACHER" && (
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-text-tertiary text-xs font-mono">
+                  {answeredCount}/{participants.length} answered
+                </span>
+                <span
+                  className={`text-4xl font-black font-mono tabular-nums ${
+                    session.remainingSeconds <= 5 ? "text-rose-400 animate-pulse" : "text-white"
+                  }`}
+                >
+                  {session.remainingSeconds}s
+                </span>
+              </div>
+              <div className="w-full h-2 bg-bg-surface-elevated rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-1000 ${
+                    session.remainingSeconds <= 5 ? "bg-rose-500" : "bg-brand-500"
+                  }`}
+                  style={{ width: `${(session.remainingSeconds / session.questionSeconds) * 100}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-text-tertiary text-xs font-mono">
+                Question {session.currentQuestionIndex + 1} / {session.totalQuestions}
               </span>
-              <span
-                className={`text-2xl font-black font-mono ${
-                  session.remainingSeconds <= 5 ? "text-rose-400" : "text-white"
+              {currentQuestion.type !== "QUIZ" && (
+                <span className="px-2 py-0.5 rounded-full bg-violet-500/15 border border-violet-500/30 text-violet-400 text-[10px] font-semibold uppercase">
+                  {currentQuestion.type === "TEXT" ? "Open-ended" : currentQuestion.type}
+                </span>
+              )}
+            </div>
+            {currentQuestion.type === "QUIZ" && (
+              <button
+                onClick={() => setRevealAnswers((v) => !v)}
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                  revealAnswers
+                    ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+                    : "border border-border-strong text-text-tertiary hover:text-text-secondary"
                 }`}
               >
-                {session.remainingSeconds}s
-              </span>
-            </div>
+                {revealAnswers ? "Hide Answers" : "Reveal Answers"}
+              </button>
+            )}
           </div>
           <h2 className="text-xl font-bold text-white mb-1">{currentQuestion.title}</h2>
           <p className="text-text-secondary text-sm mb-5 whitespace-pre-wrap">{currentQuestion.content}</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {currentQuestion.options.map((o, i) => {
-              const count = answerDistribution[o.id] ?? 0;
-              const pct = answeredCount > 0 ? Math.round((count / answeredCount) * 100) : 0;
-              return (
-                <div
-                  key={o.id}
-                  className={`rounded-xl border p-3 ${
-                    o.isCorrect ? "border-emerald-500/50 bg-emerald-500/5" : "border-border-strong"
-                  }`}
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className={`w-3 h-3 rounded-full shrink-0 ${OPTION_COLORS[i % OPTION_COLORS.length]}`} />
-                    <span className="text-white text-sm flex-grow">{o.text}</span>
-                    {o.isCorrect && <span className="text-emerald-400 text-xs font-mono">✓ correct</span>}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-grow h-2 bg-bg-surface-elevated rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full ${OPTION_COLORS[i % OPTION_COLORS.length]}`}
-                        style={{ width: `${pct}%` }}
-                      />
+          {currentQuestion.type === "QUIZ" ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {currentQuestion.options.map((o, i) => {
+                const count = answerDistribution[o.id] ?? 0;
+                const pct = answeredCount > 0 ? Math.round((count / answeredCount) * 100) : 0;
+                const showCorrect = revealAnswers && o.isCorrect;
+                return (
+                  <div
+                    key={o.id}
+                    className={`rounded-xl border p-3 ${
+                      showCorrect ? "border-emerald-500/50 bg-emerald-500/5" : "border-border-strong"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className={`w-3 h-3 rounded-full shrink-0 ${OPTION_COLORS[i % OPTION_COLORS.length]}`} />
+                      <span className="text-white text-sm flex-grow">{o.text}</span>
+                      {showCorrect && <span className="text-emerald-400 text-xs font-mono">✓ correct</span>}
                     </div>
-                    <span className="text-text-tertiary text-xs font-mono w-10 text-right">{count}</span>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-grow h-2 bg-bg-surface-elevated rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${OPTION_COLORS[i % OPTION_COLORS.length]}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <span className="text-text-tertiary text-xs font-mono w-10 text-right">{count}</span>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-5 text-center">
+              <p className="text-violet-400 text-sm font-semibold">
+                {answeredCount} / {participants.length} submitted
+              </p>
+              <p className="text-text-tertiary text-xs mt-1">
+                {currentQuestion.type === "TEXT"
+                  ? "Students are writing their answers. Review after the session ends."
+                  : "Students are working on this question."}
+              </p>
+            </div>
+          )}
         </div>
       )}
 
       {/* Leaderboard / lobby list */}
       <div className="bg-bg-surface border border-border-strong rounded-2xl p-5">
-        <h2 className="font-semibold text-white mb-4">
-          {session.status === "ENDED"
-            ? "🏆 Final Leaderboard"
-            : session.status === "LOBBY"
-              ? "Players in Lobby"
-              : "Leaderboard"}
-        </h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-semibold text-white">
+            {session.status === "ENDED"
+              ? "🏆 Final Leaderboard"
+              : session.status === "LOBBY"
+                ? "Players in Lobby"
+                : "Leaderboard"}
+          </h2>
+          {session.status !== "LOBBY" && participants.length > 0 && (
+            <button
+              onClick={() => setShowDetails((v) => !v)}
+              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                showDetails
+                  ? "bg-brand-500/15 text-brand-400 border border-brand-500/30"
+                  : "border border-border-strong text-text-tertiary hover:text-text-secondary"
+              }`}
+            >
+              {showDetails ? "Hide Details" : "Show Details"}
+            </button>
+          )}
+        </div>
         {participants.length === 0 ? (
           <p className="text-text-secondary text-sm py-8 text-center">
             Waiting for students to join with the code above…
@@ -262,134 +327,141 @@ export default function LiveHostPage({ params }: { params: Promise<{ id: string 
             ))}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="border-b border-border-strong">
-                  <th className="text-left text-text-secondary text-xs font-semibold py-2.5 pr-4 sticky left-0 bg-bg-surface">
-                    Student
-                  </th>
-                  {questions.map((q, qi) => (
-                    <th
-                      key={q.id}
-                      title={`${q.title} — answer: ${q.correctAnswer}`}
-                      className="text-center text-text-tertiary text-xs font-mono font-semibold py-2.5 px-1.5"
-                    >
-                      Q{qi + 1}
-                    </th>
-                  ))}
-                  {session.mode === "STUDENT" && (
-                    <th className="text-center text-text-tertiary text-xs font-semibold py-2.5 px-3">
-                      Progress
-                    </th>
-                  )}
-                  <th className="text-right text-text-tertiary text-xs font-semibold py-2.5 pl-3">
-                    Time
-                  </th>
-                  <th className="text-right text-text-tertiary text-xs font-semibold py-2.5 pl-3">
-                    Score
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border-strong">
-                {participants.map((p, i) => (
-                  <tr key={p.studentId}>
-                    <td className="py-2.5 pr-4 sticky left-0 bg-bg-surface">
-                      <div className="flex items-center gap-3">
-                        <span
-                          className={`w-8 h-8 rounded-full flex items-center justify-center font-mono text-sm shrink-0 ${
-                            i === 0
-                              ? "bg-amber-500/20 text-amber-400 border border-amber-500/40"
-                              : i === 1
-                                ? "bg-slate-400/20 text-slate-300 border border-slate-400/40"
-                                : i === 2
-                                  ? "bg-orange-700/20 text-orange-400 border border-orange-700/40"
-                                  : "bg-bg-surface-elevated text-text-tertiary border border-border-strong"
-                          }`}
-                        >
-                          {i + 1}
-                        </span>
-                        <div className="min-w-[8rem]">
-                          <p className="text-white text-sm whitespace-nowrap">{p.fullName}</p>
-                          <p className="text-text-tertiary text-xs font-mono">{p.username}</p>
-                        </div>
-                      </div>
-                    </td>
-                    {questions.map((q, qi) => {
-                      const a = answersByStudent.get(p.studentId)?.get(q.id);
-                      return (
-                        <td key={q.id} className="text-center py-2.5 px-1.5">
-                          {a ? (
-                            <span
-                              title={`Q${qi + 1}: ${q.title}\nAnswered: ${a.answerText}\nCorrect answer: ${q.correctAnswer}\n${
-                                a.isCorrect ? `Correct, +${a.points}` : "Wrong"
-                              }\nTime: ${formatTime(a.timeTakenMs)}`}
-                              className={`inline-flex max-w-[7rem] h-7 rounded-md items-center justify-center gap-1 px-2 text-[11px] font-mono border ${
-                                a.isCorrect
-                                  ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/40"
-                                  : "bg-rose-500/15 text-rose-400 border-rose-500/40"
-                              }`}
-                            >
-                              <span className="shrink-0">{a.isCorrect ? "✓" : "✗"}</span>
-                              <span className="truncate">{a.answerText}</span>
-                            </span>
-                          ) : (
-                            <span
-                              title={`Q${qi + 1}: ${q.title}\nNo answer\nCorrect answer: ${q.correctAnswer}`}
-                              className="text-text-tertiary text-xs"
-                            >
-                              ·
-                            </span>
-                          )}
-                        </td>
-                      );
-                    })}
-                    {session.mode === "STUDENT" && (
-                      <td className="text-center py-2.5 px-3">
-                        <span
-                          className={`px-2 py-0.5 rounded-full border text-[11px] font-mono whitespace-nowrap ${
-                            p.finished
-                              ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
-                              : "bg-bg-surface-elevated text-text-secondary border-border-strong"
-                          }`}
-                        >
-                          {p.finished
-                            ? "Finished"
-                            : `Q ${Math.min(p.progress + 1, session.totalQuestions)}/${session.totalQuestions}`}
-                        </span>
-                      </td>
-                    )}
-                    <td className="text-right py-2.5 pl-3">
-                      <span className="text-text-secondary font-mono text-xs">{formatTime(p.totalTimeMs)}</span>
-                    </td>
-                    <td className="text-right py-2.5 pl-3">
-                      <span className="text-brand-400 font-mono font-bold">{p.score}</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            {/* Answer key */}
-            <div className="mt-5 pt-4 border-t border-border-strong">
-              <p className="text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">
-                Answer Key
-              </p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1.5">
-                {questions.map((q, qi) => (
-                  <div key={q.id} className="flex items-baseline gap-2 text-xs">
-                    <span className="text-text-tertiary font-mono shrink-0">Q{qi + 1}</span>
-                    <span className="text-text-secondary truncate" title={q.title}>
-                      {q.title}
-                    </span>
-                    <span className="text-emerald-400 font-semibold shrink-0 ml-auto text-right" title={q.correctAnswer}>
-                      {q.correctAnswer}
-                    </span>
+          <>
+            {/* Compact leaderboard — always visible */}
+            <div className="divide-y divide-border-strong">
+              {participants.map((p, i) => (
+                <div key={p.studentId} className="flex items-center gap-3 py-2.5">
+                  <span
+                    className={`w-8 h-8 rounded-full flex items-center justify-center font-mono text-sm shrink-0 ${
+                      i === 0
+                        ? "bg-amber-500/20 text-amber-400 border border-amber-500/40"
+                        : i === 1
+                          ? "bg-slate-400/20 text-slate-300 border border-slate-400/40"
+                          : i === 2
+                            ? "bg-orange-700/20 text-orange-400 border border-orange-700/40"
+                            : "bg-bg-surface-elevated text-text-tertiary border border-border-strong"
+                    }`}
+                  >
+                    {i + 1}
+                  </span>
+                  <div className="flex-grow min-w-0">
+                    <p className="text-white text-sm">{p.fullName}</p>
+                    <p className="text-text-tertiary text-xs font-mono">{p.username}</p>
                   </div>
-                ))}
-              </div>
+                  {session.mode === "STUDENT" && (
+                    <span
+                      className={`px-2 py-0.5 rounded-full border text-[11px] font-mono whitespace-nowrap shrink-0 ${
+                        p.finished
+                          ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                          : "bg-bg-surface-elevated text-text-secondary border-border-strong"
+                      }`}
+                    >
+                      {p.finished
+                        ? "Finished"
+                        : `Q ${Math.min(p.progress + 1, session.totalQuestions)}/${session.totalQuestions}`}
+                    </span>
+                  )}
+                  <span className="text-text-secondary font-mono text-xs shrink-0">{formatTime(p.totalTimeMs)}</span>
+                  <span className="text-brand-400 font-mono font-bold shrink-0 w-14 text-right">{p.score}</span>
+                </div>
+              ))}
             </div>
-          </div>
+
+            {/* Detailed per-question breakdown — collapsible */}
+            {showDetails && (
+              <div className="mt-5 pt-4 border-t border-border-strong">
+                <div className="overflow-x-auto -mx-5 px-5">
+                  <table className="w-full border-collapse min-w-[600px]">
+                    <thead>
+                      <tr className="border-b border-border-strong">
+                        <th className="text-left text-text-secondary text-xs font-semibold py-2.5 pr-4 sticky left-0 bg-bg-surface z-10">
+                          Student
+                        </th>
+                        {questions.map((q, qi) => (
+                          <th
+                            key={q.id}
+                            title={`${q.title}${q.type === "QUIZ" ? ` — answer: ${q.correctAnswer}` : ""}`}
+                            className="text-center text-text-tertiary text-xs font-mono font-semibold py-2.5 px-1.5"
+                          >
+                            Q{qi + 1}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border-strong">
+                      {participants.map((p) => (
+                        <tr key={p.studentId}>
+                          <td className="py-2.5 pr-4 sticky left-0 bg-bg-surface z-10">
+                            <p className="text-white text-sm whitespace-nowrap">{p.fullName}</p>
+                          </td>
+                          {questions.map((q, qi) => {
+                            const a = answersByStudent.get(p.studentId)?.get(q.id);
+                            return (
+                              <td key={q.id} className="text-center py-2.5 px-1.5">
+                                {a ? (
+                                  q.type === "QUIZ" ? (
+                                    <span
+                                      title={`Q${qi + 1}: ${q.title}\nAnswered: ${a.answerText}\nCorrect answer: ${q.correctAnswer}\n${
+                                        a.isCorrect ? `Correct, +${a.points}` : "Wrong"
+                                      }\nTime: ${formatTime(a.timeTakenMs)}`}
+                                      className={`inline-flex max-w-[7rem] h-7 rounded-md items-center justify-center gap-1 px-2 text-[11px] font-mono border ${
+                                        a.isCorrect
+                                          ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/40"
+                                          : "bg-rose-500/15 text-rose-400 border-rose-500/40"
+                                      }`}
+                                    >
+                                      <span className="shrink-0">{a.isCorrect ? "✓" : "✗"}</span>
+                                      <span className="truncate">{a.answerText}</span>
+                                    </span>
+                                  ) : (
+                                    <span
+                                      title={`Q${qi + 1}: ${q.title}\nAnswer: ${a.answerText}\nTime: ${formatTime(a.timeTakenMs)}`}
+                                      className="inline-flex max-w-[7rem] h-7 rounded-md items-center justify-center gap-1 px-2 text-[11px] font-mono border bg-violet-500/15 text-violet-400 border-violet-500/40"
+                                    >
+                                      <span className="shrink-0">✎</span>
+                                      <span className="truncate">{a.answerText}</span>
+                                    </span>
+                                  )
+                                ) : (
+                                  <span className="text-text-tertiary text-xs">·</span>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Answer key */}
+                <div className="mt-4 pt-3 border-t border-border-strong">
+                  <p className="text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">
+                    Answer Key
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1.5">
+                    {questions.map((q, qi) => (
+                      <div key={q.id} className="flex items-baseline gap-2 text-xs">
+                        <span className="text-text-tertiary font-mono shrink-0">Q{qi + 1}</span>
+                        {q.type !== "QUIZ" && (
+                          <span className="px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-400 text-[9px] font-semibold uppercase shrink-0">
+                            {q.type === "TEXT" ? "Open" : q.type}
+                          </span>
+                        )}
+                        <span className="text-text-secondary truncate" title={q.title}>
+                          {q.title}
+                        </span>
+                        <span className={`font-semibold shrink-0 ml-auto text-right ${q.type === "QUIZ" ? "text-emerald-400" : "text-violet-400"}`} title={q.correctAnswer}>
+                          {q.correctAnswer}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

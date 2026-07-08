@@ -71,6 +71,8 @@ export async function GET(
         sourceCode: submissionDetails.sourceCode,
         selectedOptions: submissionDetails.selectedOptions,
         studentXpath: submissionDetails.studentXpath,
+        textAnswer: submissionDetails.textAnswer,
+        gradedAt: submissionDetails.gradedAt,
       })
       .from(submissionDetails)
       .innerJoin(questions, eq(submissionDetails.questionId, questions.id))
@@ -131,8 +133,15 @@ export async function GET(
         })();
 
         return { ...d, score: computedScore, selectedTexts, correctTexts, result };
+      } else if (d.questionType === "TEXT") {
+        const result = d.gradedAt ? "GRADED" : "PENDING_REVIEW";
+        return {
+          ...d,
+          selectedTexts: [],
+          correctTexts: [],
+          result,
+        };
       } else {
-        // CODE or XPATH — always show student's own submitted code/xpath
         const result = d.status === null ? "NOT COMPLETED" : d.status === "AC" ? "PASS" : "FAIL";
         return {
           ...d,

@@ -91,6 +91,8 @@ async function buildSnapshot(examId: string, scopedStudentIds: string[] | null) 
       sourceCode: submissionDetails.sourceCode,
       selectedOptions: submissionDetails.selectedOptions,
       studentXpath: submissionDetails.studentXpath,
+      textAnswer: submissionDetails.textAnswer,
+      gradedAt: submissionDetails.gradedAt,
     })
     .from(submissionDetails)
     .innerJoin(questions, eq(submissionDetails.questionId, questions.id))
@@ -172,6 +174,9 @@ async function buildSnapshot(examId: string, scopedStudentIds: string[] | null) 
         correctTexts,
         result: isCorrect ? "PASS" : "FAIL",
       };
+    } else if (d.questionType === "TEXT") {
+      const result = d.gradedAt ? "GRADED" : "PENDING_REVIEW";
+      return { ...d, selectedTexts: [], correctTexts: [], result };
     } else {
       // CODE / XPATH question result
       const result =

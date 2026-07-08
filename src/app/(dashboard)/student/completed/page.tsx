@@ -31,12 +31,14 @@ interface ExamSubmission {
   quizScore: string; quizTotal: string;
   codeScore: string; codeTotal: string;
   xpathScore: string; xpathTotal: string;
+  textScore: string; textTotal: string;
+  hasUngradedText: boolean;
 }
 
 interface SubmissionDetail {
   questionId: string;
   questionTitle: string;
-  questionType: "QUIZ" | "CODE" | "XPATH";
+  questionType: "QUIZ" | "CODE" | "XPATH" | "TEXT";
   questionPoints: string;
   questionContent: string;
   score: string;
@@ -47,7 +49,9 @@ interface SubmissionDetail {
   selectedOptions: string[] | null;
   selectedTexts: string[];
   correctTexts: string[];
-  result: "PASS" | "FAIL" | "NOT COMPLETED";
+  textAnswer: string | null;
+  gradedAt: string | null;
+  result: "PASS" | "FAIL" | "NOT COMPLETED" | "PENDING_REVIEW" | "GRADED";
 }
 
 interface DetailData {
@@ -122,8 +126,9 @@ function ScoreBadge({ score, total }: { score: string | null; total: string }) {
 }
 
 function ResultBadge({ result }: { result: string }) {
-  if (result === "PASS") return <span className="text-xs font-bold px-2 py-0.5 rounded-md border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">✓ PASS</span>;
+  if (result === "PASS" || result === "GRADED") return <span className="text-xs font-bold px-2 py-0.5 rounded-md border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">✓ {result === "GRADED" ? "GRADED" : "PASS"}</span>;
   if (result === "FAIL") return <span className="text-xs font-bold px-2 py-0.5 rounded-md border bg-rose-500/10 text-rose-400 border-rose-500/20">✕ FAIL</span>;
+  if (result === "PENDING_REVIEW") return <span className="text-xs font-bold px-2 py-0.5 rounded-md border bg-violet-500/10 text-violet-400 border-violet-500/20">⏳ Pending</span>;
   return <span className="text-xs font-bold px-2 py-0.5 rounded-md border bg-zinc-500/10 text-zinc-400 border-zinc-500/20">— N/A</span>;
 }
 
@@ -527,6 +532,8 @@ export default function CompletedExamsPage() {
                                   <TypeChip label="Quiz" score={s.quizScore} total={s.quizTotal} color="bg-brand-500/10 border-brand-500/20 text-brand-400" />
                                   <TypeChip label="Code" score={s.codeScore} total={s.codeTotal} color="bg-amber-500/10 border-amber-500/20 text-amber-400" />
                                   <TypeChip label="XPath" score={s.xpathScore} total={s.xpathTotal} color="bg-emerald-500/10 border-emerald-500/20 text-emerald-400" />
+                                  {Number(s.textTotal) > 0 && <TypeChip label="Open-ended" score={s.textScore} total={s.textTotal} color="bg-violet-500/10 border-violet-500/20 text-violet-400" />}
+                                  {s.hasUngradedText && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border bg-violet-500/10 text-violet-400 border-violet-500/20">⏳ Pending review</span>}
                                 </div>
                               ) : (
                                 <span className="text-xs text-text-tertiary italic">Not submitted</span>
@@ -653,23 +660,40 @@ export default function CompletedExamsPage() {
                           <div className="flex items-center gap-2 mb-1 flex-wrap">
                             <span className="text-xs font-bold text-text-tertiary">#{i + 1}</span>
                             <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
-                              d.questionType === "CODE" ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                              d.questionType === "TEXT" ? "bg-violet-500/10 text-violet-400 border-violet-500/20"
+                              : d.questionType === "CODE" ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
                               : d.questionType === "XPATH" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                               : "bg-brand-500/10 text-brand-400 border-brand-500/20"
-                            }`}>{d.questionType}</span>
+                            }`}>{d.questionType === "TEXT" ? "OPEN-ENDED" : d.questionType}</span>
                             {d.language && <span className="text-[10px] font-mono text-text-tertiary bg-bg-base border border-border-strong px-1.5 py-0.5 rounded">{d.language}</span>}
                           </div>
                           <div className="text-sm font-semibold text-white">{d.questionTitle}</div>
                         </div>
                         <div className="flex flex-col items-end gap-1.5 shrink-0">
                           <ResultBadge result={d.result} />
-                          <div className={`inline-flex items-center gap-1 border rounded-lg px-2.5 py-1 font-mono text-xs font-bold ${scoreBg(qp)}`}>
-                            {s.toFixed(1)}<span className="opacity-40">/</span>{q.toFixed(1)}
-                          </div>
+                          {d.result === "PENDING_REVIEW" ? (
+                            <div className="inline-flex items-center gap-1 border rounded-lg px-2.5 py-1 text-xs font-bold bg-violet-500/10 border-violet-500/20 text-violet-400">
+                              ?<span className="opacity-40">/</span>{q.toFixed(1)}
+                            </div>
+                          ) : (
+                            <div className={`inline-flex items-center gap-1 border rounded-lg px-2.5 py-1 font-mono text-xs font-bold ${scoreBg(qp)}`}>
+                              {s.toFixed(1)}<span className="opacity-40">/</span>{q.toFixed(1)}
+                            </div>
+                          )}
                         </div>
                       </div>
                       <div className="bg-bg-base px-4 py-3 space-y-3">
-                        {d.questionType === "XPATH" ? (
+                        {d.questionType === "TEXT" ? (
+                          <div className="space-y-2">
+                            <div className="text-xs font-semibold text-text-tertiary uppercase tracking-wider">Your Answer</div>
+                            {d.textAnswer
+                              ? <div className="text-sm text-white bg-bg-surface border border-violet-500/20 rounded-lg p-3 whitespace-pre-wrap">{d.textAnswer}</div>
+                              : <div className="text-xs text-text-tertiary italic px-3 py-2 bg-bg-surface border border-border-strong rounded-lg">No answer provided</div>}
+                            {d.result === "PENDING_REVIEW" && (
+                              <div className="text-xs text-violet-400 italic">Score pending teacher review</div>
+                            )}
+                          </div>
+                        ) : d.questionType === "XPATH" ? (
                           d.studentXpath
                             ? <pre className="font-mono text-xs text-emerald-300 bg-bg-base border border-emerald-500/20 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap break-all">{d.studentXpath}</pre>
                             : <div className="text-xs text-text-tertiary italic px-3 py-2 bg-bg-surface border border-border-strong rounded-lg">No answer submitted</div>

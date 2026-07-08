@@ -46,6 +46,17 @@ export async function GET(request: NextRequest) {
       option_d: "",
       correct_identifier: "A",
     },
+    {
+      type: "TEXT",
+      title: "Open-ended sample",
+      question_text: "Explain the water cycle in your own words.",
+      points: 5,
+      option_a: "",
+      option_b: "",
+      option_c: "",
+      option_d: "",
+      correct_identifier: "",
+    },
   ];
 
   const worksheet = xlsx.utils.json_to_sheet(sampleRows, {
@@ -123,9 +134,9 @@ export async function POST(request: NextRequest) {
 
     const parsed = rows.map((row, index) => {
       const type = row.type?.toString().toUpperCase() || "QUIZ";
-      if (type !== "QUIZ") {
+      if (type !== "QUIZ" && type !== "TEXT") {
         throw new Error(
-          `Validation Error: Row ${index + 2} has type '${type}' — only QUIZ questions can be hosted live`
+          `Validation Error: Row ${index + 2} has type '${type}' — only QUIZ and TEXT questions are supported`
         );
       }
       const content = row.question_text;
@@ -133,6 +144,17 @@ export async function POST(request: NextRequest) {
         throw new Error(`Validation Error: Missing question_text in row ${index + 2}`);
       }
       const pointsNum = parseFloat(row.points);
+
+      if (type === "TEXT") {
+        return {
+          type: "TEXT" as const,
+          title: String(row.title || `Question ${index + 1}`).substring(0, 150),
+          content: String(content),
+          points: isNaN(pointsNum) ? "1.00" : pointsNum.toFixed(2),
+          options: [],
+        };
+      }
+
       const correctKey = String(row.correct_identifier || "").toUpperCase();
       if (!correctKey) {
         throw new Error(`Validation Error: Missing correct_identifier in row ${index + 2}`);
@@ -152,6 +174,7 @@ export async function POST(request: NextRequest) {
         );
       }
       return {
+        type: "QUIZ" as const,
         title: String(row.title || `Question ${index + 1}`).substring(0, 150),
         content: String(content),
         points: isNaN(pointsNum) ? "1.00" : pointsNum.toFixed(2),
@@ -185,16 +208,18 @@ export async function POST(request: NextRequest) {
           .insert(questions)
           .values({
             examId: exam.id,
-            type: "QUIZ",
+            type: q.type,
             title: q.title,
             content: q.content,
             points: q.points,
             sortOrder,
           })
           .returning();
-        await tx.insert(quizOptions).values(
-          q.options.map((opt) => ({ questionId: newQuestion.id, ...opt }))
-        );
+        if (q.options.length > 0) {
+          await tx.insert(quizOptions).values(
+            q.options.map((opt) => ({ questionId: newQuestion.id, ...opt }))
+          );
+        }
       }
       return exam;
     });

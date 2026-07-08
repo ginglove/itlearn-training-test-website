@@ -8,6 +8,7 @@ interface ExamOption {
   title: string;
   description: string | null;
   quizQuestionCount: number;
+  totalQuestionCount: number;
 }
 
 interface SessionRow {
@@ -35,7 +36,7 @@ export default function LiveLaunchPage() {
   const [selectedExamId, setSelectedExamId] = useState<string | null>(null);
   const [questionSeconds, setQuestionSeconds] = useState(30);
   const [mode, setMode] = useState<"TEACHER" | "STUDENT">("TEACHER");
-  const [showCorrectAnswer, setShowCorrectAnswer] = useState(true);
+  const [showCorrectAnswer, setShowCorrectAnswer] = useState(false);
   const [shuffleQuestions, setShuffleQuestions] = useState(false);
   const [shuffleOptions, setShuffleOptions] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -177,8 +178,8 @@ export default function LiveLaunchPage() {
         </span>
       </div>
       <p className="text-text-secondary text-sm mb-6">
-        Pick an exam with quiz questions. Students join with a code and answer together in real
-        time, racing for the leaderboard.
+        Pick an exam to host live. Students join with a code and answer together in real
+        time. Supports multiple choice, open-ended, and more.
       </p>
 
       <div className="flex flex-wrap items-center gap-3 mb-6">
@@ -212,7 +213,7 @@ export default function LiveLaunchPage() {
           Download Template
         </button>
         <span className="text-text-tertiary text-xs">
-          Columns: type, title, question_text, points, option_a–d, correct_identifier
+          Columns: type (QUIZ or TEXT), title, question_text, points, option_a–d, correct_identifier
         </span>
       </div>
       {importNotice && <p className="text-emerald-400 text-sm mb-4">{importNotice}</p>}
@@ -222,8 +223,8 @@ export default function LiveLaunchPage() {
       ) : exams.length === 0 ? (
         <div className="bg-bg-surface border border-border-strong rounded-2xl p-8 text-center">
           <p className="text-text-secondary text-sm">
-            No hostable quizzes yet. Import questions above, or create an exam with quiz
-            questions first.
+            No hostable exams yet. Import questions above, or create an exam with questions
+            first.
           </p>
           <button
             onClick={() => router.push("/teacher")}
@@ -249,7 +250,7 @@ export default function LiveLaunchPage() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="text-white text-sm font-semibold">{exam.title}</p>
                     <span className="px-2 py-0.5 rounded-full bg-brand-500/10 border border-brand-500/30 text-brand-400 text-[11px] font-mono">
-                      {exam.quizQuestionCount} questions
+                      {exam.totalQuestionCount} questions
                     </span>
                   </div>
                   {exam.description && (

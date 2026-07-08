@@ -131,7 +131,10 @@ CREATE TABLE "submission_details" (
 	"language" varchar(30),
 	"status" "execution_status",
 	"student_xpath" text,
-	"score" numeric(5, 2) DEFAULT '0.00' NOT NULL
+	"text_answer" text,
+	"score" numeric(5, 2) DEFAULT '0.00' NOT NULL,
+	"graded_by" uuid,
+	"graded_at" timestamp with time zone
 );
 
 CREATE TABLE "xpath_configs" (
@@ -351,6 +354,7 @@ CREATE TABLE "live_answers" (
 	"question_id" uuid NOT NULL,
 	"student_id" uuid NOT NULL,
 	"selected_options" text[] DEFAULT '{}',
+	"text_answer" text,
 	"is_correct" boolean DEFAULT false NOT NULL,
 	"points" integer DEFAULT 0 NOT NULL,
 	"time_taken_ms" integer DEFAULT 0 NOT NULL,

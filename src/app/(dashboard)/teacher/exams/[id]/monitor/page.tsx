@@ -435,19 +435,29 @@ export default function CodingMonitorPage({ params }: { params: Promise<{ id: st
                                         <td className="px-4 py-3 max-w-[200px]">
                                           <div className="font-medium text-white text-sm leading-snug">{d.questionTitle}</div>
                                           <span className={`mt-1 inline-block text-[10px] font-bold px-1.5 py-0.5 rounded border ${
-                                            d.questionType === "CODE"
+                                            d.questionType === "TEXT"
+                                              ? "bg-violet-500/10 text-violet-400 border-violet-500/20"
+                                              : d.questionType === "CODE"
                                               ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
                                               : d.questionType === "XPATH"
                                               ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                                               : "bg-brand-500/10 text-brand-400 border-brand-500/20"
                                           }`}>
-                                            {d.questionType}
+                                            {d.questionType === "TEXT" ? "OPEN-ENDED" : d.questionType}
                                           </span>
                                         </td>
 
                                         {/* Student's answer */}
                                         <td className="px-4 py-3 max-w-[240px]">
-                                          {d.questionType === "CODE" ? (
+                                          {d.questionType === "TEXT" ? (
+                                            d.textAnswer ? (
+                                              <div className="text-xs text-white bg-violet-500/5 border border-violet-500/10 rounded-lg px-2 py-1 max-h-20 overflow-y-auto whitespace-pre-wrap">
+                                                {d.textAnswer}
+                                              </div>
+                                            ) : (
+                                              <span className="text-xs text-text-tertiary italic">No answer provided</span>
+                                            )
+                                          ) : d.questionType === "CODE" ? (
                                             d.sourceCode ? (
                                               <CodeExpandRow code={d.sourceCode} language={d.language} />
                                             ) : (
@@ -479,7 +489,11 @@ export default function CodingMonitorPage({ params }: { params: Promise<{ id: st
 
                                         {/* Correct answer */}
                                         <td className="px-4 py-3 max-w-[240px]">
-                                          {d.questionType === "CODE" || d.questionType === "XPATH" ? (
+                                          {d.questionType === "TEXT" ? (
+                                            <span className={`text-xs font-bold ${d.gradedAt ? "text-emerald-400" : "text-violet-400"}`}>
+                                              {d.gradedAt ? "✓ Graded" : "⏳ Pending review"}
+                                            </span>
+                                          ) : d.questionType === "CODE" || d.questionType === "XPATH" ? (
                                             <span className="text-xs text-text-tertiary italic">Graded by {d.questionType === "XPATH" ? "DOM match" : "output"}</span>
                                           ) : (
                                             <div className="space-y-1">

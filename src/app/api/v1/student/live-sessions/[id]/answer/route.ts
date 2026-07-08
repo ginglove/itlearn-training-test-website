@@ -5,8 +5,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { getUserId } from "@/lib/get-user-id";
 import { orderByQuestionOrder } from "@/lib/live-quiz";
 
-// POST — answer the current question. Score = 500 base + up to 500 speed bonus
-// for a fully correct answer; one answer per question, locked once given.
+// POST — answer the current question. QUIZ: speed-scored. TEXT/CODE/XPATH: recorded, scored 0.
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -42,7 +41,6 @@ export async function POST(
       );
     }
 
-    // The countdown only applies in teacher-paced mode
     const elapsedMs = Date.now() - new Date(session.questionStartedAt).getTime();
     const totalMs = session.questionSeconds * 1000;
     if (session.mode === "TEACHER" && elapsedMs > totalMs + 1500) {
@@ -54,23 +52,18 @@ export async function POST(
 
     const body = await request.json();
     const { questionId } = body;
-    const selectedOptions: string[] = Array.isArray(body.selectedOptions)
-      ? body.selectedOptions.map(String)
-      : [];
-    if (!questionId || selectedOptions.length === 0) {
+    if (!questionId) {
       return NextResponse.json(
-        { error: "VALIDATION_ERROR", message: "questionId and selectedOptions are required" },
+        { error: "VALIDATION_ERROR", message: "questionId is required" },
         { status: 400 }
       );
     }
 
-    // The answered question must be the one open for this student: the shared
-    // question in teacher-paced mode, or their own position in student-paced mode
     const sessionQuestions = orderByQuestionOrder(
       await db
-        .select({ id: questions.id })
+        .select({ id: questions.id, type: questions.type })
         .from(questions)
-        .where(and(eq(questions.examId, session.examId), eq(questions.type, "QUIZ")))
+        .where(eq(questions.examId, session.examId))
         .orderBy(questions.sortOrder, questions.id),
       session.questionOrder
     );
@@ -84,33 +77,62 @@ export async function POST(
       );
     }
 
-    const options = await db
-      .select({ id: quizOptions.id, isCorrect: quizOptions.isCorrect })
-      .from(quizOptions)
-      .where(eq(quizOptions.questionId, questionId));
-    const validIds = new Set(options.map((o) => o.id));
-    if (selectedOptions.some((optId) => !validIds.has(optId))) {
-      return NextResponse.json(
-        { error: "VALIDATION_ERROR", message: "Invalid option selected" },
-        { status: 400 }
-      );
-    }
-
-    const correctIds = new Set(options.filter((o) => o.isCorrect).map((o) => o.id));
-    const selectedSet = new Set(selectedOptions);
-    const isCorrect =
-      correctIds.size === selectedSet.size && [...correctIds].every((c) => selectedSet.has(c));
-
     const timeTakenMs = Math.max(0, Math.round(elapsedMs));
+    let isCorrect = false;
+    let points = 0;
+    let selectedOptions: string[] = [];
+    let textAnswer: string | null = null;
 
-    // Teacher-paced: speed-based scoring, full marks near-instant and halving
-    // toward the deadline. Student-paced has no timer, so a flat reward.
-    const remainingRatio = Math.max(0, Math.min(1, 1 - elapsedMs / totalMs));
-    const points = !isCorrect
-      ? 0
-      : session.mode === "STUDENT"
-        ? 1000
-        : Math.round(500 + 500 * remainingRatio);
+    if (current.type === "QUIZ") {
+      selectedOptions = Array.isArray(body.selectedOptions)
+        ? body.selectedOptions.map(String)
+        : [];
+      if (selectedOptions.length === 0) {
+        return NextResponse.json(
+          { error: "VALIDATION_ERROR", message: "selectedOptions are required for QUIZ" },
+          { status: 400 }
+        );
+      }
+
+      const options = await db
+        .select({ id: quizOptions.id, isCorrect: quizOptions.isCorrect })
+        .from(quizOptions)
+        .where(eq(quizOptions.questionId, questionId));
+      const validIds = new Set(options.map((o) => o.id));
+      if (selectedOptions.some((optId) => !validIds.has(optId))) {
+        return NextResponse.json(
+          { error: "VALIDATION_ERROR", message: "Invalid option selected" },
+          { status: 400 }
+        );
+      }
+
+      const correctIds = new Set(options.filter((o) => o.isCorrect).map((o) => o.id));
+      const selectedSet = new Set(selectedOptions);
+      isCorrect =
+        correctIds.size === selectedSet.size && [...correctIds].every((c) => selectedSet.has(c));
+
+      const remainingRatio = Math.max(0, Math.min(1, 1 - elapsedMs / totalMs));
+      points = !isCorrect
+        ? 0
+        : session.mode === "STUDENT"
+          ? 1000
+          : Math.round(500 + 500 * remainingRatio);
+    } else if (current.type === "TEXT") {
+      textAnswer = typeof body.textAnswer === "string" ? body.textAnswer : "";
+      if (!textAnswer.trim()) {
+        return NextResponse.json(
+          { error: "VALIDATION_ERROR", message: "textAnswer is required for TEXT questions" },
+          { status: 400 }
+        );
+      }
+      isCorrect = false;
+      points = 0;
+    } else {
+      // CODE / XPATH — just mark as answered in live quiz (no auto-grading in live context)
+      textAnswer = typeof body.textAnswer === "string" ? body.textAnswer : "";
+      isCorrect = false;
+      points = 0;
+    }
 
     try {
       await db.insert(liveAnswers).values({
@@ -118,12 +140,12 @@ export async function POST(
         questionId,
         studentId,
         selectedOptions,
+        textAnswer,
         isCorrect,
         points,
         timeTakenMs,
       });
     } catch {
-      // Unique constraint: already answered this question
       return NextResponse.json(
         { error: "VALIDATION_ERROR", message: "You already answered this question" },
         { status: 409 }
@@ -138,7 +160,6 @@ export async function POST(
       })
       .where(and(eq(liveParticipants.sessionId, id), eq(liveParticipants.studentId, studentId)));
 
-    // Only reveal correctness when the session allows it
     return NextResponse.json(
       session.showCorrectAnswer
         ? { status: "SUCCESS", isCorrect, points }

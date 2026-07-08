@@ -64,6 +64,7 @@ export async function POST(
               sourceCode: payload.source_code ?? existingDetail.sourceCode,
               language: payload.language ?? existingDetail.language,
               studentXpath: payload.student_xpath ?? existingDetail.studentXpath,
+              textAnswer: payload.text_answer ?? existingDetail.textAnswer,
             })
             .where(eq(submissionDetails.id, existingDetail.id));
         } else {
@@ -74,6 +75,7 @@ export async function POST(
             sourceCode: payload.source_code ?? "",
             language: payload.language ?? "python",
             studentXpath: payload.student_xpath ?? null,
+            textAnswer: payload.text_answer ?? null,
           });
         }
       }

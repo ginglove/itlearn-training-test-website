@@ -40,6 +40,7 @@ export async function GET(
         sourceCode: submissionDetails.sourceCode,
         language: submissionDetails.language,
         studentXpath: submissionDetails.studentXpath,
+        textAnswer: submissionDetails.textAnswer,
       })
       .from(submissionDetails)
       .where(eq(submissionDetails.submissionId, submission.id));

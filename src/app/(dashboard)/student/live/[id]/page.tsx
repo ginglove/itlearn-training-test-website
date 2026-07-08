@@ -23,6 +23,7 @@ interface PlayState {
   };
   currentQuestion: {
     id: string;
+    type: string;
     title: string;
     content: string;
     options: { id: string; text: string }[];
@@ -31,7 +32,7 @@ interface PlayState {
   finished: boolean;
   correctOptionIds: string[] | null;
   myBreakdown:
-    | { title: string; answered: boolean; isCorrect: boolean; points: number }[]
+    | { title: string; type: string; answered: boolean; isCorrect: boolean; points: number }[]
     | null;
   myScore: number;
   myTotalTimeMs: number;
@@ -64,6 +65,8 @@ export default function LivePlayPage({ params }: { params: Promise<{ id: string 
   const [state, setState] = useState<PlayState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
+  const [textAnswer, setTextAnswer] = useState("");
+  const [isSubmittingText, setIsSubmittingText] = useState(false);
   const [feedback, setFeedback] = useState<AnswerResult | null>(null);
   const [isAdvancing, setIsAdvancing] = useState(false);
   const lastQuestionId = useRef<string | null>(null);
@@ -76,6 +79,7 @@ export default function LivePlayPage({ params }: { params: Promise<{ id: string 
       if (data.currentQuestion && data.currentQuestion.id !== lastQuestionId.current) {
         lastQuestionId.current = data.currentQuestion.id;
         setSelected([]);
+        setTextAnswer("");
         setFeedback(null);
       }
       setState(data);
@@ -103,6 +107,25 @@ export default function LivePlayPage({ params }: { params: Promise<{ id: string 
     if (res.ok) {
       setFeedback({ isCorrect: data.isCorrect ?? null, points: data.points ?? null });
       fetchState();
+    }
+  };
+
+  const submitText = async () => {
+    if (!state?.currentQuestion || !textAnswer.trim()) return;
+    setIsSubmittingText(true);
+    try {
+      const res = await fetch(`/api/v1/student/live-sessions/${id}/answer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ questionId: state.currentQuestion.id, textAnswer }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setFeedback({ isCorrect: data.isCorrect ?? null, points: data.points ?? null });
+        fetchState();
+      }
+    } finally {
+      setIsSubmittingText(false);
     }
   };
 
@@ -174,30 +197,47 @@ export default function LivePlayPage({ params }: { params: Promise<{ id: string 
 
       {session.status === "QUESTION" && !finished && currentQuestion && (
         <div className="bg-bg-surface border border-border-strong rounded-2xl p-6">
-          <div className="flex items-center justify-between mb-4">
-            <span className="text-text-tertiary text-xs font-mono">
-              Question {session.currentQuestionIndex + 1} / {session.totalQuestions}
-            </span>
-            {!selfPaced && (
-              <span
-                className={`text-2xl font-black font-mono ${
-                  session.remainingSeconds <= 5 ? "text-rose-400 animate-pulse" : "text-white"
-                }`}
-              >
-                {session.remainingSeconds}s
-              </span>
-            )}
-          </div>
+          {/* Countdown timer */}
           {!selfPaced && (
-            <div className="w-full h-1.5 bg-bg-surface-elevated rounded-full overflow-hidden mb-5">
-              <div
-                className="h-full bg-brand-500 rounded-full transition-all duration-1000"
-                style={{ width: `${(session.remainingSeconds / session.questionSeconds) * 100}%` }}
-              />
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-text-tertiary text-xs font-mono">
+                  Question {session.currentQuestionIndex + 1} / {session.totalQuestions}
+                </span>
+                <span
+                  className={`text-4xl font-black font-mono tabular-nums ${
+                    session.remainingSeconds <= 5 ? "text-rose-400 animate-pulse" : "text-white"
+                  }`}
+                >
+                  {session.remainingSeconds}s
+                </span>
+              </div>
+              <div className="w-full h-2 bg-bg-surface-elevated rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-1000 ${
+                    session.remainingSeconds <= 5 ? "bg-rose-500" : "bg-brand-500"
+                  }`}
+                  style={{ width: `${(session.remainingSeconds / session.questionSeconds) * 100}%` }}
+                />
+              </div>
+            </div>
+          )}
+          {selfPaced && (
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-text-tertiary text-xs font-mono">
+                Question {session.currentQuestionIndex + 1} / {session.totalQuestions}
+              </span>
             </div>
           )}
 
-          <h2 className="text-lg font-bold text-white mb-1">{currentQuestion.title}</h2>
+          <div className="flex items-center gap-2 mb-1">
+            <h2 className="text-lg font-bold text-white">{currentQuestion.title}</h2>
+            {currentQuestion.type !== "QUIZ" && (
+              <span className="px-2 py-0.5 rounded-full bg-violet-500/15 border border-violet-500/30 text-violet-400 text-[10px] font-semibold uppercase">
+                {currentQuestion.type === "TEXT" ? "Open-ended" : currentQuestion.type}
+              </span>
+            )}
+          </div>
           <p className="text-text-secondary text-sm mb-6 whitespace-pre-wrap">{currentQuestion.content}</p>
 
           {answered ? (
@@ -241,6 +281,29 @@ export default function LivePlayPage({ params }: { params: Promise<{ id: string 
             <div className="rounded-2xl p-8 text-center border border-border-strong">
               <p className="text-text-secondary">⏰ Time&apos;s up! Waiting for the next question…</p>
             </div>
+          ) : currentQuestion.type === "TEXT" ? (
+            <div className="space-y-3">
+              <textarea
+                value={textAnswer}
+                onChange={(e) => setTextAnswer(e.target.value)}
+                placeholder="Type your answer here…"
+                rows={5}
+                className="w-full bg-bg-surface-elevated border border-border-strong rounded-xl p-4 text-white text-sm placeholder:text-text-tertiary focus:border-brand-500 focus:outline-none resize-y"
+              />
+              <button
+                onClick={submitText}
+                disabled={isSubmittingText || !textAnswer.trim()}
+                className="w-full py-3 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white rounded-xl font-bold text-sm transition-all"
+              >
+                {isSubmittingText ? "Submitting…" : "Submit Answer"}
+              </button>
+            </div>
+          ) : currentQuestion.type !== "QUIZ" ? (
+            <div className="rounded-2xl p-8 text-center border border-border-strong">
+              <p className="text-text-secondary text-sm">
+                This question type ({currentQuestion.type}) is not supported in live quiz yet.
+              </p>
+            </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {currentQuestion.options.map((o, i) => {
@@ -249,14 +312,11 @@ export default function LivePlayPage({ params }: { params: Promise<{ id: string 
                   <button
                     key={o.id}
                     onClick={() => {
-                      // Tap once = answer immediately; long-press style multi-select
-                      // via second tap on another option before confirming
                       if (isPicked) {
                         submit(selected);
                       } else {
                         const next = [...selected, o.id];
                         setSelected(next);
-                        // Single-choice fast path: if nothing else selected, submit at once
                         if (selected.length === 0) submit([o.id]);
                       }
                     }}
@@ -303,18 +363,25 @@ export default function LivePlayPage({ params }: { params: Promise<{ id: string 
                       className={`w-6 h-6 rounded flex items-center justify-center text-[11px] font-mono border shrink-0 ${
                         !q.answered
                           ? "border-border-strong text-text-tertiary"
-                          : q.isCorrect
-                            ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
-                            : "bg-rose-500/20 text-rose-400 border-rose-500/40"
+                          : q.type !== "QUIZ"
+                            ? "bg-violet-500/20 text-violet-400 border-violet-500/40"
+                            : q.isCorrect
+                              ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
+                              : "bg-rose-500/20 text-rose-400 border-rose-500/40"
                       }`}
                     >
-                      {!q.answered ? "–" : q.isCorrect ? "✓" : "✗"}
+                      {!q.answered ? "–" : q.type !== "QUIZ" ? "✎" : q.isCorrect ? "✓" : "✗"}
                     </span>
                     <span className="text-text-secondary text-sm flex-grow truncate">
                       {i + 1}. {q.title}
                     </span>
+                    {q.type !== "QUIZ" && q.answered && (
+                      <span className="text-violet-400 text-[10px] font-semibold shrink-0">
+                        Submitted
+                      </span>
+                    )}
                     <span className="text-brand-400 font-mono text-xs shrink-0">
-                      {q.answered ? `+${q.points}` : "no answer"}
+                      {q.answered ? (q.type === "QUIZ" ? `+${q.points}` : "pending") : "no answer"}
                     </span>
                   </div>
                 ))}

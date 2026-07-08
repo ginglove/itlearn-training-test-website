@@ -116,6 +116,8 @@ export async function POST(
 
         totalScore += questionScore || 0;
         detailInserts.push({ submissionId: subId, questionId: q.id, sourceCode: answer.source_code, language: answer.language, status: overallStatus, score: questionScore.toFixed(2) });
+      } else if (q.type === "TEXT") {
+        detailInserts.push({ submissionId: subId, questionId: q.id, textAnswer: answer.text_answer ?? "", score: "0.00" });
       } else if (q.type === "XPATH") {
         const xConfig = xpathConfigMap.get(q.id);
         const cases = xpathTCMap.get(q.id) ?? [];
