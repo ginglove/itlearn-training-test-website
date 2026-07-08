@@ -17,7 +17,7 @@ import {
 
 // ── Enums ──────────────────────────────────────────────────────────────────────
 export const userRoleEnum = pgEnum("user_role", ["ADMIN", "TEACHER", "STUDENT"]);
-export const questionTypeEnum = pgEnum("question_type", ["QUIZ", "CODE", "XPATH"]);
+export const questionTypeEnum = pgEnum("question_type", ["QUIZ", "CODE", "XPATH", "TEXT"]);
 export const workspaceStatusEnum = pgEnum("workspace_status", ["ACTIVE", "ARCHIVED"]);
 export const membershipStatusEnum = pgEnum("membership_status", ["ACTIVE", "REMOVED"]);
 export const attendanceStatusEnum = pgEnum("attendance_status", [

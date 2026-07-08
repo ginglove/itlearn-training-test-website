@@ -33,7 +33,7 @@ DROP TYPE IF EXISTS "public"."activity_type" CASCADE;
 
 -- Enums
 CREATE TYPE "public"."execution_status" AS ENUM('AC', 'WA', 'CE', 'RE', 'TLE', 'OFE');
-CREATE TYPE "public"."question_type" AS ENUM('QUIZ', 'CODE', 'XPATH');
+CREATE TYPE "public"."question_type" AS ENUM('QUIZ', 'CODE', 'XPATH', 'TEXT');
 CREATE TYPE "public"."user_role" AS ENUM('ADMIN', 'TEACHER', 'STUDENT');
 CREATE TYPE "public"."workspace_status" AS ENUM('ACTIVE', 'ARCHIVED');
 CREATE TYPE "public"."membership_status" AS ENUM('ACTIVE', 'REMOVED');

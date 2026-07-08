@@ -1,5 +1,8 @@
 -- Migration 0018: support open-ended (TEXT) questions with manual teacher grading
 
+-- Add TEXT to the question_type enum
+ALTER TYPE "question_type" ADD VALUE IF NOT EXISTS 'TEXT';
+
 -- Student's typed answer for TEXT questions
 ALTER TABLE "submission_details" ADD COLUMN IF NOT EXISTS "text_answer" text;
 
