@@ -118,17 +118,17 @@ export async function POST(
           ? 1000
           : Math.round(500 + 500 * remainingRatio);
     } else if (current.type === "TEXT") {
-      textAnswer = typeof body.textAnswer === "string" ? body.textAnswer : "";
-      if (!textAnswer.trim()) {
+      const text = typeof body.textAnswer === "string" ? body.textAnswer : "";
+      if (!text.trim()) {
         return NextResponse.json(
           { error: "VALIDATION_ERROR", message: "textAnswer is required for TEXT questions" },
           { status: 400 }
         );
       }
+      textAnswer = text;
       isCorrect = false;
       points = 0;
     } else {
-      // CODE / XPATH — just mark as answered in live quiz (no auto-grading in live context)
       textAnswer = typeof body.textAnswer === "string" ? body.textAnswer : "";
       isCorrect = false;
       points = 0;
