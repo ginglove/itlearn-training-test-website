@@ -19,6 +19,8 @@ export default function EditExamPage({ params }: { params: Promise<{ id: string 
     allowedAttempts: 1,
     accessType: "ALL",
     sessionType: "QUIZ",
+    focusLossPolicy: "LOG_ONLY",
+    focusLossThreshold: 3,
   });
 
   const [students, setStudents] = useState<any[]>([]);
@@ -66,6 +68,8 @@ export default function EditExamPage({ params }: { params: Promise<{ id: string 
         allowedAttempts: exam.allowedAttempts || 1,
         accessType: exam.accessType || "ALL",
         sessionType: exam.sessionType || "QUIZ",
+        focusLossPolicy: exam.focusLossPolicy || "LOG_ONLY",
+        focusLossThreshold: exam.focusLossThreshold ?? 3,
       });
 
       setAssignedStudents(exam.assignedStudents || []);
@@ -251,6 +255,35 @@ export default function EditExamPage({ params }: { params: Promise<{ id: string 
                 <span className="text-sm font-medium text-white">Shuffle Questions</span>
               </label>
             </div>
+
+            <div>
+              <label className="block text-sm font-medium text-text-secondary mb-1.5">Focus Loss Policy</label>
+              <select
+                value={formData.focusLossPolicy}
+                onChange={(e) => setFormData({ ...formData, focusLossPolicy: e.target.value })}
+                className="premium-input bg-bg-surface-elevated text-white w-full"
+              >
+                <option value="LOG_ONLY">Log Only &mdash; Track tab switches, no penalty</option>
+                <option value="WARN_AND_LOCK">Warn &amp; Lock &mdash; Warn then auto-submit after threshold</option>
+              </select>
+            </div>
+
+            {formData.focusLossPolicy === "WARN_AND_LOCK" && (
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-1.5">
+                  Tab Switch Threshold <span className="text-text-tertiary font-normal">(auto-submit after this many switches)</span>
+                </label>
+                <input
+                  type="number"
+                  min={2}
+                  max={10}
+                  value={formData.focusLossThreshold}
+                  onChange={(e) => setFormData({ ...formData, focusLossThreshold: Math.max(2, Math.min(10, parseInt(e.target.value) || 3)) })}
+                  className="premium-input bg-bg-surface-elevated text-white w-24"
+                />
+                <p className="text-xs text-text-tertiary mt-1">Students get {formData.focusLossThreshold - 1} warning{formData.focusLossThreshold - 1 !== 1 ? "s" : ""} before auto-submit on switch #{formData.focusLossThreshold}.</p>
+              </div>
+            )}
 
             {/* Access Control section */}
             <div className="pt-6 border-t border-border-strong">
