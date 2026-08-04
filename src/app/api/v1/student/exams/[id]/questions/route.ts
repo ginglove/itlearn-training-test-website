@@ -141,6 +141,7 @@ export async function GET(
       questions: enrichedQuestions,
       examTitle: exam.title,
       focusLossPolicy: exam.focusLossPolicy ?? "LOG_ONLY",
+      focusLossThreshold: exam.focusLossThreshold ?? 3,
       activeSeconds,
       // Server-synced counter so a page reload cannot reset the offense count
       focusLossCount: activeSubmission?.focusLossCount ?? 0,
