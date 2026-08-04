@@ -349,13 +349,13 @@ export default function ExamQuestionsPage({ params }: { params: Promise<{ id: st
             </button>
             <button
               onClick={() => router.push(`/teacher/exams/${examId}/coding`)}
-              className="premium-btn-secondary py-2 text-sm"
+              className="premium-btn-secondary py-2 text-sm whitespace-nowrap"
             >
               <span className="hidden sm:inline">Coding </span>Constraints
             </button>
             <button
               onClick={() => router.push(`/teacher/exams/${examId}/xpath`)}
-              className="premium-btn-secondary py-2 text-sm flex items-center gap-1.5"
+              className="premium-btn-secondary py-2 text-sm flex items-center gap-1.5 whitespace-nowrap"
             >
               <span className="w-2 h-2 rounded-full bg-emerald-500" />
               <span className="hidden sm:inline">XPath </span>Config
