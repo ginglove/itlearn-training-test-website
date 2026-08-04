@@ -561,14 +561,14 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
           <button
             onClick={handleSaveAndExit}
             disabled={isExiting || isSubmitting}
-            className="premium-btn-secondary py-1.5 px-2.5 sm:py-2 sm:px-4 text-xs sm:text-sm"
+            className="premium-btn-secondary py-1.5 px-2.5 sm:py-2 sm:px-4 text-xs sm:text-sm whitespace-nowrap"
           >
-            {isExiting ? "Saving…" : <><span className="hidden sm:inline">Save & </span>Exit</>}
+            {isExiting ? "Saving…" : <><span className="hidden sm:inline">Save &amp; </span>Exit</>}
           </button>
           <button
             onClick={handleSubmitClick}
             disabled={isSubmitting || isExiting}
-            className="premium-btn-primary py-1.5 px-3 sm:py-2 sm:px-6 text-xs sm:text-sm"
+            className="premium-btn-primary py-1.5 px-3 sm:py-2 sm:px-6 text-xs sm:text-sm whitespace-nowrap"
           >
             {isSubmitting ? "Submitting…" : <><span className="hidden sm:inline">Submit </span>Exam</>}
           </button>
