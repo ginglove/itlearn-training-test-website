@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { title, description, duration, startTime, endTime, isShuffled, allowedAttempts, accessType, sessionType, focusLossPolicy, assignedStudents } = body;
+    const { title, description, duration, startTime, endTime, isShuffled, allowedAttempts, accessType, sessionType, focusLossPolicy, focusLossThreshold, assignedStudents } = body;
 
     if (!title || !duration || !startTime || !endTime) {
       return NextResponse.json(
@@ -95,6 +95,7 @@ export async function POST(request: NextRequest) {
           accessType: accessType || "ALL",
           sessionType: sessionType || "QUIZ",
           focusLossPolicy: focusLossPolicy || "LOG_ONLY",
+          focusLossThreshold: focusLossThreshold ? Math.max(2, Math.min(10, parseInt(focusLossThreshold))) : 3,
           createdBy: teacherId,
         })
         .returning();

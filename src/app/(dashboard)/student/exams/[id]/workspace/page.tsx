@@ -17,6 +17,8 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
   const [isExiting, setIsExiting] = useState(false);
   const [focusLosses, setFocusLosses] = useState(0);
   const [focusLossPolicy, setFocusLossPolicy] = useState("LOG_ONLY");
+  const [focusLossThreshold, setFocusLossThreshold] = useState(3);
+  const focusLossThresholdRef = useRef(3);
   const [showFocusWarning, setShowFocusWarning] = useState(false);
   const [focusWarningOffense, setFocusWarningOffense] = useState(0);
   const focusLossPolicyRef = useRef("LOG_ONLY");
@@ -72,6 +74,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
           setQuestions(questionsData.questions);
           if (questionsData.examTitle) setExamTitle(questionsData.examTitle);
           if (questionsData.focusLossPolicy) { setFocusLossPolicy(questionsData.focusLossPolicy); focusLossPolicyRef.current = questionsData.focusLossPolicy; }
+          if (typeof questionsData.focusLossThreshold === "number") { setFocusLossThreshold(questionsData.focusLossThreshold); focusLossThresholdRef.current = questionsData.focusLossThreshold; }
           // Hydrate the server-synced counter — a page reload cannot reset offenses
           if (typeof questionsData.focusLossCount === "number") {
             setFocusLosses((prev) => Math.max(prev, questionsData.focusLossCount));
@@ -167,11 +170,11 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
       setFocusLosses(prev => {
         const next = prev + 1;
         if (focusLossPolicyRef.current === "WARN_AND_LOCK") {
-          if (next <= 2) {
+          if (next < focusLossThresholdRef.current) {
             setFocusWarningOffense(next);
             setShowFocusWarning(true);
           }
-          // 3rd offense handled by useEffect watching focusLosses
+          // Threshold offense handled by useEffect watching focusLosses
         }
         return next;
       });
@@ -227,7 +230,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
   // Fires when focusLosses changes AND when questions load (to handle the deferred case
   // where the 3rd blur arrived before the question list finished loading).
   useEffect(() => {
-    if (focusLosses < 3 || focusLossPolicy !== "WARN_AND_LOCK" || questions.length === 0) return;
+    if (focusLosses < focusLossThreshold || focusLossPolicy !== "WARN_AND_LOCK" || questions.length === 0) return;
     const payloads = getPreparedPayloads();
     fetch(`/api/v1/student/exams/${examId}/submit`, {
       method: "POST",
@@ -237,7 +240,7 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
       sessionStorage.removeItem(`exam_${examId}_submission_id`);
       router.push("/student/exams");
     });
-  }, [focusLosses, questions.length]);
+  }, [focusLosses, focusLossThreshold, questions.length]);
 
   // Auto-Save Drafts
   useEffect(() => {
@@ -1310,15 +1313,15 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
               </div>
               <div>
                 <h3 className="text-white font-semibold text-base">Tab Switch Detected</h3>
-                <p className="text-rose-400 text-sm mt-0.5">Warning {focusWarningOffense} of 2</p>
+                <p className="text-rose-400 text-sm mt-0.5">Warning {focusWarningOffense} of {focusLossThreshold - 1}</p>
               </div>
             </div>
             <p className="text-text-secondary text-sm mb-2">
               You left the exam window. This event has been logged and reported to your instructor.
             </p>
-            {focusWarningOffense >= 2 && (
+            {focusWarningOffense >= focusLossThreshold - 1 && (
               <p className="text-rose-400 text-sm font-semibold mb-2">
-                ⚠ This is your final warning. A third tab switch will automatically submit your exam.
+                ⚠ This is your final warning. One more tab switch will automatically submit your exam.
               </p>
             )}
             <button onClick={() => setShowFocusWarning(false)} className="w-full premium-btn-primary py-2.5 text-sm mt-2">

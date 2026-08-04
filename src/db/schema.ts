@@ -71,6 +71,7 @@ export const exams = pgTable(
     accessType: varchar("access_type", { length: 20 }).default("ALL").notNull(),
     sessionType: varchar("session_type", { length: 20 }).default("QUIZ").notNull(),
     focusLossPolicy: varchar("focus_loss_policy", { length: 20 }).notNull().default("LOG_ONLY"),
+    focusLossThreshold: integer("focus_loss_threshold").notNull().default(3),
     createdBy: uuid("created_by")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),

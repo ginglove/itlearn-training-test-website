@@ -15,6 +15,7 @@ export default function CreateExamPage() {
     isShuffled: false,
     sessionType: "QUIZ",
     focusLossPolicy: "LOG_ONLY",
+    focusLossThreshold: 3,
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
@@ -142,9 +143,26 @@ export default function CreateExamPage() {
                 className="premium-input bg-bg-surface-elevated text-white w-full"
               >
                 <option value="LOG_ONLY">Log Only &mdash; Track tab switches, no penalty</option>
-                <option value="WARN_AND_LOCK">Warn &amp; Lock &mdash; Warn twice, auto-submit on 3rd tab switch</option>
+                <option value="WARN_AND_LOCK">Warn &amp; Lock &mdash; Warn then auto-submit after threshold</option>
               </select>
             </div>
+
+            {formData.focusLossPolicy === "WARN_AND_LOCK" && (
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-1.5">
+                  Tab Switch Threshold <span className="text-text-tertiary font-normal">(auto-submit after this many switches)</span>
+                </label>
+                <input
+                  type="number"
+                  min={2}
+                  max={10}
+                  value={formData.focusLossThreshold}
+                  onChange={(e) => setFormData({ ...formData, focusLossThreshold: Math.max(2, Math.min(10, parseInt(e.target.value) || 3)) })}
+                  className="premium-input bg-bg-surface-elevated text-white w-24"
+                />
+                <p className="text-xs text-text-tertiary mt-1">Students get {formData.focusLossThreshold - 1} warning{formData.focusLossThreshold - 1 !== 1 ? "s" : ""} before auto-submit on switch #{formData.focusLossThreshold}.</p>
+              </div>
+            )}
 
             <div className="flex items-center">
               <label className="flex items-center gap-3 cursor-pointer">
