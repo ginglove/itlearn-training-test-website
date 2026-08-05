@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { xpathConfigs, xpathTestCases, exams } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { xpathConfigs, xpathTestCases, exams, examSubmissions } from "@/db/schema";
+import { eq, and, isNull } from "drizzle-orm";
 import { gradeXPathQuestion } from "@/lib/grading/xpath-evaluator";
 import { getUserId } from "@/lib/get-user-id";
 
@@ -33,6 +33,25 @@ export async function POST(
 
     const [exam] = await db.select().from(exams).where(eq(exams.id, examId)).limit(1);
     if (!exam) return NextResponse.json({ error: "NOT_FOUND", message: "Exam not found." }, { status: 404 });
+
+    const [activeSub] = await db
+      .select({ id: examSubmissions.id })
+      .from(examSubmissions)
+      .where(
+        and(
+          eq(examSubmissions.examId, examId),
+          eq(examSubmissions.studentId, studentId),
+          isNull(examSubmissions.submittedAt)
+        )
+      )
+      .limit(1);
+
+    if (!activeSub) {
+      return NextResponse.json(
+        { error: "FORBIDDEN", message: "Cannot test XPath. Exam session is not active or has been submitted." },
+        { status: 403 }
+      );
+    }
 
     const [config] = await db.select().from(xpathConfigs).where(eq(xpathConfigs.questionId, question_id)).limit(1);
     const cases = await db.select().from(xpathTestCases).where(eq(xpathTestCases.questionId, question_id));

@@ -103,6 +103,34 @@ export async function GET(
       )
       .limit(1);
 
+    if (!activeSubmission) {
+      const [submittedSubmission] = await db
+        .select({ id: examSubmissions.id, closeReason: examSubmissions.closeReason })
+        .from(examSubmissions)
+        .where(
+          and(
+            eq(examSubmissions.examId, examId),
+            eq(examSubmissions.studentId, studentId)
+          )
+        )
+        .limit(1);
+
+      if (submittedSubmission) {
+        return NextResponse.json(
+          {
+            error: "ALREADY_SUBMITTED",
+            message: "This exam session has already been submitted.",
+            closeReason: submittedSubmission.closeReason,
+          },
+          { status: 403 }
+        );
+      }
+      return NextResponse.json(
+        { error: "NO_ACTIVE_SUBMISSION", message: "No active exam session found for this student." },
+        { status: 403 }
+      );
+    }
+
     // Shuffle if configured — persist order so it stays the same on resume
     let shuffleUpdate: string[] | null = null;
     if (exam.isShuffled) {

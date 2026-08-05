@@ -30,6 +30,20 @@ export async function GET(
       .limit(1);
 
     if (!submission) {
+      const [submitted] = await db
+        .select({ id: examSubmissions.id })
+        .from(examSubmissions)
+        .where(
+          and(
+            eq(examSubmissions.examId, examId),
+            eq(examSubmissions.studentId, studentId)
+          )
+        )
+        .limit(1);
+
+      if (submitted) {
+        return NextResponse.json({ error: "ALREADY_SUBMITTED", message: "Exam session is already submitted." }, { status: 403 });
+      }
       return NextResponse.json({ status: "NO_DRAFT", answers: [] });
     }
 
