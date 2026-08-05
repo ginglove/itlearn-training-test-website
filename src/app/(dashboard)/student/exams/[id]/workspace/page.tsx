@@ -70,6 +70,15 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
         const questionsData = await questionsRes.json();
         const draftData = draftRes.ok ? await draftRes.json() : { answers: [] };
 
+        if (!questionsRes.ok) {
+          if (questionsRes.status === 403 || questionsData.error === "ALREADY_SUBMITTED" || questionsData.error === "NO_ACTIVE_SUBMISSION") {
+            showToast("Your exam session has been force-submitted or finalized.", "error");
+            sessionStorage.removeItem(`exam_${examId}_submission_id`);
+            router.push("/student/completed");
+            return;
+          }
+        }
+
         if (questionsRes.ok) {
           setQuestions(questionsData.questions);
           if (questionsData.examTitle) setExamTitle(questionsData.examTitle);
@@ -251,11 +260,19 @@ export default function ExamWorkspacePage({ params }: { params: Promise<{ id: st
       const payloads = getPreparedPayloads();
 
       try {
-        await fetch(`/api/v1/student/exams/${examId}/auto-save`, {
+        const res = await fetch(`/api/v1/student/exams/${examId}/auto-save`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ submission_id: submissionId, unsynced_payloads: payloads })
         });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          if (res.status === 403 || data.error === "FORBIDDEN" || data.error === "ALREADY_SUBMITTED") {
+            showToast("Your exam session was force-submitted or ended by your teacher.", "error");
+            sessionStorage.removeItem(`exam_${examId}_submission_id`);
+            router.push("/student/completed");
+          }
+        }
       } catch (err) {
         console.error("Auto-save failed");
       }
