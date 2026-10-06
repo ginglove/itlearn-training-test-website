@@ -339,8 +339,13 @@ function buildAutoHarness(sourceCode: string, language: string, funcName: string
   // Try eval() first: handles JS object/array literals and JSON from stdin.
   // Falls back to line-based parsing for simple primitive inputs.
   try {
-    var __val__ = eval('(' + __raw__ + ')');
-    __args__ = [__val__];
+    // "(a, b)" is an argument list, not the comma operator.
+    if(__raw__.charAt(0)==='(' && __raw__.charAt(__raw__.length-1)===')'){
+      __args__ = eval('[' + __raw__.slice(1,-1) + ']');
+    } else {
+      var __val__ = eval('(' + __raw__ + ')');
+      __args__ = [__val__];
+    }
   } catch(__e__) {
     var __lines__ = __raw__.split('\\n').filter(Boolean);
     var __parse__ = function(l){
@@ -393,7 +398,16 @@ def __parse__(x):
     except ValueError:
         try: return float(x)
         except ValueError: return x
-if len(__lines__) == 1:
+__args__ = None
+if len(__lines__) == 1 and __lines__[0].strip().startswith('(') and __lines__[0].strip().endswith(')'):
+    import ast as __ast__
+    try:
+        __args__ = list(__ast__.literal_eval('[' + __lines__[0].strip()[1:-1] + ']'))
+    except Exception:
+        __args__ = None
+if __args__ is not None:
+    pass
+elif len(__lines__) == 1:
     __parts__ = __lines__[0].strip().split()
     def __all_num__(ps):
         for p in ps:
@@ -450,6 +464,31 @@ function normalizeOutput(output: string): string {
       .join("\n")
       .trim()
   );
+}
+
+/**
+ * For array/object literal outputs, ignore layout differences: `[1, 0]`,
+ * `[ 1, 0 ]` and the harness's multi-line `[\n  1,\n  0\n]` are all equal.
+ * Whitespace inside string literals is preserved.
+ */
+function compactStructured(normalized: string): string {
+  if (!/^[[{]/.test(normalized) || !/[\]}]$/.test(normalized)) return normalized;
+  let out = "";
+  let quote: string | null = null;
+  for (let i = 0; i < normalized.length; i++) {
+    const ch = normalized[i];
+    if (quote) {
+      out += ch;
+      if (ch === "\\") out += normalized[++i] ?? "";
+      else if (ch === quote) quote = null;
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+      out += ch;
+    } else if (!/\s/.test(ch)) {
+      out += ch;
+    }
+  }
+  return out;
 }
 
 export async function executeCode(
@@ -543,7 +582,11 @@ export async function executeCode(
       } else {
         const expectedNorm = normalizeOutput(expectedOutput);
         const actualNorm = normalizeOutput(execution.stdout);
-        status = expectedNorm === actualNorm ? "AC" : "WA";
+        status =
+          expectedNorm === actualNorm ||
+          compactStructured(expectedNorm) === compactStructured(actualNorm)
+            ? "AC"
+            : "WA";
       }
 
       const usedTeacherCode = !!(request.teacherCode && request.teacherCode.trim().length > 0);
