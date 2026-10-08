@@ -343,8 +343,9 @@ function buildAutoHarness(sourceCode: string, language: string, funcName: string
     if(__raw__.charAt(0)==='(' && __raw__.charAt(__raw__.length-1)===')'){
       __args__ = eval('[' + __raw__.slice(1,-1) + ']');
     } else {
-      var __val__ = eval('(' + __raw__ + ')');
-      __args__ = [__val__];
+      // Wrap in an array literal so top-level commas ("a", "b") become separate
+      // arguments instead of the comma operator (which would keep only the last).
+      __args__ = eval('[' + __raw__ + ']');
     }
   } catch(__e__) {
     var __lines__ = __raw__.split('\\n').filter(Boolean);
@@ -403,6 +404,12 @@ if len(__lines__) == 1 and __lines__[0].strip().startswith('(') and __lines__[0]
     import ast as __ast__
     try:
         __args__ = list(__ast__.literal_eval('[' + __lines__[0].strip()[1:-1] + ']'))
+    except Exception:
+        __args__ = None
+if __args__ is None and len(__lines__) == 1:
+    import ast as __ast2__
+    try:
+        __args__ = list(__ast2__.literal_eval('[' + __lines__[0].strip() + ']'))
     except Exception:
         __args__ = None
 if __args__ is not None:
