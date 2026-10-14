@@ -477,6 +477,7 @@ function normalizeOutput(output: string): string {
  * For array/object literal outputs, ignore layout differences: `[1, 0]`,
  * `[ 1, 0 ]` and the harness's multi-line `[\n  1,\n  0\n]` are all equal.
  * Whitespace inside string literals is preserved.
+ * Quote style is normalised to double-quotes so `'Alice'` matches `"Alice"`.
  */
 function compactStructured(normalized: string): string {
   if (!/^[[{]/.test(normalized) || !/[\]}]$/.test(normalized)) return normalized;
@@ -485,12 +486,19 @@ function compactStructured(normalized: string): string {
   for (let i = 0; i < normalized.length; i++) {
     const ch = normalized[i];
     if (quote) {
-      out += ch;
-      if (ch === "\\") out += normalized[++i] ?? "";
-      else if (ch === quote) quote = null;
+      if (ch === "\\") {
+        out += ch + (normalized[++i] ?? "");
+      } else if (ch === quote) {
+        // Close with a canonical double-quote
+        out += '"';
+        quote = null;
+      } else {
+        out += ch;
+      }
     } else if (ch === '"' || ch === "'") {
       quote = ch;
-      out += ch;
+      // Open with a canonical double-quote
+      out += '"';
     } else if (!/\s/.test(ch)) {
       out += ch;
     }
